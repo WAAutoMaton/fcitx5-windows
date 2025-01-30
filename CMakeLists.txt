@@ -27,6 +27,7 @@ if (CYGWIN)
     add_compile_definitions(-D_GNU_SOURCE)
 else()
     set(ECM_DIR C:/msys64/ucrt64/share/ECM/cmake)
+    set(GETTEXT_MSGMERGE_EXECUTABLE C:/msys64/usr/bin/msgfmt.exe)
 endif()
 
 add_subdirectory(fcitx5)
