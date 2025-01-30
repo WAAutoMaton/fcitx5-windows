@@ -10,11 +10,10 @@ on:
 jobs:
   build-fcitx5:
     runs-on: windows-2025
-    matrix:
-      env: [msys, clang64]
-      include:
-        - { env: msys, prefix: /usr }
-        - { env: clang64, prefix: /clang64 }
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [msys, clang64]
     steps:
       - uses: actions/checkout@v4
         with:
