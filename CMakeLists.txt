@@ -24,7 +24,9 @@ option(ENABLE_EMOJI "" OFF)
 option(ENABLE_LIBUUID "" OFF)
 option(BUILD_SPELL_DICT "" OFF)
 
-set(CMAKE_INSTALL_PREFIX C:)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(ENV{PKG_CONFIG_PATH} "${CMAKE_SYSROOT}/lib/pkgconfig")
 # For std::osyncstream
 add_compile_options(-fexperimental-library)
