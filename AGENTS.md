@@ -18,7 +18,8 @@
 | `windows-cross/` | Git 子模块，提供 MSYS2 / Clang 工具链配置 |
 | `win32/CMakeLists.txt` | 独立的 Windows TSF 工程入口 |
 | `win32/dll/` | COM 类工厂、DLL 入口、输入法注册与注销、辅助函数 |
-| `win32/tsf/` | TSF 生命周期、事件订阅、按键回调、编辑会话和 composition |
+| `win32/tsf/` | TSF 生命周期、事件订阅、按键回调、编辑会话、composition 和 Pipe 客户端 |
+| `win32/ipc/` | Core/TSF 共用的 Named Pipe framing 和协议定义 |
 | `win32/assets/` | 输入法图标，使用 ImageMagick 将 SVG 转为 ICO |
 | `win32/tests/` | Windows 工程的 CTest 测试 |
 | `win32/scripts/` | 开发期注册、注销、格式化和格式检查脚本 |
@@ -31,12 +32,12 @@
 - 根工程构建上游库及 `src/main.cpp`，没有调用 `add_subdirectory(win32)`。
 - `win32` 工程构建 `tsf` 静态库和 `fcitx5-x86_64` DLL；DLL 目前只链接 `tsf`，没有链接 Fcitx5 Core。
 - 根工程使用 MSYS2 / Clang Windows GNU 工具链；TSF 工程依赖 Windows SDK 和 ATL。不要将两者的编译器、头文件、运行库环境混为一谈。
-- 当前没有 TSF DLL 与核心宿主之间的 IPC，也没有在 DLL 内嵌入核心。后续架构尚未确定，不要把某一种方案写成既定事实。
+- Core 与 TSF 当前通过用户级 Named Pipe 通信；Core 仍是独立宿主进程，TSF DLL 未内嵌 Core。当前协议和连接管理是最小实现，后续可继续加固。
 
 ### 已有实现
 
 - 核心宿主设置资源目录相关环境变量，创建 `fcitx::Instance`，注册默认插件加载器，初始化实例并运行事件循环。
-- `EventDispatcher` 已创建并挂接，但没有接入 TSF 业务请求。
+- `EventDispatcher` 已创建并挂接；Named Pipe 服务线程通过它把请求投递到 Core 主事件循环。
 - 工具链和核心 CI 已配置 AMD64、ARM64 目标；这不表示 TSF DLL 已支持这两种架构。
 - Windows DLL 已有 COM 创建、引用计数、注册/注销、简体中文 profile 和图标注册逻辑。
 - TSF 已有激活/停用、线程管理和文本编辑事件订阅、焦点文档切换处理以及按键事件订阅。
@@ -45,7 +46,7 @@
 
 ### 尚未实现或接入
 
-- Windows `fcitx::InputContext`、TSF context 映射、按键转换、焦点同步，以及核心提交文本/预编辑/候选变化的回传。
+- 完整的 Windows `fcitx::InputContext` / TSF 映射仍在完善；当前已支持最小 context、焦点、按键、提交文本和预编辑快照回传，尚未实现候选变化等完整能力。
 - 真正的输入引擎集成和数据部署，例如拼音、双拼、五笔或 Rime。
 - 正常的按键消费与放行、修饰键和按键释放处理、输入状态切换及快捷键。
 - 持续预编辑、预编辑光标和显示属性、提交/取消、周边文本操作和可靠的异步编辑生命周期。
@@ -149,3 +150,11 @@
 - 不自动修改注册表、复制文件到系统目录、执行安装包，或将这些操作作为普通测试步骤。
 - 不创建提交或新分支，除非用户明确要求。
 - 完成后简要报告修改文件、行为变化、执行的验证和仍未验证的内容；架构或实现进度改变时更新本文件。
+
+## 进度更新：Core/TSF 最小 IPC 链路
+
+- 当前已实现用户级 Windows Named Pipe：`win32/ipc/protocol.h` 定义版本化 framing，Core 端服务在 `src/windowsfrontend.cpp`，TSF 端客户端在 `win32/tsf/pipeclient.cpp`。
+- Core 端维护 Windows `InputContext`，支持 `hello`、context 创建/销毁、焦点切换、按键请求和 `KeyReply`；TSF 端将提交文本和预编辑结果放入同步 edit session。
+- 当前连接服务只接受一个客户端，协议暂未实现用户 SID ACL、自动启动、异步输出队列和多连接复用；这些属于后续加固，不应描述为已完成。
+- 当前默认 `ENABLE_KEYBOARD=OFF`，因为 MSYS2 环境缺少 `xkbcommon`/XKB 配置依赖。未被 Fcitx5 输入引擎消费的 ASCII `A-Z`、`0-9`、空格按键会通过受限 fallback 提交，用于验证 Core 到 TSF 的最小链路；这不是拼音、双拼、五笔或 Rime 支持。
+- 本阶段已验证 Core 进程、Named Pipe、Core `InputContext`、按键响应和 ASCII 提交；尚未在真实注册的 TSF 宿主应用中验证 COM 激活和文本插入。

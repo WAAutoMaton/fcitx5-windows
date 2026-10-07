@@ -3,6 +3,7 @@
 #include <fcitx-utils/eventdispatcher.h>
 #include <fcitx/addonmanager.h>
 #include <fcitx/instance.h>
+#include "windowsfrontend.h"
 #include <filesystem>
 #include <windows.h>
 
@@ -11,6 +12,7 @@ namespace fs = std::filesystem;
 namespace fcitx {
 std::unique_ptr<Instance> instance;
 std::unique_ptr<fcitx::EventDispatcher> dispatcher;
+std::unique_ptr<fcitx::win32::WindowsPipeServer> pipeServer;
 
 void setenv(const char *name, const std::string &value) {
     setEnvironment(name, value.c_str());
@@ -37,7 +39,12 @@ void start() {
     instance->initialize();
     dispatcher = std::make_unique<fcitx::EventDispatcher>();
     dispatcher->attach(&instance->eventLoop());
+    pipeServer = std::make_unique<fcitx::win32::WindowsPipeServer>(*instance,
+                                                                    *dispatcher);
+    pipeServer->start();
     instance->eventLoop().exec();
+    pipeServer->stop();
+    pipeServer.reset();
 }
 } // namespace fcitx
 

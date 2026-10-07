@@ -11,14 +11,19 @@ STDAPI Tsf::Deactivate() {
     uninitKeyEventSink();
     threadMgr_ = nullptr;
     clientId_ = TF_CLIENTID_NULL;
+    pipe_.disconnect();
     return S_OK;
 }
 
 STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId,
-                       DWORD dwFlags) {
+                       DWORD) {
+    if (pThreadMgr == nullptr) {
+        return E_INVALIDARG;
+    }
     CComPtr<ITfDocumentMgr> documentMgr;
     threadMgr_ = pThreadMgr;
     clientId_ = tfClientId;
+    pipe_.connect();
     if (!initThreadMgrEventSink()) {
         goto ActivateExError;
     }

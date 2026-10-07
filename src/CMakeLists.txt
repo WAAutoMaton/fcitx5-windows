@@ -1,4 +1,13 @@
-add_executable(Fcitx5 main.cpp)
+add_executable(Fcitx5
+    main.cpp
+    windowsfrontend.cpp
+)
 target_link_libraries(Fcitx5 Fcitx5::Core)
+
+if (ENABLE_WINDOWS_ASCII_FALLBACK)
+    target_compile_definitions(Fcitx5 PRIVATE FCITX5_WINDOWS_ASCII_FALLBACK)
+endif()
+
+target_include_directories(Fcitx5 PRIVATE "${CMAKE_SOURCE_DIR}/win32/ipc")
 
 install(TARGETS Fcitx5 DESTINATION "${FCITX_INSTALL_BINDIR}")
