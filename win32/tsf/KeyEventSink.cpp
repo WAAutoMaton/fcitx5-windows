@@ -3,25 +3,25 @@
 
 namespace fcitx {
 namespace {
-constexpr uint32_t kModifierShift = 1U << 0;
-constexpr uint32_t kModifierControl = 1U << 1;
-constexpr uint32_t kModifierAlt = 1U << 2;
-constexpr uint32_t kModifierSuper = 1U << 3;
 constexpr uint32_t kModifierCaps = 1U << 4;
 constexpr uint32_t kModifierRepeat = 1U << 5;
 
+bool keyDown(int key) {
+    return (GetKeyState(key) & 0x8000) || (GetAsyncKeyState(key) & 0x8000);
+}
+
 uint32_t currentModifiers(LPARAM lParam) {
     uint32_t result = 0;
-    if (GetKeyState(VK_SHIFT) & 0x8000) {
+    if (keyDown(VK_SHIFT)) {
         result |= kModifierShift;
     }
-    if (GetKeyState(VK_CONTROL) & 0x8000) {
+    if (keyDown(VK_CONTROL) || keyDown(VK_LCONTROL) || keyDown(VK_RCONTROL)) {
         result |= kModifierControl;
     }
-    if (GetKeyState(VK_MENU) & 0x8000) {
+    if (keyDown(VK_MENU) || keyDown(VK_LMENU) || keyDown(VK_RMENU)) {
         result |= kModifierAlt;
     }
-    if ((GetKeyState(VK_LWIN) & 0x8000) || (GetKeyState(VK_RWIN) & 0x8000)) {
+    if (keyDown(VK_LWIN) || keyDown(VK_RWIN)) {
         result |= kModifierSuper;
     }
     if (GetKeyState(VK_CAPITAL) & 1) {

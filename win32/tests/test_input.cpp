@@ -6,10 +6,14 @@ int main() {
     using namespace fcitx;
     assert(routesKey('N', 0, true, false));
     assert(!routesKey('N', 0, false, false));
-    assert(!routesKey('C', 2, true, true));
-    assert(!routesKey('A', 4, true, true));
-    assert(routesKey(VK_SPACE, 2, false, false));
-    assert(!routesKey(VK_SPACE, 3, false, false));
+    assert(!routesKey('C', kModifierControl, true, true));
+    assert(!routesKey('A', kModifierAlt, true, true));
+    assert(isModeSwitchKey(VK_SPACE, kModifierControl));
+    assert(routesKey(VK_SPACE, kModifierControl, false, false));
+    assert(
+        !routesKey(VK_SPACE, kModifierControl | kModifierShift, false, false));
+    assert(!routesKey('1', 0, true, false));
+    assert(routesKey('1', 0, true, true));
     assert(!routesKey(VK_BACK, 0, true, false));
     assert(routesKey(VK_BACK, 0, true, true));
     assert(routesKey(VK_ESCAPE, 0, true, true));
