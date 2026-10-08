@@ -10,11 +10,9 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 1;
+constexpr uint16_t kVersion = 2;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
-
-inline constexpr wchar_t kPipeName[] = LR"(\\.\pipe\fcitx5-windows-v1)";
 
 enum class MessageType : uint16_t {
     Hello = 1,
@@ -29,6 +27,29 @@ enum class MessageType : uint16_t {
     KeyReply = 10,
     Error = 11,
     Ack = 12,
+    Reset = 13,
+    PollState = 14,
+};
+
+constexpr uint32_t kMaxCandidates = 32;
+
+struct Candidate {
+    std::string text;
+    std::string label;
+    std::string comment;
+};
+
+struct KeyReply {
+    bool consumed = false;
+    bool enabled = true;
+    std::string commit;
+    std::string preedit;
+    uint32_t preeditCursor = 0;
+    uint64_t revision = 0;
+    uint32_t selected = UINT32_MAX;
+    bool hasPrev = false;
+    bool hasNext = false;
+    std::vector<Candidate> candidates;
 };
 
 struct Frame {
@@ -139,6 +160,60 @@ class Reader {
     size_t size_;
     size_t offset_ = 0;
 };
+
+inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
+    Writer writer;
+    writer.u8(reply.consumed);
+    writer.u8(reply.enabled);
+    writer.string(reply.commit);
+    writer.string(reply.preedit);
+    writer.u32(reply.preeditCursor);
+    writer.u64(reply.revision);
+    writer.u32(reply.selected);
+    writer.u8(reply.hasPrev);
+    writer.u8(reply.hasNext);
+    writer.u32(static_cast<uint32_t>(reply.candidates.size()));
+    for (const auto &candidate : reply.candidates) {
+        writer.string(candidate.text);
+        writer.string(candidate.label);
+        writer.string(candidate.comment);
+    }
+    return writer.take();
+}
+
+inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
+                           KeyReply &reply) {
+    Reader reader(payload.data(), payload.size());
+    KeyReply result;
+    uint8_t consumed = 0, enabled = 0, hasPrev = 0, hasNext = 0;
+    uint32_t count = 0;
+    if (!reader.u8(consumed) || consumed > 1 || !reader.u8(enabled) ||
+        enabled > 1 || !reader.string(result.commit) ||
+        !reader.string(result.preedit) || !reader.u32(result.preeditCursor) ||
+        result.preeditCursor > result.preedit.size() ||
+        !reader.u64(result.revision) || !reader.u32(result.selected) ||
+        !reader.u8(hasPrev) || hasPrev > 1 || !reader.u8(hasNext) ||
+        hasNext > 1 || !reader.u32(count) || count > kMaxCandidates ||
+        (result.selected != UINT32_MAX && result.selected >= count)) {
+        return false;
+    }
+    result.consumed = consumed;
+    result.enabled = enabled;
+    result.hasPrev = hasPrev;
+    result.hasNext = hasNext;
+    result.candidates.resize(count);
+    for (auto &candidate : result.candidates) {
+        if (!reader.string(candidate.text) || !reader.string(candidate.label) ||
+            !reader.string(candidate.comment)) {
+            return false;
+        }
+    }
+    if (reader.remaining() != 0) {
+        return false;
+    }
+    reply = std::move(result);
+    return true;
+}
 
 inline std::vector<uint8_t> encodeFrame(const Frame &frame) {
     Writer writer;

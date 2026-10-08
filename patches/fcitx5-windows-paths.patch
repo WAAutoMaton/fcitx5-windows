@@ -1,0 +1,19 @@
+diff --git a/src/lib/fcitx-utils/standardpaths_p_win.cpp b/src/lib/fcitx-utils/standardpaths_p_win.cpp
+index c9d6942..5db3c42 100644
+--- a/src/lib/fcitx-utils/standardpaths_p_win.cpp
++++ b/src/lib/fcitx-utils/standardpaths_p_win.cpp
+@@ -176,11 +176,11 @@ std::vector<std::filesystem::path> builtinPath(
+         {"basedir", basePath},
+         {"configdir", basePath / "config"},
+         {"pkgconfigdir", basePath / "config/fcitx5"},
+-        {"datadir", basePath / "data"},
+-        {"pkgdatadir", basePath / "data/fcitx5"},
++        {"datadir", basePath / "share"},
++        {"pkgdatadir", basePath / "share/fcitx5"},
+         {"libdir", basePath / "lib"},
+         {"bindir", basePath / "bin"},
+-        {"localedir", basePath / "data/locale"},
++        {"localedir", basePath / "share/locale"},
+         {"addondir", basePath / "lib/fcitx5"},
+         {"libdatadir", basePath / "lib"},
+         {"libexecdir", basePath / "libexec"},

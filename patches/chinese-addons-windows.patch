@@ -1,0 +1,34 @@
+diff --git a/im/pinyin/pinyin.cpp b/im/pinyin/pinyin.cpp
+index 7047c16..5c743cb 100644
+--- a/im/pinyin/pinyin.cpp
++++ b/im/pinyin/pinyin.cpp
+@@ -1035,7 +1035,7 @@ void PinyinEngine::loadSymbols(const UnixFD &file) {
+     }
+ }
+ 
+-void PinyinEngine::loadDict(const std::string &fullPath,
++void PinyinEngine::loadDict(const std::filesystem::path &fullPath,
+                             std::list<std::unique_ptr<TaskToken>> &taskTokens) {
+     if (fullPath.empty()) {
+         return;
+diff --git a/im/pinyin/pinyin.h b/im/pinyin/pinyin.h
+index 3023307..96c9c00 100644
+--- a/im/pinyin/pinyin.h
++++ b/im/pinyin/pinyin.h
+@@ -12,6 +12,7 @@
+ #include "workerthread.h"
+ #include <cstddef>
+ #include <cstdint>
++#include <filesystem>
+ #include <fcitx-config/configuration.h>
+ #include <fcitx-config/enum.h>
+ #include <fcitx-config/iniparser.h>
+@@ -497,7 +498,7 @@ private:
+     void loadExtraDict();
+     void loadCustomPhrase();
+     void loadSymbols(const UnixFD &file);
+-    void loadDict(const std::string &fullPath,
++    void loadDict(const std::filesystem::path &fullPath,
+                   std::list<std::unique_ptr<TaskToken>> &taskTokens);
+     void saveCustomPhrase();
+ 

@@ -1,0 +1,68 @@
+diff --git a/src/libime/core/LibIMECoreConfig.cmake.in b/src/libime/core/LibIMECoreConfig.cmake.in
+index fcc6989..dec4fc8 100644
+--- a/src/libime/core/LibIMECoreConfig.cmake.in
++++ b/src/libime/core/LibIMECoreConfig.cmake.in
+@@ -8,19 +8,19 @@ find_dependency(Fcitx5Utils)
+ if(NOT TARGET LibIME::slm_build_binary)
+     add_executable(LibIME::slm_build_binary IMPORTED)
+     set_target_properties(LibIME::slm_build_binary PROPERTIES
+-        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_slm_build_binary")
++        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_slm_build_binary@CMAKE_EXECUTABLE_SUFFIX@")
+ endif()
+ 
+ if(NOT TARGET LibIME::prediction)
+     add_executable(LibIME::prediction IMPORTED)
+     set_target_properties(LibIME::prediction PROPERTIES
+-        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_prediction")
++        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_prediction@CMAKE_EXECUTABLE_SUFFIX@")
+ endif()
+ 
+ if(NOT TARGET LibIME::history)
+     add_executable(LibIME::history IMPORTED)
+     set_target_properties(LibIME::history PROPERTIES
+-        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_history")
++        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_history@CMAKE_EXECUTABLE_SUFFIX@")
+ endif()
+ 
+ include("${CMAKE_CURRENT_LIST_DIR}/LibIMECoreTargets.cmake")
+diff --git a/src/libime/core/languagemodel.cpp b/src/libime/core/languagemodel.cpp
+index feb3865..516159c 100644
+--- a/src/libime/core/languagemodel.cpp
++++ b/src/libime/core/languagemodel.cpp
+@@ -311,7 +311,11 @@ std::string DefaultLanguageModelResolver::languageModelFileNameForLanguage(
+     const char *modelDirs = getenv("LIBIME_MODEL_DIRS");
+     std::vector<std::string> dirs;
+     if (modelDirs && modelDirs[0]) {
++#ifdef _WIN32
++        dirs = fcitx::stringutils::split(modelDirs, ";");
++#else
+         dirs = fcitx::stringutils::split(modelDirs, ":");
++#endif
+     } else {
+         dirs.push_back(LIBIME_INSTALL_LIBDATADIR);
+     }
+diff --git a/src/libime/pinyin/LibIMEPinyinConfig.cmake.in b/src/libime/pinyin/LibIMEPinyinConfig.cmake.in
+index d56c637..3fc85e7 100644
+--- a/src/libime/pinyin/LibIMEPinyinConfig.cmake.in
++++ b/src/libime/pinyin/LibIMEPinyinConfig.cmake.in
+@@ -10,6 +10,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/LibIMEPinyinTargets.cmake")
+ if(NOT TARGET LibIME::pinyindict)
+     add_executable(LibIME::pinyindict IMPORTED)
+     set_target_properties(LibIME::pinyindict PROPERTIES
+-        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_pinyindict")
++        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_pinyindict@CMAKE_EXECUTABLE_SUFFIX@")
+ endif()
+-
+diff --git a/src/libime/table/LibIMETableConfig.cmake.in b/src/libime/table/LibIMETableConfig.cmake.in
+index 2b7fadd..156e0b0 100644
+--- a/src/libime/table/LibIMETableConfig.cmake.in
++++ b/src/libime/table/LibIMETableConfig.cmake.in
+@@ -10,7 +10,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/LibIMETableTargets.cmake")
+ if(NOT TARGET LibIME::tabledict)
+     add_executable(LibIME::tabledict IMPORTED)
+     set_target_properties(LibIME::tabledict PROPERTIES
+-        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_tabledict")
++        IMPORTED_LOCATION "@CMAKE_INSTALL_FULL_BINDIR@/libime_tabledict@CMAKE_EXECUTABLE_SUFFIX@")
+ endif()
+ 
+-

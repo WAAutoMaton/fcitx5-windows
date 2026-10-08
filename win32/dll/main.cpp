@@ -1,5 +1,7 @@
 #include "../tsf/tsf.h"
 #include "register.h"
+#include "util.h"
+#include <new>
 
 CRITICAL_SECTION CS;
 LONG dllRefCount = 0;
@@ -12,6 +14,9 @@ class ClassFactory : public IClassFactory {
   public:
     // IUnknown methods
     STDMETHODIMP QueryInterface(REFIID riid, void **ppvObject) override {
+        if (!ppvObject)
+            return E_INVALIDARG;
+        *ppvObject = nullptr;
         if (IsEqualIID(riid, IID_IClassFactory) ||
             IsEqualIID(riid, IID_IUnknown)) {
             *ppvObject = this;
@@ -42,7 +47,7 @@ class ClassFactory : public IClassFactory {
         *ppvObject = nullptr;
         if (pUnkOuter != nullptr)
             return CLASS_E_NOAGGREGATION;
-        if ((tsf = new fcitx::Tsf()) == nullptr)
+        if ((tsf = new (std::nothrow) fcitx::Tsf()) == nullptr)
             return E_OUTOFMEMORY;
         hr = tsf->QueryInterface(riid, ppvObject);
         tsf->Release(); // caller still holds ref if hr == S_OK
@@ -59,13 +64,20 @@ ClassFactory *factory = nullptr;
 
 __declspec(dllexport) STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid,
                                                void **ppvObject) {
+    if (!ppvObject)
+        return E_INVALIDARG;
+    *ppvObject = nullptr;
+    if (rclsid != fcitx::FCITX_CLSID)
+        return CLASS_E_CLASSNOTAVAILABLE;
     if (factory == nullptr) {
         EnterCriticalSection(&CS);
         if (factory == nullptr) {
-            factory = new ClassFactory();
+            factory = new (std::nothrow) ClassFactory();
         }
         LeaveCriticalSection(&CS);
     }
+    if (!factory)
+        return E_OUTOFMEMORY;
     if (IsEqualIID(riid, IID_IClassFactory) || IsEqualIID(riid, IID_IUnknown)) {
         *ppvObject = factory;
         DllAddRef();
@@ -75,7 +87,9 @@ __declspec(dllexport) STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid,
     return CLASS_E_CLASSNOTAVAILABLE;
 }
 
-__declspec(dllexport) STDAPI DllCanUnloadNow() { return dllRefCount == 0; }
+__declspec(dllexport) STDAPI DllCanUnloadNow() {
+    return dllRefCount == 0 ? S_OK : S_FALSE;
+}
 
 __declspec(dllexport) STDAPI DllUnregisterServer() {
     fcitx::UnregisterCategoriesAndProfiles();

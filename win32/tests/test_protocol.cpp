@@ -30,5 +30,32 @@ int main() {
     auto invalid = encodeFrame(source);
     invalid[0] ^= 0xff;
     assert(!decodeFrame(invalid, decoded));
+    invalid = encodeFrame(source);
+    invalid[4] = 1;
+    assert(!decodeFrame(invalid, decoded));
+    KeyReply snapshot;
+    snapshot.consumed = true;
+    snapshot.preedit = "nihao";
+    snapshot.preeditCursor = 5;
+    snapshot.revision = 42;
+    snapshot.selected = 0;
+    snapshot.candidates.push_back({"\xe4\xbd\xa0\xe5\xa5\xbd", "1", "ni hao"});
+    KeyReply reply;
+    auto payload = encodeKeyReply(snapshot);
+    assert(decodeKeyReply(payload, reply));
+    assert(reply.consumed && reply.preedit == "nihao" &&
+           reply.preeditCursor == 5);
+    assert(reply.revision == 42 &&
+           reply.candidates.front().text == snapshot.candidates.front().text);
+    payload.push_back(0);
+    assert(!decodeKeyReply(payload, reply));
+    snapshot.preeditCursor = 6;
+    assert(!decodeKeyReply(encodeKeyReply(snapshot), reply));
+    snapshot.preeditCursor = 5;
+    snapshot.selected = 1;
+    assert(!decodeKeyReply(encodeKeyReply(snapshot), reply));
+    snapshot.selected = UINT32_MAX;
+    snapshot.candidates.resize(kMaxCandidates + 1);
+    assert(!decodeKeyReply(encodeKeyReply(snapshot), reply));
     return 0;
 }

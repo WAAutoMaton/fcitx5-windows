@@ -1,22 +1,17 @@
 #pragma once
 
+#include "../ipc/protocol.h"
 #include <cstdint>
 #include <mutex>
 #include <string>
 #include <windows.h>
-#include "../ipc/protocol.h"
 
 namespace fcitx {
 namespace ipc = win32::ipc;
 
 class PipeClient {
   public:
-    struct KeyReply {
-        bool consumed = false;
-        std::string commit;
-        std::string preedit;
-        uint32_t preeditCursor = 0;
-    };
+    using KeyReply = ipc::KeyReply;
 
     PipeClient() = default;
     ~PipeClient();
@@ -31,7 +26,9 @@ class PipeClient {
     bool destroyContext(uint64_t contextId);
     bool key(uint64_t contextId, bool release, uint32_t virtualKey,
              uint32_t scanCode, uint32_t modifiers, uint32_t time,
-             KeyReply &reply);
+             KeyReply &reply, uint32_t unicode = 0);
+    bool poll(uint64_t contextId, KeyReply &reply);
+    bool reset(uint64_t contextId, KeyReply &reply);
 
   private:
     bool request(ipc::MessageType type, uint64_t contextId,

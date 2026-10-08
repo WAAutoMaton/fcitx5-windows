@@ -1,20 +1,20 @@
 #pragma once
 
+#include "../win32/ipc/protocol.h"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <fcitx-utils/eventdispatcher.h>
+#include <fcitx/inputcontext.h>
+#include <fcitx/inputcontextmanager.h>
+#include <fcitx/instance.h>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
-#include <fcitx-utils/eventdispatcher.h>
-#include <fcitx/inputcontext.h>
-#include <fcitx/inputcontextmanager.h>
-#include <fcitx/instance.h>
 #include <windows.h>
-#include "../win32/ipc/protocol.h"
 
 namespace fcitx::win32 {
 
@@ -30,6 +30,7 @@ class WindowsInputContext final : public InputContext {
     std::string takeCommit();
     std::string preedit() const;
     uint32_t preeditCursor() const;
+    ipc::KeyReply snapshot(bool consumed, bool enabled);
 
   protected:
     void commitStringImpl(const std::string &text) override;
@@ -40,6 +41,7 @@ class WindowsInputContext final : public InputContext {
   private:
     uint64_t id_;
     std::string pendingCommit_;
+    uint64_t revision_ = 0;
 };
 
 class WindowsPipeServer {
@@ -59,23 +61,28 @@ class WindowsPipeServer {
     };
 
     void run();
-    void runClient(HANDLE pipe);
+    void runClient(HANDLE pipe, uint64_t clientId);
     void process(const ipc::Frame &request,
-                 const std::shared_ptr<PendingReply> &pending);
+                 const std::shared_ptr<PendingReply> &pending,
+                 uint64_t clientId);
     void complete(const std::shared_ptr<PendingReply> &pending,
                   ipc::Frame response);
     bool readFrame(HANDLE pipe, ipc::Frame &frame);
     bool writeFrame(HANDLE pipe, const ipc::Frame &frame);
-    void closePipe();
-
     Instance &instance_;
     EventDispatcher &dispatcher_;
     std::atomic_bool stopping_ = false;
     std::thread thread_;
-    std::mutex pipeMutex_;
-    HANDLE pipe_ = INVALID_HANDLE_VALUE;
+    HANDLE stopEvent_ = nullptr;
+    struct ClientThread {
+        std::thread thread;
+        std::shared_ptr<std::atomic_bool> finished;
+    };
+    std::vector<ClientThread> clients_;
+    std::unordered_map<uint64_t, uint64_t> owners_;
     uint64_t nextContextId_ = 1;
-    std::unordered_map<uint64_t, std::unique_ptr<WindowsInputContext>> contexts_;
+    std::unordered_map<uint64_t, std::unique_ptr<WindowsInputContext>>
+        contexts_;
 };
 
 } // namespace fcitx::win32

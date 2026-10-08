@@ -1,3 +1,4 @@
+#include "keypolicy.h"
 #include "tsf.h"
 
 namespace fcitx {
@@ -20,8 +21,7 @@ uint32_t currentModifiers(LPARAM lParam) {
     if (GetKeyState(VK_MENU) & 0x8000) {
         result |= kModifierAlt;
     }
-    if ((GetKeyState(VK_LWIN) & 0x8000) ||
-        (GetKeyState(VK_RWIN) & 0x8000)) {
+    if ((GetKeyState(VK_LWIN) & 0x8000) || (GetKeyState(VK_RWIN) & 0x8000)) {
         result |= kModifierSuper;
     }
     if (GetKeyState(VK_CAPITAL) & 1) {
@@ -41,68 +41,101 @@ uint32_t scanCode(LPARAM lParam) {
     return value;
 }
 
+uint32_t unicodeForKey(WPARAM key, LPARAM details) {
+    BYTE keyboard[256]{};
+    WCHAR text[4]{};
+    if (!GetKeyboardState(keyboard) || (keyboard[VK_CONTROL] & 0x80) ||
+        (keyboard[VK_MENU] & 0x80)) {
+        return 0;
+    }
+    const auto count =
+        ToUnicodeEx(static_cast<UINT>(key), scanCode(details) & 0xff, keyboard,
+                    text, 4, 4, GetKeyboardLayout(0));
+    if (count == 1 && text[0] >= 0x20 && text[0] != 0x7f &&
+        !(text[0] >= 0xd800 && text[0] <= 0xdfff)) {
+        return text[0];
+    }
+    if (count == 2 && text[0] >= 0xd800 && text[0] <= 0xdbff &&
+        text[1] >= 0xdc00 && text[1] <= 0xdfff) {
+        return 0x10000 + ((text[0] - 0xd800) << 10) + text[1] - 0xdc00;
+    }
+    return 0;
+}
+
 } // namespace
 
-bool Tsf::initKeyEventSink() {
+HRESULT Tsf::initKeyEventSink() {
     CComPtr<ITfKeystrokeMgr> keystrokeMgr;
-    if (threadMgr_->QueryInterface(&keystrokeMgr) != S_OK) {
-        return false;
+    auto result = threadMgr_->QueryInterface(&keystrokeMgr);
+    if (FAILED(result)) {
+        return result;
     }
-    return keystrokeMgr->AdviseKeyEventSink(clientId_, (ITfKeyEventSink *)this,
-                                            TRUE) == S_OK;
+    result = keystrokeMgr->AdviseKeyEventSink(clientId_,
+                                              (ITfKeyEventSink *)this, TRUE);
+    keyEventSinkAdvised_ = SUCCEEDED(result);
+    return result;
 }
 
 void Tsf::uninitKeyEventSink() {
+    if (!keyEventSinkAdvised_) {
+        return;
+    }
     CComPtr<ITfKeystrokeMgr> keystrokeMgr;
     if (threadMgr_->QueryInterface(&keystrokeMgr) != S_OK) {
         return;
     }
     keystrokeMgr->UnadviseKeyEventSink(clientId_);
+    keyEventSinkAdvised_ = false;
 }
 
 BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
                      bool release) {
-    if (context == nullptr || remoteContextId_ == 0 || !pipe_.connected()) {
+    if (context == nullptr || context != textEditSinkContext_ ||
+        remoteContextId_ == 0 || !pipe_.connected() || !foreground_) {
         return FALSE;
     }
     PipeClient::KeyReply reply;
     if (!pipe_.key(remoteContextId_, release, static_cast<uint32_t>(wParam),
                    scanCode(lParam), currentModifiers(lParam),
-                   static_cast<uint32_t>(GetMessageTime()), reply)) {
+                   static_cast<uint32_t>(GetMessageTime()), reply,
+                   unicodeForKey(wParam, lParam))) {
+        clearRemoteContext();
+        pipe_.disconnect();
         return FALSE;
     }
-    if (release) {
-        return reply.consumed ? TRUE : FALSE;
-    }
-
-    pendingEditContext_ = context;
-    pendingCommit_ = std::move(reply.commit);
-    pendingPreedit_ = std::move(reply.preedit);
-    pendingPreeditCursor_ = reply.preeditCursor;
-    if (!pendingCommit_.empty() || !pendingPreedit_.empty() || composition_) {
-        HRESULT sessionResult = E_FAIL;
-        const auto requestResult = context->RequestEditSession(
-            clientId_, this, TF_ES_SYNC | TF_ES_READWRITE, &sessionResult);
-        if (FAILED(requestResult) || FAILED(sessionResult)) {
-            pendingEditContext_ = nullptr;
-            pendingCommit_.clear();
-            pendingPreedit_.clear();
-            composition_ = nullptr;
-            return FALSE;
+    bool consumed = reply.consumed;
+    if (wParam < handledKeys_.size()) {
+        if (release) {
+            consumed = consumed || handledKeys_.test(wParam);
+            handledKeys_.reset(wParam);
+        } else if (consumed) {
+            handledKeys_.set(wParam);
         }
     }
-    pendingEditContext_ = nullptr;
-    return reply.consumed ? TRUE : FALSE;
+    submitSnapshot(std::move(reply), true);
+    return consumed ? TRUE : FALSE;
 }
 
-STDMETHODIMP Tsf::OnSetFocus(BOOL) { return S_OK; }
+STDMETHODIMP Tsf::OnSetFocus(BOOL foreground) {
+    foreground_ = foreground != FALSE;
+    if (!foreground_) {
+        clearRemoteContext();
+    } else {
+        initRemoteContext();
+    }
+    return S_OK;
+}
 
-STDMETHODIMP Tsf::OnTestKeyDown(ITfContext *, WPARAM, LPARAM,
+STDMETHODIMP Tsf::OnTestKeyDown(ITfContext *context, WPARAM key, LPARAM details,
                                 BOOL *pfEaten) {
     if (pfEaten == nullptr) {
         return E_INVALIDARG;
     }
-    *pfEaten = (remoteContextId_ != 0 && pipe_.connected()) ? TRUE : FALSE;
+    *pfEaten = context && context == textEditSinkContext_ && foreground_ &&
+               remoteContextId_ && pipe_.connected() &&
+               routesKey(static_cast<uint32_t>(key), currentModifiers(details),
+                         state_.enabled,
+                         !state_.preedit.empty() || !state_.candidates.empty());
     return S_OK;
 }
 
@@ -115,12 +148,14 @@ STDMETHODIMP Tsf::OnKeyDown(ITfContext *pContext, WPARAM wParam, LPARAM lParam,
     return S_OK;
 }
 
-STDMETHODIMP Tsf::OnTestKeyUp(ITfContext *, WPARAM, LPARAM,
+STDMETHODIMP Tsf::OnTestKeyUp(ITfContext *context, WPARAM key, LPARAM,
                               BOOL *pfEaten) {
     if (pfEaten == nullptr) {
         return E_INVALIDARG;
     }
-    *pfEaten = (remoteContextId_ != 0 && pipe_.connected()) ? TRUE : FALSE;
+    *pfEaten = context && context == textEditSinkContext_ && foreground_ &&
+               remoteContextId_ && pipe_.connected() &&
+               key < handledKeys_.size() && handledKeys_.test(key);
     return S_OK;
 }
 

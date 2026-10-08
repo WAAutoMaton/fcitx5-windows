@@ -4,3 +4,9 @@
 [submodule "windows-cross"]
 	path = windows-cross
 	url = https://github.com/fcitx-contrib/windows-cross
+[submodule "libime"]
+	path = libime
+	url = https://github.com/fcitx/libime.git
+[submodule "chinese-addons"]
+	path = chinese-addons
+	url = https://github.com/fcitx/fcitx5-chinese-addons.git

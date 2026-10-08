@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.27)
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/windows-cross/msys2.toolchain.cmake")
 
 project(fcitx5-windows VERSION 0.1.0)
+include(GNUInstallDirs)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -18,7 +19,7 @@ option(ENABLE_DBUS "" OFF)
 option(ENABLE_DOC "" OFF)
 option(ENABLE_SERVER "" OFF)
 option(ENABLE_KEYBOARD "Enable the keyboard input method" OFF)
-option(ENABLE_WINDOWS_ASCII_FALLBACK "Enable the minimal Windows ASCII fallback" ON)
+option(ENABLE_WINDOWS_ASCII_FALLBACK "Enable the minimal Windows ASCII fallback" OFF)
 option(USE_SYSTEMD "" OFF)
 option(ENABLE_XDGAUTOSTART "" OFF)
 option(ENABLE_EMOJI "" OFF)

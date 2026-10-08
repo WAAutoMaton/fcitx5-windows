@@ -1,0 +1,13 @@
+#pragma once
+
+#include <msctf.h>
+
+namespace fcitx {
+
+inline constexpr GUID kPreeditAttribute = {
+    0xc9332741,
+    0x697b,
+    0x4b8a,
+    {0xa0, 0x42, 0x3d, 0x80, 0x9a, 0x63, 0x2e, 0x10}};
+
+}

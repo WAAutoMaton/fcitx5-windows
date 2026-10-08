@@ -1,3 +1,4 @@
+#include "displayattribute.h"
 #include "tsf.h"
 
 namespace fcitx {
@@ -6,6 +7,18 @@ STDAPI Tsf::Activate(ITfThreadMgr *pThreadMgr, TfClientId tfClientId) {
 }
 
 STDAPI Tsf::Deactivate() {
+    if (messageWindow_) {
+        const auto module = reinterpret_cast<HINSTANCE>(
+            GetWindowLongPtrW(messageWindow_, GWLP_HINSTANCE));
+        KillTimer(messageWindow_, 1);
+        DestroyWindow(messageWindow_);
+        UnregisterClassW(L"Fcitx5WindowsDispatchV2", module);
+        messageWindow_ = nullptr;
+    }
+    if (!threadMgr_) {
+        pipe_.disconnect();
+        return S_OK;
+    }
     initTextEditSink(CComPtr<ITfDocumentMgr>());
     uninitThreadMgrEventSink();
     uninitKeyEventSink();
@@ -15,16 +28,25 @@ STDAPI Tsf::Deactivate() {
     return S_OK;
 }
 
-STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId,
-                       DWORD) {
-    if (pThreadMgr == nullptr) {
+STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD) {
+    if (pThreadMgr == nullptr || tfClientId == TF_CLIENTID_NULL || threadMgr_) {
         return E_INVALIDARG;
     }
     CComPtr<ITfDocumentMgr> documentMgr;
+    CComPtr<ITfCategoryMgr> categories;
+    HRESULT activationResult = E_FAIL;
+    if (SUCCEEDED(categories.CoCreateInstance(CLSID_TF_CategoryMgr))) {
+        categories->RegisterGUID(kPreeditAttribute, &attributeAtom_);
+    }
     threadMgr_ = pThreadMgr;
+    foreground_ = true;
     clientId_ = tfClientId;
     pipe_.connect();
-    if (!initThreadMgrEventSink()) {
+    if (!initMessageWindow()) {
+        goto ActivateExError;
+    }
+    activationResult = initThreadMgrEventSink();
+    if (FAILED(activationResult)) {
         goto ActivateExError;
     }
 
@@ -33,7 +55,8 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId,
         initTextEditSink(documentMgr);
     }
 
-    if (!initKeyEventSink()) {
+    activationResult = initKeyEventSink();
+    if (FAILED(activationResult)) {
         goto ActivateExError;
     }
 
@@ -41,6 +64,6 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId,
 
 ActivateExError:
     Deactivate();
-    return E_FAIL;
+    return activationResult;
 }
 } // namespace fcitx

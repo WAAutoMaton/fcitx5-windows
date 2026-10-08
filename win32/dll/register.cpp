@@ -77,22 +77,8 @@ BOOL RegisterProfiles() {
 }
 
 // No documentation about what they means.
-const GUID Categories[] = {GUID_TFCAT_CATEGORY_OF_TIP,
-                           GUID_TFCAT_TIP_KEYBOARD,
-                           GUID_TFCAT_TIPCAP_SECUREMODE,
-                           GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
-                           GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
-                           GUID_TFCAT_TIPCAP_COMLESS,
-                           GUID_TFCAT_TIPCAP_WOW16,
-                           GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
-                           GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
-                           GUID_TFCAT_PROP_AUDIODATA,
-                           GUID_TFCAT_PROP_INKDATA,
-                           GUID_TFCAT_PROPSTYLE_CUSTOM,
-                           GUID_TFCAT_PROPSTYLE_STATIC,
-                           GUID_TFCAT_PROPSTYLE_STATICCOMPACT,
-                           GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
-                           GUID_TFCAT_DISPLAYATTRIBUTEPROPERTY};
+const GUID Categories[] = {GUID_TFCAT_TIP_KEYBOARD,
+                           GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER};
 
 /*
 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}

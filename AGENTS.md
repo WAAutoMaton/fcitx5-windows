@@ -5,7 +5,7 @@
 - 本文件适用于整个仓库；子目录中的 `AGENTS.md` 对其目录有更具体的约束时，优先遵守子目录说明。
 - 本项目是尚未完成的 Fcitx5 Windows port，使用 C++20、CMake 和 PowerShell。
 - 默认使用中文沟通，保留代码标识符、接口名称和命令的原文。
-- 以下进度基于 2026-10-07 的代码检查。功能变化时同步更新相关说明，以实际代码为准，不把已知缺口当作永久设计限制。
+- 以下进度更新于 2026-10-08。功能变化时同步更新相关说明，以实际代码为准，不把已知缺口当作永久设计限制。
 - 不要将“可以编译”“可以注册为输入法”“可以提交固定字符”描述为“已经支持 Fcitx5 输入”。
 
 ## 项目结构
@@ -15,6 +15,9 @@
 | `CMakeLists.txt` | 核心移植工程入口，选择 Windows 工具链并裁剪上游组件 |
 | `src/` | 核心宿主程序，构建 `Fcitx5` 可执行文件 |
 | `fcitx5/` | 上游 Fcitx5 Git 子模块，提供 Core、Config、Utils 和通用插件 |
+| `libime/`、`chinese-addons/` | 固定版本的解码库、数据工具和拼音输入引擎 |
+| `patches/`、`cmake/pinyin-lock.json` | Windows 兼容补丁和版本、数据校验值 |
+| `scripts/` | 隔离拼音构建、补丁应用和免注册集成验证 |
 | `windows-cross/` | Git 子模块，提供 MSYS2 / Clang 工具链配置 |
 | `win32/CMakeLists.txt` | 独立的 Windows TSF 工程入口 |
 | `win32/dll/` | COM 类工厂、DLL 入口、输入法注册与注销、辅助函数 |
@@ -36,21 +39,22 @@
 
 ### 已有实现
 
-- 核心宿主设置资源目录相关环境变量，创建 `fcitx::Instance`，注册默认插件加载器，初始化实例并运行事件循环。
+- 核心宿主创建 `fcitx::Instance`，注册默认插件加载器和 Windows direct-input 静态引擎；拼音可用时创建内存中的 Windows 输入法组并运行事件循环。
 - `EventDispatcher` 已创建并挂接；Named Pipe 服务线程通过它把请求投递到 Core 主事件循环。
 - 工具链和核心 CI 已配置 AMD64、ARM64 目标；这不表示 TSF DLL 已支持这两种架构。
 - Windows DLL 已有 COM 创建、引用计数、注册/注销、简体中文 profile 和图标注册逻辑。
 - TSF 已有激活/停用、线程管理和文本编辑事件订阅、焦点文档切换处理以及按键事件订阅。
-- 当前按键路径忽略键值并请求编辑会话；编辑会话创建 composition、写入固定字符 `哈`，然后立即结束 composition。
-- `test_dll` 只检查 GUID 格式化和 UTF-8 转宽字符串，不测试 DLL 加载、注册、TSF 生命周期或真实输入。
+- 按键经 Core 交给真实 Pinyin 引擎，返回消费结果、中文提交、预编辑、光标和候选页；TSF 持续维护 composition，通过独立 edit session 写入文档。
+- TSF 有基础预编辑下划线、UTF-16 光标和不抢焦点的候选浮窗，支持同步编辑失败后异步排队、取消和焦点切换。
+- `test_dll` 仍仅测试辅助函数；新增 `ipc_probe` 验证真实拼音，`tsf_probe` 加载实际 DLL 并使用真实 TSF context 和内存 text store，但以测试适配器代替未注册 TIP 的按键订阅，并显式模拟按键/焦点回调。
 
 ### 尚未实现或接入
 
-- 完整的 Windows `fcitx::InputContext` / TSF 映射仍在完善；当前已支持最小 context、焦点、按键、提交文本和预编辑快照回传，尚未实现候选变化等完整能力。
-- 真正的输入引擎集成和数据部署，例如拼音、双拼、五笔或 Rime。
-- 正常的按键消费与放行、修饰键和按键释放处理、输入状态切换及快捷键。
-- 持续预编辑、预编辑光标和显示属性、提交/取消、周边文本操作和可靠的异步编辑生命周期。
-- Windows 候选界面、语言栏/托盘、配置界面、原生剪贴板接入和 DPI 适配。
+- 完整 Windows `InputContext` 能力仍在完善；当前按焦点创建/销毁远端 context，不持久保存多个输入框的未提交预编辑。
+- 拼音已接入并验证；双拼、五笔、Rime 的实际输入和部署尚未验证。
+- 基础消费/放行、Ctrl+Space、按键释放和布局字符转换已接入；死键、AltGr、复杂非美式布局、密码/安全 context 和完整快捷键尚未验证。
+- 周边文本、转发按键、格式化预编辑区间和跨断线提交可靠性尚未实现。
+- 候选鼠标交互、TSF UIElement/无障碍、语言栏/托盘、配置界面、原生剪贴板和全面 DPI 适配尚未实现或验证。
 - 统一安装包、核心与 DLL 的联合部署，以及 TSF 的 ARM64/x86 构建与验证。
 - 默认配置关闭上游 X11、Wayland、DBus、server 和 keyboard engine 等组件；不要直接启用 Linux 前端来替代 Windows 实现。
 - 上游已有候选、配置、引擎管理和输入上下文等抽象，优先复用；插件能构建不代表其 Windows 系统后端已经实现。
@@ -67,6 +71,7 @@
 
 4. 不使用 `git submodule update --remote`，不顺手升级子模块，不提交子模块版本变更，除非任务明确要求。
 5. 优先在主仓库完成 Windows 接入。确需修改子模块时，先说明原因、影响和版本管理方式，并检查子模块内的开发约束。
+6. 初始化后运行 `scripts/apply-pinyin-patches.ps1`。本项目在主仓库记录补丁，不创建本地子模块提交；不要把补丁产生的 dirty 状态误当作待丢弃修改。
 
 ## 构建与验证
 
@@ -76,6 +81,8 @@
 - 默认 MSYS2 根目录为 `C:/msys64`；工具链也支持通过 `MSYSTEM_PREFIX` 或 `MSYS2_ROOT` 定位。
 - AMD64 使用 `clang64` sysroot；ARM64 使用 `clangarm64` sysroot，需要目标架构对应的依赖。
 - 编译器必须与工具链的 Windows GNU 目标匹配；遇到问题先检查 PATH 和 CMake 缓存，不要修改源码来掩盖环境错误。
+- 当前固定 Core 5.1.22、chinese-addons 5.1.15、libime 1.1.17。后一版本由实际 API 需求决定，不能仅依据 chinese-addons 声明的 1.1.14 最低版本降级。
+- 完整 AMD64 拼音构建见 `docs/pinyin.md` 和 `scripts/build-pinyin.ps1`，额外要求同运行库的 Boost/iostreams 和 zstd。默认从源生成数据；已验证路径为 SHA256 固定的预编译数据归档模式。
 - 在仓库根目录、正确的 MSYS2 / Clang 工具环境中执行：
 
   ```powershell
@@ -120,20 +127,16 @@
 - 主仓库提供 `win32/scripts/format.ps1` 和 `win32/scripts/lint.ps1`；脚本基于当前工作目录执行 `git ls-files`，调用前确认检查范围。
 - 优先验证修改涉及的目标，再考虑更广泛的构建和测试。
 - 如果依赖或工具版本阻塞验证，报告具体命令、错误和未验证范围，不宣称测试通过。
-- 本次基线检查所在环境的 CMake 为 3.23.2，两套工程都在最低版本检查处停止；这属于环境限制，不是编译失败的代码证据。
+- 旧基线检查的 CMake 为 3.23.2；本次环境为 CMake 4.4.4，AMD64 Core、libime、chinese-addons 和 TSF 均已构建，不能继续引用旧版本限制作为本次验证结果。
 - 不自动安装或升级系统工具，不为绕过环境问题降低项目要求，除非任务明确要求。
 
 ## 已知问题与开发注意事项
 
 以下事项来自静态检查，尚未通过完整运行验证；涉及对应代码时重新核对，不在无关任务中顺手修复。
 
-- `win32/dll/main.cpp` 的 `DllCanUnloadNow()` 返回布尔表达式，当前结果与应返回的 `S_OK` / `S_FALSE` 含义相反。
-- `DllGetClassObject()` 没有验证请求的 CLSID。
-- `Tsf` 继承 `ITfCompositionSink`，但 `QueryInterface()` 没有对应分支。
-- KeyUp 和 preserved key 回调返回成功，却没有设置 `pfEaten` 输出参数。
-- `processKey()` 没有检查 context 是否为空，也没有检查编辑会话请求结果，仍始终报告按键已消费。
-- 按键测试回调会触发编辑副作用；异步编辑会话使用可随焦点变化的成员 context。设计真实输入链路时需处理请求所属 context、生命周期和事件顺序。
-- `src/main.cpp` 将运行时资源指向 `share` / `share/fcitx5` 和 `lib/fcitx5`；上游 Windows `StandardPaths` 的内置回退仍使用 `data` / `data/fcitx5`，因此部署和插件加载任务必须保持宿主位于 `bin`，并核对环境变量与安装布局。
+- COM 卸载返回值、CLSID 验证和 composition sink 查询已修复；免注册 probe 覆盖工厂创建、接口和最终引用释放。真实注册激活仍未验证。
+- 按键测试回调无编辑副作用；实际编辑请求持有原始 context 和代次。IPC 超时或文档写入失败仍可能丢失输入，不提供跨进程故障的 exactly-once 保证。
+- Core 5.1.22 的 Windows `StandardPaths` 不使用旧资源目录环境覆盖；项目补丁将内置资源目录改为安装树的 `share` / `share/fcitx5`。宿主必须位于 `bin`。
 - 当前 Windows 默认路径计算要求宿主可执行文件位于 `bin` 目录；根工程已将构建输出统一到 `bin`。构建树中的宿主可以启动，但完整资源验证应使用 `cmake --install` 生成的安装树。
 - 上游仍有部分 Windows 空实现或降级实现，例如启动外部进程和根据 PID 查询可执行文件；使用相关能力前检查平台分支。
 - 注册了某些 TSF category 不代表相应能力已经实现；新增能力声明时必须与实际接口和行为一致。
@@ -151,10 +154,11 @@
 - 不创建提交或新分支，除非用户明确要求。
 - 完成后简要报告修改文件、行为变化、执行的验证和仍未验证的内容；架构或实现进度改变时更新本文件。
 
-## 进度更新：Core/TSF 最小 IPC 链路
+## 进度更新：Core/TSF 基础拼音链路
 
 - 当前已实现用户级 Windows Named Pipe：`win32/ipc/protocol.h` 定义版本化 framing，Core 端服务在 `src/windowsfrontend.cpp`，TSF 端客户端在 `win32/tsf/pipeclient.cpp`。
-- Core 端维护 Windows `InputContext`，支持 `hello`、context 创建/销毁、焦点切换、按键请求和 `KeyReply`；TSF 端将提交文本和预编辑结果放入同步 edit session。
-- 当前连接服务只接受一个客户端，协议暂未实现用户 SID ACL、自动启动、异步输出队列和多连接复用；这些属于后续加固，不应描述为已完成。
-- 当前默认 `ENABLE_KEYBOARD=OFF`，因为 MSYS2 环境缺少 `xkbcommon`/XKB 配置依赖。未被 Fcitx5 输入引擎消费的 ASCII `A-Z`、`0-9`、空格按键会通过受限 fallback 提交，用于验证 Core 到 TSF 的最小链路；这不是拼音、双拼、五笔或 Rime 支持。
-- 本阶段已验证 Core 进程、Named Pipe、Core `InputContext`、按键响应和 ASCII 提交；尚未在真实注册的 TSF 宿主应用中验证 COM 激活和文本插入。
+- 协议 v2 包括 context/焦点/按键、Reset 和 PollState，返回预编辑、UTF-8 字节光标、候选页、mode 和 revision。TSF 使用 100 ms 同线程轮询接收延迟变化，不是服务端异步推送。
+- 管道按 SID/Windows session 命名，设置当前用户 ACL、拒绝远程访问、支持多连接，并校验 context 的连接归属。客户端有可取消的有界 overlapped I/O 和重连；服务端回收断开的 contexts。
+- 默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`。静态 Windows direct-input 引擎只放行按键，不绕过真实拼音引擎提交 ASCII。
+- AMD64 真实拼音 IPC 和免注册 TSF context 文本插入已验证，包括 `nihao` 中文选词/提交、异步取消、焦点及迟到请求隔离。尚未验证真实注册 TIP 的系统激活、按键派发和普通应用输入，也未验证候选窗口视觉效果及 ARM64 拼音/TSF。
+- `scripts/test-pinyin.ps1` 启动隔离 Core、运行两个 probes 和 CTest，再停止自身启动的进程；不执行注册、注销或修改系统输入法设置。
