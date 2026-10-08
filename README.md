@@ -44,6 +44,17 @@ run the following command as administrator:
 & "$env:WINDIR\System32\regsvr32.exe" /u $dll
 ```
 
+To unregister and release processes that still hold the DLL, use an elevated
+PowerShell. The `-Force` option stops only processes reported as DLL owners:
+
+```powershell
+.\win32\scripts\release-tsf.ps1 -Force
+```
+
+If Sysinternals Handle is not in `PATH`, provide its path explicitly with
+`-HandlePath`. Without it, the script uses Windows `tasklist /m` and accessible
+process module lists.
+
 ## Credits
 * [fcitx5](https://github.com/fcitx/fcitx5): LGPL-2.1-or-later
 * [weasel](https://github.com/rime/weasel): GPL-3.0-only
