@@ -3,6 +3,12 @@
 
 namespace fcitx {
 namespace {
+constexpr GUID kModeSwitchPreservedKey = {
+    0x4d9f2d1a,
+    0x6d73,
+    0x4a6d,
+    {0x9d, 0x4f, 0x8a, 0x61, 0x72, 0x5e, 0x31, 0x09}};
+constexpr wchar_t kModeSwitchDescription[] = L"Fcitx5 Pinyin mode switch";
 constexpr uint32_t kModifierCaps = 1U << 4;
 constexpr uint32_t kModifierRepeat = 1U << 5;
 
@@ -73,6 +79,12 @@ HRESULT Tsf::initKeyEventSink() {
     result = keystrokeMgr->AdviseKeyEventSink(clientId_,
                                               (ITfKeyEventSink *)this, TRUE);
     keyEventSinkAdvised_ = SUCCEEDED(result);
+    if (keyEventSinkAdvised_) {
+        constexpr TF_PRESERVEDKEY key{VK_SPACE, TF_MOD_CONTROL};
+        modeSwitchPreserved_ = SUCCEEDED(keystrokeMgr->PreserveKey(
+            clientId_, kModeSwitchPreservedKey, &key, kModeSwitchDescription,
+            static_cast<ULONG>(std::size(kModeSwitchDescription) - 1)));
+    }
     return result;
 }
 
@@ -84,19 +96,27 @@ void Tsf::uninitKeyEventSink() {
     if (threadMgr_->QueryInterface(&keystrokeMgr) != S_OK) {
         return;
     }
+    if (modeSwitchPreserved_) {
+        constexpr TF_PRESERVEDKEY key{VK_SPACE, TF_MOD_CONTROL};
+        keystrokeMgr->UnpreserveKey(kModeSwitchPreservedKey, &key);
+        modeSwitchPreserved_ = false;
+    }
     keystrokeMgr->UnadviseKeyEventSink(clientId_);
     keyEventSinkAdvised_ = false;
 }
 
 BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
-                     bool release) {
+                     bool release, uint32_t modifiers) {
     if (context == nullptr || context != textEditSinkContext_ ||
         remoteContextId_ == 0 || !pipe_.connected() || !foreground_) {
         return FALSE;
     }
     PipeClient::KeyReply reply;
+    if (modifiers == UINT32_MAX) {
+        modifiers = currentModifiers(lParam);
+    }
     if (!pipe_.key(remoteContextId_, release, static_cast<uint32_t>(wParam),
-                   scanCode(lParam), currentModifiers(lParam),
+                   scanCode(lParam), modifiers,
                    static_cast<uint32_t>(GetMessageTime()), reply,
                    unicodeForKey(wParam, lParam))) {
         clearRemoteContext();
@@ -168,11 +188,15 @@ STDMETHODIMP Tsf::OnKeyUp(ITfContext *pContext, WPARAM wParam, LPARAM lParam,
     return S_OK;
 }
 
-STDMETHODIMP Tsf::OnPreservedKey(ITfContext *, REFGUID, BOOL *pfEaten) {
+STDMETHODIMP Tsf::OnPreservedKey(ITfContext *context, REFGUID guid,
+                                 BOOL *pfEaten) {
     if (pfEaten == nullptr) {
         return E_INVALIDARG;
     }
     *pfEaten = FALSE;
+    if (guid == kModeSwitchPreservedKey) {
+        *pfEaten = processKey(context, VK_SPACE, 0, false, kModifierControl);
+    }
     return S_OK;
 }
 } // namespace fcitx

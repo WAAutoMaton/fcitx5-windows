@@ -14,6 +14,12 @@ int main() {
         !routesKey(VK_SPACE, kModifierControl | kModifierShift, false, false));
     assert(!routesKey('1', 0, true, false));
     assert(routesKey('1', 0, true, true));
+    assert(!routesKey(VK_SPACE, 0, true, false));
+    assert(routesKey(VK_SPACE, 0, true, true));
+    assert(!routesKey(VK_OEM_PLUS, 0, true, false));
+    assert(!routesKey(VK_OEM_MINUS, 0, true, false));
+    assert(routesKey(VK_OEM_PLUS, 0, true, true));
+    assert(routesKey(VK_OEM_MINUS, 0, true, true));
     assert(!routesKey(VK_BACK, 0, true, false));
     assert(routesKey(VK_BACK, 0, true, true));
     assert(routesKey(VK_ESCAPE, 0, true, true));

@@ -69,7 +69,7 @@ class Tsf : public ITfTextInputProcessorEx,
     bool initRemoteContext();
     void clearRemoteContext();
     BOOL processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
-                    bool release);
+                    bool release, uint32_t modifiers = UINT32_MAX);
     bool submitSnapshot(PipeClient::KeyReply reply, bool synchronous);
     bool requestNextEdit(bool synchronous);
     HRESULT applySnapshot(TfEditCookie cookie, ITfContext *context,
@@ -110,5 +110,6 @@ class Tsf : public ITfTextInputProcessorEx,
     bool foreground_ = true;
     TfGuidAtom attributeAtom_ = TF_INVALID_GUIDATOM;
     bool keyEventSinkAdvised_ = false;
+    bool modeSwitchPreserved_ = false;
 };
 } // namespace fcitx

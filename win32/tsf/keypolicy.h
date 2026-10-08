@@ -25,12 +25,13 @@ inline bool routesKey(uint32_t key, uint32_t modifiers, bool enabled,
         (modifiers & (kModifierControl | kModifierAlt | kModifierSuper))) {
         return false;
     }
-    if ((key >= 'A' && key <= 'Z') || key == VK_SPACE ||
-        (key >= VK_OEM_1 && key <= VK_OEM_3) ||
-        (key >= VK_OEM_4 && key <= VK_OEM_8) || key == VK_OEM_102) {
+    if (key >= 'A' && key <= 'Z') {
         return true;
     }
-    if (composing && key >= '0' && key <= '9') {
+    if (composing &&
+        (key >= '0' && key <= '9' || key == VK_SPACE ||
+         (key >= VK_OEM_1 && key <= VK_OEM_3) ||
+         (key >= VK_OEM_4 && key <= VK_OEM_8) || key == VK_OEM_102)) {
         return true;
     }
     if (!composing) {
