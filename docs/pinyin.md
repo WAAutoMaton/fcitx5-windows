@@ -1,5 +1,9 @@
 # Windows Pinyin Integration
 
+This guide describes the AMD64 Pinyin integration and its current validation
+scope as of 2026-10-10. For manual registration, startup and unregistration,
+see [Run in the README](../README.md#run).
+
 ## Versions and Architecture
 
 The pinned combination is Fcitx5 5.1.22, chinese-addons 5.1.15 and libime
@@ -8,9 +12,25 @@ declares libime 1.1.14 as its minimum, its selected revision uses newer
 `HistoryBigram::WordWithCode` and Pinyin context APIs. The tested combination
 is recorded in `cmake/pinyin-lock.json`.
 
-Core remains a separate MSYS2 clang64 process. The TSF DLL is compiled with
-LLVM's Windows SDK/ATL toolchain. No C++ object, allocator or engine ABI crosses
-the pipe. All engine operations run on Core's event loop through EventDispatcher.
+Core and TSF are independent CMake projects. The root project builds Core and
+its host; it does not include `win32`, libime or chinese-addons. Core runs in a
+separate MSYS2 clang64 process. The TSF DLL is compiled with LLVM's Windows
+SDK/ATL toolchain and loaded into the application's process. No C++ object,
+allocator or engine ABI crosses the pipe. Pipe service threads dispatch requests
+to Core's event loop through `EventDispatcher`; document changes use TSF edit
+sessions on the TSF owning thread.
+
+| Source | Responsibility |
+| --- | --- |
+| [src/main.cpp](../src/main.cpp) | Host initialization, in-memory input group and Pinyin warmup |
+| [src/windowsfrontend.cpp](../src/windowsfrontend.cpp) | Windows InputContext and Core pipe service |
+| [win32/ipc/protocol.h](../win32/ipc/protocol.h) | Shared framing and snapshot format |
+| [win32/tsf/pipeclient.cpp](../win32/tsf/pipeclient.cpp) | TSF pipe client and bounded I/O |
+| [win32/tsf/EditSession.cpp](../win32/tsf/EditSession.cpp) | Composition and document edits |
+| [win32/tsf/langbaritem.cpp](../win32/tsf/langbaritem.cpp) | Input mode button, notifications and lifetime |
+| [win32/dll/register.cpp](../win32/dll/register.cpp) | Profile, branding icon and capability registration |
+
+### Input Modes and Indicator
 
 `windowskeyboard` is a static direct-input engine with no XKB dependency. It
 provides the first group entry required by Core; it never commits ASCII itself.
@@ -20,7 +40,8 @@ system keyboard open/close changes select Pinyin/direct input in Core. Focus
 changes and reconnections preserve that system mode. An exact Ctrl+Space
 preserved key and the ordinary key callback use the same mode synchronization;
 ordinary Space is never registered as a preserved key. Existing user groups are
-not saved or overwritten. ASCII fallback is disabled by default and by the Pinyin build script.
+not saved or overwritten. Both upstream keyboard support and ASCII fallback are
+disabled by default and by the Pinyin build script.
 Core prewarms Pinyin before accepting pipe clients so initial model paging does
 not consume the first key's IPC timeout. Runtime DLL search includes its own bin.
 
@@ -34,6 +55,14 @@ system small-icon size and declare `TF_LBI_STYLE_TEXTCOLORICON` for system theme
 coloring. No extra runtime icon files or Core protocol changes are required.
 This is a Windows input-indicator item, not a `Shell_NotifyIcon` tray icon;
 its display is controlled by Windows and the user's language-bar settings.
+After removal, a retained language-bar object is hidden and detached from its
+message window, so late clicks cannot affect another activation. It holds an
+independent DLL reference until released.
+
+The icon reflects the system keyboard compartment, not Core connection health.
+It can show a mode while Core is unavailable. Core must be started separately
+and remain running for Pinyin input; neither the DLL nor registration launches
+it automatically.
 
 The desktop TIP registers `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT` so Windows can
 recognize its input-indicator support without declaring unverified Windows Store
@@ -68,49 +97,66 @@ conflicting changes. It does not reset submodules or create commits.
 - `chinese-addons-windows.patch`: dictionary loading accepts filesystem paths,
   allowing Windows' wide native paths to reach `std::ifstream`.
 
-The submodule working trees are intentionally patched. Commit the main-repo
-patches and version pointers together when preparing a commit; do not commit
-unrecorded modifications only inside the submodules.
+The submodule working trees are intentionally patched. Record Windows changes
+in the main-repository patch files; do not create local submodule commits or
+discard this patched dirty state. Keep the pinned revisions unless the task
+explicitly requires an upgrade, and keep the lock file and submodule pointers
+consistent if versions are intentionally changed.
 
 ## Build and Deploy Core
 
 Prerequisites: CMake 3.27+, MSYS2 clang64 Clang/Ninja/pkgconf/ECM/dlfcn/libuv/
 gettext, zstd, and Boost headers/iostreams. No script installs or upgrades system
-packages. An isolated extra dependency prefix may be passed via
-`-DependencyPrefix`; it must contain dependencies for the same MSYS2 runtime.
-
-```powershell
-./scripts/build-pinyin.ps1
-```
-
-This builds Core, libime (including tools and datasets), then chinese-addons
-without Qt configuration tools, OpenCC or cloud Pinyin. Source datasets are
-downloaded from the upstream server with SHA256 validation. Language-model
-generation can take significant time and memory.
-
-Alternatively, use the pinned precompiled data archive:
+packages. Run the commands from the repository root. The build script currently
+targets AMD64 using clang64 and does not offer an ARM64 Pinyin build option.
 
 ```powershell
 ./scripts/build-pinyin.ps1 -DataMode Prebuilt
 ```
 
+This applies the compatibility patches and builds Core, libime and its tools,
+then chinese-addons without Qt configuration tools, OpenCC or cloud Pinyin.
 Only `usr/share/libime` and `usr/lib/libime` are extracted from the SHA256-pinned
-Arch Linux libime 1.1.17 package. No Linux executable/library is loaded. The
+Arch Linux libime 1.1.17 package; no Linux executable/library is loaded. The
 dictionary and KenLM data formats have been verified with the Windows build.
-For offline use, supply `-DataArchive <local-package-path>`. This archive mode is
-the locally verified data deployment path; source-data generation has not been
-validated end to end in this environment.
+This is the locally validated deployment path.
+
+The default `Source` mode generates data locally instead:
+
+```powershell
+./scripts/build-pinyin.ps1 -DataMode Source
+```
+
+It downloads source datasets from the upstream server with SHA256 validation.
+Language-model generation can take significant time and memory. Source-data
+generation has not been validated end to end locally.
+
+| Build Option | Behavior |
+| --- | --- |
+| `-MSYS2Root` | MSYS2 location, default `C:/msys64`; the script uses its clang64 toolchain |
+| `-DependencyPrefix` | Extra dependency prefix; Boost/iostreams and zstd must use the same target/runtime |
+| `-Prefix` | Install location, default `dist/pinyin`; must remain inside this repository |
+| `-DataArchive` | Local archive for `Prebuilt` mode, verified against the locked SHA256; avoids the data download, not all environment prerequisites |
+| `-Jobs` | Build parallelism, default 6 |
+
+The build directories are `build/pinyin-core`, `build/pinyin-libime` and
+`build/pinyin-addons`, with prebuilt data cached in `build/pinyin-data`.
+Changing `-Prefix` changes deployment, not these build directory names. A plain
+root CMake build alone does not produce a complete Pinyin installation.
 
 The default prefix is `dist/pinyin`. The script recursively resolves PE imports
 and copies the necessary MSYS2 runtime DLLs into `bin`, without copying Windows
 system DLLs. Start the deployed `dist/pinyin/bin/Fcitx5.exe`, not the build-tree
 executable, for input validation. Keep `bin`, `lib` and `share` together when
-moving the prefix. User dictionaries remain in Fcitx5's user data directories.
+moving the prefix. The executable must remain in `bin` for the Windows resource
+path calculation. User dictionaries remain in Fcitx5's user data directories;
+an isolated installation prefix does not isolate those user dictionaries.
 
 ## Build and Test TSF
 
 Use an initialized Visual Studio x64 development environment with LLVM clang,
-Windows SDK/ATL, Ninja and ImageMagick, not the MSYS2 clang compiler:
+Windows SDK/ATL, Ninja and ImageMagick, not the MSYS2 clang compiler. Run these
+commands from the repository root after deploying Core:
 
 ```powershell
 cmake -S win32 -B win32/build/pinyin-tsf -G Ninja -DCMAKE_BUILD_TYPE=Debug
@@ -118,14 +164,27 @@ cmake --build win32/build/pinyin-tsf
 ./scripts/test-pinyin.ps1
 ```
 
-The TSF DLL now also requires RC compilation for its embedded branding icon.
+The TSF DLL requires RC compilation for its embedded branding icon.
 With the GNU-style Clang driver, use LLVM's `llvm-rc`; if an old CMake cache
 selects the SDK's `rc.exe`, reconfigure with
 `-DCMAKE_RC_COMPILER="C:/Program Files/LLVM/bin/llvm-rc.exe"`.
 
 The test script starts only the isolated Core, runs both probes and CTest, then
 stops the process it started. It refuses to run alongside an existing Core.
-Neither probe registers/unregisters an input method or calls DllRegisterServer.
+Neither the probes nor the CTest tests register/unregister an input method or
+call `DllRegisterServer`. The separate install/uninstall/release scripts do
+modify registration and are not integration test steps.
+
+For CTest alone, without starting Core:
+
+```powershell
+ctest --test-dir win32/build/pinyin-tsf --output-on-failure
+```
+
+The default six tests are `test_dll`, `test_protocol`, `test_input`,
+`test_transport`, `test_langbar` and `test_register`. Root/upstream tests are
+disabled by the default build configuration; these six tests are not the full
+upstream test suite.
 
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
   selection, backspace, cancellation, Ctrl+C pass-through, Ctrl+Space switching,
@@ -145,7 +204,7 @@ Neither probe registers/unregisters an input method or calls DllRegisterServer.
   open/close notifications, cancellation, focus changes and a simulated failure
   to register the exact Ctrl+Space preserved key. Preserved-key callbacks are
   explicitly invoked; the adapter does not prove real OS hotkey dispatch.
-- CTest: helper functions, protocol framing/snapshots, UTF-8/UTF-16/key policy,
+- Default CTest: helper functions, protocol framing/snapshots, UTF-8/UTF-16/key policy,
   real pipe timeout/cancellation followed by a successful read, and language-bar
   COM identity, sink cookies, state notifications and nonblank/distinct monochrome
   icon pixels.
@@ -155,14 +214,32 @@ Neither probe registers/unregisters an input method or calls DllRegisterServer.
   invokes system registration and does not prove taskbar rendering.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers both probes with CTest;
-a deployed Core must already be running for those two tests.
+a deployed Core must already be running for those two tests, bringing the total
+to eight. Debug and clean Release TSF builds and the default six tests have
+passed locally; the real Pinyin probes have also passed with the deployed Core.
+
+`scripts/test-pinyin.ps1` accepts `-Prefix` and `-TsfBuild` for other deployment
+and TSF build directories. Logs are written to `build/pinyin-test/core.stdout.log`
+and `core.stderr.log`. It refuses to run alongside any existing `Fcitx5` process
+and only stops the Core it starts. Read those logs if Core exits or the readiness
+check fails.
+
+If a registered DLL is locked during a rebuild, close applications using it or
+build TSF in a new directory and pass that directory with `-TsfBuild`. Repeating
+unregistration alone does not unload it from running applications. See the
+[README release helper instructions](../README.md#run) before using
+`release-tsf.ps1`: `-Force` terminates detected DLL-owner processes and can affect
+editors, browsers or Explorer.
 
 ## Protocol and Behavior
 
 Protocol v3 uses a pipe name scoped to the user's SID and Windows session. Its
 ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
-overlapped I/O with a 500 ms read/write wait limit; disconnected contexts are destroyed.
+overlapped I/O with a 500 ms wait limit per read/write operation; this is not a
+single 500 ms deadline for the entire request. Disconnected clients' contexts
+are destroyed. The pipe name retains the historical `fcitx5-windows-v2-` prefix;
+compatibility is checked using the framing/handshake version, which is v3.
 
 `SetMode` sets an explicit Pinyin/direct-input mode rather than replaying a
 toggle keystroke. Repeated requests are idempotent; changing modes cancels the
@@ -171,9 +248,11 @@ protocol upgrade; v2 and v3 do not connect to each other.
 
 Each key response contains consumption, mode, commit, preedit, UTF-8 byte cursor,
 revision and the current candidate page. Reset cancels Core composition. PollState
-collects deferred engine updates on Core's event loop. TSF polls every 100 ms on
-its owning thread, rather than using server-pushed updates. Disconnected clients
-retry every two seconds. Requests are not replayed after a timeout.
+collects deferred engine updates on Core's event loop. TSF's 100 ms owning-thread
+timer polls while a foreground document context exists and no edit request is
+pending; it is not a guaranteed output latency. Disconnected clients retry
+every two seconds while a foreground context exists. Requests are not replayed
+after a timeout.
 
 The key test callback performs no IPC or editing. Actual processing runs once
 and decides consumption from Core. Each edit session owns its original context,
@@ -186,20 +265,25 @@ applies a dotted underline, replaces the composition range on commit and cancels
 on focus loss. A nonactivating Win32 candidate popup uses the context's text
 extent and basic DPI/work-area bounds. Candidate selection and paging are handled
 by the Pinyin engine; the popup does not insert candidate text itself.
+Focus changes create/destroy remote contexts; the current implementation does
+not persist separate unfinished preedits for multiple input fields.
 
 ## Remaining Validation and Limits
 
-- Registered activation and keyboard input in Notepad, browsers and other real
-  host applications still require explicit approval to register the DLL.
+- The user confirmed the registered input indicator works. This is narrower
+  than a complete real-application input compatibility test; OS key/hotkey
+  dispatch and input in Notepad, browsers and other hosts still need broader
+  validation. The test application and Windows-version matrix were not recorded.
 - Candidate rendering, DPI behavior and screen-reader integration are not
   verified in those applications; the window does not implement ITfUIElement.
-- The user confirmed the input indicator works after rebuilding and registering
-  the DLL with `SYSTRAYSUPPORT` and the embedded branding icon. Theme coloring,
-  Explorer restart, multiple-monitor DPI and broader Windows-version coverage
-  still need registered-TIP validation. The automated probes do not verify
-  taskbar rendering.
-- The first version has keyboard-only candidates, no candidate mouse selection,
-  ordinary notification-area tray/configuration UI or automatic Core startup.
+- Input-indicator theme coloring, Explorer restart, multiple-monitor DPI and
+  broader Windows-version coverage still need registered-TIP validation.
+  The automated probes do not verify taskbar rendering.
+- Candidates currently have keyboard-only selection, with no candidate mouse
+  interaction, ordinary notification-area tray/configuration UI, automatic Core
+  startup or unified Core/TSF installer.
+- Shuangpin, Wubi and Rime input/deployment and Windows Store compatibility have
+  not been validated. `SYSTRAYSUPPORT` does not declare `IMMERSIVESUPPORT`.
 - Password/secure contexts, dead keys, AltGr/non-US layouts, forwarded keys and
   surrounding-text editing are not claimed as supported. Secure-mode and other
   unimplemented TSF categories are no longer declared.
