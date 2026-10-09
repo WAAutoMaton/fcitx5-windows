@@ -56,7 +56,23 @@ jobs:
           DESTDIR: dist/${{ matrix.arch }}
         run: |
           cmake --install build/${{ matrix.arch }}
-          cd dist/${{ matrix.arch }} && tar cjf ../Fcitx5-${{ matrix.arch }}-dev.tar.bz2 bin/lib* include lib
+          $prefixLine = cmake -LA -N build/${{ matrix.arch }} |
+            Select-String '^CMAKE_INSTALL_PREFIX:'
+          if (!$prefixLine) { throw 'CMAKE_INSTALL_PREFIX was not found in the build cache.' }
+          $prefix = ($prefixLine.Line -split '=', 2)[1]
+          $relativePrefix = $prefix -replace '^[A-Za-z]:[\\/]*', ''
+          $stagingRoot = (Resolve-Path "dist/${{ matrix.arch }}").Path
+          $installRoot = Join-Path $stagingRoot $relativePrefix
+          if (!(Test-Path (Join-Path $installRoot 'bin'))) {
+            throw "Installed bin directory was not found at $installRoot"
+          }
+          $archive = Join-Path (Split-Path -Parent $stagingRoot) "Fcitx5-${{ matrix.arch }}-dev.tar.bz2"
+          Push-Location $installRoot
+          try {
+            tar cjf $archive bin/lib* include lib
+          } finally {
+            Pop-Location
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
