@@ -1,6 +1,7 @@
 #pragma once
 
 #include "candidatewindow.h"
+#include "langbaritem.h"
 #include "pipeclient.h"
 #include <atlcomcli.h>
 #include <bitset>
@@ -70,6 +71,10 @@ class Tsf : public ITfTextInputProcessorEx,
     void uninitKeyEventSink();
     HRESULT initKeyboardCompartment();
     void uninitKeyboardCompartment();
+    HRESULT initLangBarItem();
+    void uninitLangBarItem();
+    void notifyLangBarItem();
+    void toggleMode();
     HRESULT setKeyboardOpen(bool enabled);
     bool applyKeyboardMode(bool synchronous);
     bool initRemoteContext();
@@ -120,5 +125,7 @@ class Tsf : public ITfTextInputProcessorEx,
     CComPtr<ITfCompartment> keyboardCompartment_;
     DWORD keyboardCompartmentCookie_ = TF_INVALID_COOKIE;
     bool keyboardOpen_ = true;
+    CComPtr<ITfLangBarItemMgr> langBarItemManager_;
+    CComPtr<LangBarItem> langBarItem_;
 };
 } // namespace fcitx

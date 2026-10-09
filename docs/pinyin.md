@@ -24,6 +24,17 @@ not saved or overwritten. ASCII fallback is disabled by default and by the Pinyi
 Core prewarms Pinyin before accepting pipe clients so initial model paging does
 not consume the first key's IPC timeout. Runtime DLL search includes its own bin.
 
+TSF publishes one Language Bar button with `GUID_LBI_INPUTMODE` while the TIP
+is activated and removes it when deactivated. Chinese mode shows "中" and
+direct-input mode shows "A"; closing the keyboard compartment changes the icon
+rather than removing the item. Clicking it posts a message to the TSF owning
+thread, updates the same keyboard compartment, and uses the existing Core
+`SetMode` request. The transparent monochrome glyphs are drawn with GDI at the
+system small-icon size and declare `TF_LBI_STYLE_TEXTCOLORICON` for system theme
+coloring. No extra runtime icon files or Core protocol changes are required.
+This is a Windows input-indicator item, not a `Shell_NotifyIcon` tray icon;
+its display is controlled by Windows and the user's language-bar settings.
+
 ## Compatibility Patches
 
 Initialize the pinned submodules, then apply the patches kept in the main repo:
@@ -107,12 +118,19 @@ Neither probe registers/unregisters an input method or calls DllRegisterServer.
   isolation. Because this TIP is not registered, a test-only adapter substitutes
   key-sink subscription, and the probe explicitly supplies key/focus callbacks.
   This does not verify Windows' registered TIP activation or OS key dispatch.
+  A test-only language-bar manager captures the input mode item instead of
+  publishing an unregistered service to the desktop. The probe checks add/remove,
+  Chinese/English state and notifications, explicitly invoked button clicks,
+  activation rollback and detached-item lifetime/late-click isolation; it does
+  not verify taskbar rendering or actual OS language-bar click dispatch.
   Mode regressions use a real thread-manager keyboard compartment, including
   open/close notifications, cancellation, focus changes and a simulated failure
   to register the exact Ctrl+Space preserved key. Preserved-key callbacks are
   explicitly invoked; the adapter does not prove real OS hotkey dispatch.
 - CTest: helper functions, protocol framing/snapshots, UTF-8/UTF-16/key policy,
-  and real pipe timeout/cancellation followed by a successful read.
+  real pipe timeout/cancellation followed by a successful read, and language-bar
+  COM identity, sink cookies, state notifications and nonblank/distinct monochrome
+  icon pixels.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers both probes with CTest;
 a deployed Core must already be running for those two tests.
@@ -153,8 +171,12 @@ by the Pinyin engine; the popup does not insert candidate text itself.
   host applications still require explicit approval to register the DLL.
 - Candidate rendering, DPI behavior and screen-reader integration are not
   verified in those applications; the window does not implement ITfUIElement.
+- The input mode Language Bar item is implemented, but Windows 10/11 taskbar
+  appearance, theme coloring, Explorer restart and multiple-monitor DPI behavior
+  still need registered-TIP validation. Interface/probe success does not prove
+  the item is displayed by the system.
 - The first version has keyboard-only candidates, no candidate mouse selection,
-  tray/configuration UI or automatic Core startup.
+  ordinary notification-area tray/configuration UI or automatic Core startup.
 - Password/secure contexts, dead keys, AltGr/non-US layouts, forwarded keys and
   surrounding-text editing are not claimed as supported. Secure-mode and other
   unimplemented TSF categories are no longer declared.

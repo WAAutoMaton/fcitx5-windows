@@ -1,12 +1,56 @@
 #include "displayattribute.h"
 #include "tsf.h"
 
+#include <new>
+
 namespace fcitx {
+HRESULT Tsf::initLangBarItem() {
+    CComPtr<ITfLangBarItemMgr> manager;
+    auto result = threadMgr_->QueryInterface(IID_PPV_ARGS(&manager));
+    if (FAILED(result)) {
+        return result;
+    }
+    auto *item = new (std::nothrow) LangBarItem(messageWindow_, keyboardOpen_);
+    if (!item) {
+        return E_OUTOFMEMORY;
+    }
+    result = manager->AddItem(static_cast<ITfLangBarItem *>(item));
+    if (FAILED(result)) {
+        item->detach();
+        item->Release();
+        return result;
+    }
+    langBarItemManager_ = std::move(manager);
+    langBarItem_.Attach(item);
+    return S_OK;
+}
+
+void Tsf::uninitLangBarItem() {
+    if (!langBarItem_) {
+        langBarItemManager_.Release();
+        return;
+    }
+    langBarItem_.p->detach();
+    if (langBarItemManager_) {
+        langBarItemManager_->RemoveItem(
+            static_cast<ITfLangBarItem *>(langBarItem_.p));
+    }
+    langBarItem_.Release();
+    langBarItemManager_.Release();
+}
+
+void Tsf::notifyLangBarItem() {
+    if (langBarItem_) {
+        langBarItem_.p->setMode(keyboardOpen_);
+    }
+}
+
 STDAPI Tsf::Activate(ITfThreadMgr *pThreadMgr, TfClientId tfClientId) {
     return ActivateEx(pThreadMgr, tfClientId, 0U);
 }
 
 STDAPI Tsf::Deactivate() {
+    uninitLangBarItem();
     if (messageWindow_) {
         const auto module = reinterpret_cast<HINSTANCE>(
             GetWindowLongPtrW(messageWindow_, GWLP_HINSTANCE));
@@ -47,6 +91,10 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD) {
         goto ActivateExError;
     }
     activationResult = initKeyboardCompartment();
+    if (FAILED(activationResult)) {
+        goto ActivateExError;
+    }
+    activationResult = initLangBarItem();
     if (FAILED(activationResult)) {
         goto ActivateExError;
     }

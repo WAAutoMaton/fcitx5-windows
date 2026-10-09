@@ -57,6 +57,8 @@ HRESULT Tsf::setKeyboardOpen(bool enabled) {
     const auto result = keyboardCompartment_->SetValue(clientId_, &value);
     if (FAILED(result)) {
         keyboardOpen_ = previous;
+    } else {
+        notifyLangBarItem();
     }
     return result;
 }
@@ -72,11 +74,19 @@ STDMETHODIMP Tsf::OnChange(REFGUID guid) {
     }
     if (value.vt == VT_I4 && keyboardOpen_ != (value.lVal != 0)) {
         keyboardOpen_ = value.lVal != 0;
+        notifyLangBarItem();
         if (messageWindow_) {
             PostMessageW(messageWindow_, WM_APP + 2, 0, 0);
         }
     }
     return S_OK;
+}
+
+void Tsf::toggleMode() {
+    if (FAILED(setKeyboardOpen(!keyboardOpen_))) {
+        return;
+    }
+    applyKeyboardMode(false);
 }
 
 bool Tsf::applyKeyboardMode(bool synchronous) {

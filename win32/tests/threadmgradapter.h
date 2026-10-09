@@ -1,11 +1,15 @@
 #pragma once
 
 #include <atlcomcli.h>
+#include <ctffunc.h>
+#include <ctfutb.h>
 #include <msctf.h>
 
 class ThreadMgrAdapter : public ITfThreadMgr,
                          public ITfKeystrokeMgr,
-                         public ITfSource {
+                         public ITfSource,
+                         public ITfLangBarItemMgr,
+                         public ITfLangBarItemSink {
   public:
     explicit ThreadMgrAdapter(ITfThreadMgr *manager) : manager_(manager) {
         manager_->QueryInterface(IID_PPV_ARGS(&source_));
@@ -22,6 +26,10 @@ class ThreadMgrAdapter : public ITfThreadMgr,
             *result = static_cast<ITfKeystrokeMgr *>(this);
         else if (id == IID_ITfSource)
             *result = static_cast<ITfSource *>(this);
+        else if (id == IID_ITfLangBarItemMgr)
+            *result = static_cast<ITfLangBarItemMgr *>(this);
+        else if (id == IID_ITfLangBarItemSink)
+            *result = static_cast<ITfLangBarItemSink *>(this);
         else
             return E_NOINTERFACE;
         AddRef();
@@ -140,14 +148,92 @@ class ThreadMgrAdapter : public ITfThreadMgr,
         return E_NOTIMPL;
     }
 
+    // The unregistered TIP's language item is captured instead of published.
+    STDMETHODIMP AddItem(ITfLangBarItem *item) override {
+        ++addItemCalls;
+        if (FAILED(addItemResult))
+            return addItemResult;
+        if (!item || langBarItem)
+            return E_INVALIDARG;
+        CComPtr<ITfSource> source;
+        auto result = item->QueryInterface(IID_PPV_ARGS(&source));
+        if (FAILED(result))
+            return result;
+        result = source->AdviseSink(IID_ITfLangBarItemSink,
+                                    static_cast<ITfLangBarItemSink *>(this),
+                                    &langBarCookie_);
+        if (SUCCEEDED(result))
+            langBarItem = item;
+        return result;
+    }
+    STDMETHODIMP RemoveItem(ITfLangBarItem *item) override {
+        if (!item || item != langBarItem)
+            return E_INVALIDARG;
+        ++removeItemCalls;
+        CComPtr<ITfSource> source;
+        if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&source))))
+            source->UnadviseSink(langBarCookie_);
+        langBarItem.Release();
+        langBarCookie_ = TF_INVALID_COOKIE;
+        return S_OK;
+    }
+    STDMETHODIMP OnUpdate(DWORD flags) override {
+        ++langBarUpdates;
+        langBarUpdateFlags |= flags;
+        return S_OK;
+    }
+    STDMETHODIMP GetItem(REFGUID guid, ITfLangBarItem **item) override {
+        if (!item)
+            return E_INVALIDARG;
+        *item = nullptr;
+        if (guid != GUID_LBI_INPUTMODE || !langBarItem)
+            return E_FAIL;
+        *item = langBarItem;
+        (*item)->AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP EnumItems(IEnumTfLangBarItems **) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP AdviseItemSink(ITfLangBarItemSink *, DWORD *,
+                                REFGUID) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP UnadviseItemSink(DWORD) override { return E_NOTIMPL; }
+    STDMETHODIMP GetItemFloatingRect(DWORD, REFGUID, RECT *) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP GetItemsStatus(ULONG, const GUID *, DWORD *) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP GetItemNum(ULONG *) override { return E_NOTIMPL; }
+    STDMETHODIMP GetItems(ULONG, ITfLangBarItem **, TF_LANGBARITEMINFO *,
+                          DWORD *, ULONG *) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP AdviseItemsSink(ULONG, ITfLangBarItemSink **, const GUID *,
+                                 DWORD *) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP UnadviseItemsSink(ULONG, DWORD *) override {
+        return E_NOTIMPL;
+    }
+
     GUID preservedGuid = GUID_NULL;
     unsigned int preserveCalls = 0;
     unsigned int unpreserveCalls = 0;
     HRESULT preserveResult = S_OK;
+    CComPtr<ITfLangBarItem> langBarItem;
+    unsigned int addItemCalls = 0;
+    unsigned int removeItemCalls = 0;
+    unsigned int langBarUpdates = 0;
+    DWORD langBarUpdateFlags = 0;
+    HRESULT addItemResult = S_OK;
 
   private:
     LONG references_ = 1;
     CComPtr<ITfThreadMgr> manager_;
     CComPtr<ITfSource> source_;
     CComPtr<ITfKeyEventSink> sink_;
+    DWORD langBarCookie_ = TF_INVALID_COOKIE;
 };

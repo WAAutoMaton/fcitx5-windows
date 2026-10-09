@@ -5,7 +5,7 @@
 - 本文件适用于整个仓库；子目录中的 `AGENTS.md` 对其目录有更具体的约束时，优先遵守子目录说明。
 - 本项目是尚未完成的 Fcitx5 Windows port，使用 C++20、CMake 和 PowerShell。
 - 默认使用中文沟通，保留代码标识符、接口名称和命令的原文。
-- 以下进度更新于 2026-10-08。功能变化时同步更新相关说明，以实际代码为准，不把已知缺口当作永久设计限制。
+- 以下进度更新于 2026-10-09。功能变化时同步更新相关说明，以实际代码为准，不把已知缺口当作永久设计限制。
 - 不要将“可以编译”“可以注册为输入法”“可以提交固定字符”描述为“已经支持 Fcitx5 输入”。
 
 ## 项目结构
@@ -46,7 +46,8 @@
 - TSF 已有激活/停用、线程管理和文本编辑事件订阅、焦点文档切换处理以及按键事件订阅。
 - 按键经 Core 交给真实 Pinyin 引擎，返回消费结果、中文提交、预编辑、光标和候选页；TSF 持续维护 composition，通过独立 edit session 写入文档。
 - TSF 有基础预编辑下划线、UTF-16 光标和不抢焦点的候选浮窗，支持同步编辑失败后异步排队、取消和焦点切换。
-- `test_dll` 仍仅测试辅助函数；新增 `ipc_probe` 验证真实拼音，`tsf_probe` 加载实际 DLL 并使用真实 TSF context 和内存 text store，但以测试适配器代替未注册 TIP 的按键订阅，并显式模拟按键/焦点回调。
+- TSF 已实现 `GUID_LBI_INPUTMODE` Language Bar 输入模式项，激活时添加、停用时移除；中文显示“中”、英文显示“A”，点击通过 TSF 消息窗口切换现有 keyboard compartment。透明单色图标由 GDI 绘制，并声明 `TF_LBI_STYLE_TEXTCOLORICON` 供系统主题着色；尚未验证真实任务栏显示和多显示器 DPI 效果。
+- `test_dll` 仍仅测试辅助函数；`test_langbar` 覆盖语言栏 COM 接口、通知、图标像素和生命周期。`ipc_probe` 验证真实拼音，`tsf_probe` 加载实际 DLL 并使用真实 TSF context 和内存 text store，但以测试适配器代替未注册 TIP 的按键订阅和语言栏管理器，并显式模拟按键/焦点/语言栏点击回调。
 
 ### 尚未实现或接入
 
@@ -54,7 +55,7 @@
 - 拼音已接入并验证；双拼、五笔、Rime 的实际输入和部署尚未验证。
 - 基础消费/放行、Ctrl+Space、按键释放和布局字符转换已接入；死键、AltGr、复杂非美式布局、密码/安全 context 和完整快捷键尚未验证。
 - 周边文本、转发按键、格式化预编辑区间和跨断线提交可靠性尚未实现。
-- 候选鼠标交互、TSF UIElement/无障碍、语言栏/托盘、配置界面、原生剪贴板和全面 DPI 适配尚未实现或验证。
+- 候选鼠标交互、TSF UIElement/无障碍、普通通知区域托盘、配置界面、原生剪贴板和全面 DPI 适配尚未实现或验证；语言栏输入模式项已实现，真实系统显示仍未验证。
 - 统一安装包、核心与 DLL 的联合部署，以及 TSF 的 ARM64/x86 构建与验证。
 - 默认配置关闭上游 X11、Wayland、DBus、server 和 keyboard engine 等组件；不要直接启用 Linux 前端来替代 Windows 实现。
 - 上游已有候选、配置、引擎管理和输入上下文等抽象，优先复用；插件能构建不代表其 Windows 系统后端已经实现。
@@ -159,6 +160,7 @@
 - 当前已实现用户级 Windows Named Pipe：`win32/ipc/protocol.h` 定义版本化 framing，Core 端服务在 `src/windowsfrontend.cpp`，TSF 端客户端在 `win32/tsf/pipeclient.cpp`。
 - 协议 v3 包括 context/焦点/按键、Reset、PollState 和幂等 SetMode，返回预编辑、UTF-8 字节光标、候选页、mode 和 revision。TSF 使用 100 ms 同线程轮询接收延迟变化，不是服务端异步推送。升级协议必须同时更新 Core 与 TSF DLL。
 - TSF 订阅线程管理器的 `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`，将系统输入法开关同步到 Core 的 Pinyin/direct-input 模式；新焦点 context 和重连继承该状态。只注册精确 Ctrl+Space preserved key，不注册普通 Space。免注册 probe 覆盖真实 compartment 通知和显式模拟的快捷键回调，不能据此宣称真实系统热键派发已验证。
+- `win32/tsf/langbaritem.cpp` 提供 Language Bar 输入模式项，复用相同的 compartment 状态和 Core SetMode；停用后仍被持有的对象隐藏并解除窗口绑定，独立持有 DLL 引用。免注册 probe 用语言栏适配器验证注册/移除、模式刷新、点击、失败回滚和迟到点击隔离，不代表 Windows 输入指示器视觉效果已验证。
 - 管道按 SID/Windows session 命名，设置当前用户 ACL、拒绝远程访问、支持多连接，并校验 context 的连接归属。客户端有可取消的有界 overlapped I/O 和重连；服务端回收断开的 contexts。
 - 默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`。静态 Windows direct-input 引擎只放行按键，不绕过真实拼音引擎提交 ASCII。
 - AMD64 真实拼音 IPC 和免注册 TSF context 文本插入已验证，包括 `nihao` 中文选词/提交、异步取消、焦点及迟到请求隔离。尚未验证真实注册 TIP 的系统激活、按键派发和普通应用输入，也未验证候选窗口视觉效果及 ARM64 拼音/TSF。

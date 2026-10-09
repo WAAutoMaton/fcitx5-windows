@@ -47,6 +47,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
+    if (self && message == LangBarItem::kToggleMessage) {
+        self->AddRef();
+        self->toggleMode();
+        self->Release();
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 

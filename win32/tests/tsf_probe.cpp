@@ -403,10 +403,43 @@ int wmain(int count, wchar_t **arguments) {
             std::cerr << "ActivateEx HRESULT: 0x" << std::hex << activation
                       << std::dec << '\n';
         require(SUCCEEDED(activation), "TIP activation failed");
+        BOOL handled = FALSE;
+        require(adapter->addItemCalls == 1 && adapter->langBarItem,
+                "input mode item was not added on activation");
+        CComPtr<ITfLangBarItemButton> modeButton;
+        require(SUCCEEDED(adapter->langBarItem.QueryInterface(&modeButton)),
+                "input mode button interface missing");
+        TF_LANGBARITEMINFO modeInfo{};
+        require(SUCCEEDED(modeButton->GetInfo(&modeInfo)) &&
+                    modeInfo.clsidService == fcitx::FCITX_CLSID &&
+                    modeInfo.guidItem == GUID_LBI_INPUTMODE,
+                "input mode item has the wrong identity");
+        auto requireMode = [&](bool chinese) {
+            CComBSTR text;
+            DWORD status = 0;
+            require(SUCCEEDED(modeButton->GetText(&text)) && text &&
+                        std::wstring(text) == (chinese ? L"\u4e2d" : L"A") &&
+                        SUCCEEDED(modeButton->GetStatus(&status)) &&
+                        !(status & TF_LBI_STATUS_HIDDEN) &&
+                        ((status & TF_LBI_STATUS_BTN_TOGGLED) != 0) == chinese,
+                    "input mode text/status is out of sync");
+        };
+        requireMode(true);
+        require(SUCCEEDED(modeButton->OnClick(TF_LBI_CLK_LEFT, {}, nullptr)),
+                "input mode click failed");
+        pump(200);
+        requireMode(false);
+        requirePassedThrough(keys, context, 'N');
+        require(SUCCEEDED(modeButton->OnClick(TF_LBI_CLK_LEFT, {}, nullptr)),
+                "input mode reopen click failed");
+        pump(200);
+        requireMode(true);
+        require(SUCCEEDED(keys->OnTestKeyDown(context, 'N', 0, &handled)) &&
+                    handled,
+                "input mode click did not reopen Pinyin");
         require(adapter->preserveCalls == 1 &&
                     adapter->preservedGuid != GUID_NULL,
                 "exact Ctrl+Space preserved key was not requested");
-        BOOL handled = FALSE;
         const uint32_t directKeys[] = {VK_SPACE, VK_OEM_PLUS, VK_OEM_MINUS, '0',
                                        '9'};
         for (const auto key : directKeys)
@@ -415,11 +448,17 @@ int wmain(int count, wchar_t **arguments) {
         require(SUCCEEDED(keyboard->SetValue(client, &closed)),
                 "system keyboard close failed");
         pump(200);
+        requireMode(false);
+        require(
+            (adapter->langBarUpdateFlags & (TF_LBI_BTNALL | TF_LBI_STATUS)) ==
+                (TF_LBI_BTNALL | TF_LBI_STATUS),
+            "input mode changes did not notify the language bar");
         requirePassedThrough(keys, context, 'N');
         requirePassedThrough(keys, context, VK_SPACE);
         require(SUCCEEDED(keyboard->SetValue(client, &open)),
                 "system keyboard open failed");
         pump(200);
+        requireMode(true);
         require(SUCCEEDED(keys->OnTestKeyDown(context, 'N', 0, &handled)) &&
                     handled,
                 "system keyboard reopen did not restore Pinyin");
@@ -429,6 +468,7 @@ int wmain(int count, wchar_t **arguments) {
                 "preserved mode switch failed");
         pump();
         requirePassedThrough(keys, context, 'N');
+        requireMode(false);
         CComVariant mode;
         require(SUCCEEDED(keyboard->GetValue(&mode)) && mode.vt == VT_I4 &&
                     mode.lVal == 0,
@@ -546,11 +586,30 @@ int wmain(int count, wchar_t **arguments) {
         require(store->text == hello && otherStore->text.empty(),
                 "late edit reached the wrong context");
         require(SUCCEEDED(service->Deactivate()), "TIP deactivation failed");
+        require(adapter->removeItemCalls == 1 && !adapter->langBarItem,
+                "input mode item was not removed on deactivation");
+        DWORD inactiveStatus = 0;
+        require(SUCCEEDED(modeButton->GetStatus(&inactiveStatus)) &&
+                    (inactiveStatus & TF_LBI_STATUS_HIDDEN),
+                "retained input mode item was not detached");
+        adapter->addItemResult = E_FAIL;
+        require(FAILED(service->ActivateEx(adapter, client, 0)) &&
+                    !adapter->langBarItem,
+                "failed input mode registration was not rolled back");
+        adapter->addItemResult = S_OK;
         require(adapter->unpreserveCalls == 1,
                 "preserved key was not removed on deactivation");
         adapter->preserveResult = E_FAIL;
         require(SUCCEEDED(service->ActivateEx(adapter, client, 0)),
                 "preserved-key failure disabled the TIP");
+        require(adapter->langBarItem && adapter->langBarItem != modeButton,
+                "reactivation did not create a fresh input mode item");
+        require(SUCCEEDED(modeButton->OnClick(TF_LBI_CLK_LEFT, {}, nullptr)),
+                "detached input mode click failed");
+        pump(200);
+        require(SUCCEEDED(keyboard->GetValue(&mode)) && mode.vt == VT_I4 &&
+                    mode.lVal == 1,
+                "detached input mode item changed the new activation");
         require(SUCCEEDED(keyboard->SetValue(client, &closed)),
                 "system close without preserved key failed");
         pump(200);
@@ -562,6 +621,8 @@ int wmain(int count, wchar_t **arguments) {
                     handled,
                 "system mode sync depends on preserved-key registration");
         require(SUCCEEDED(service->Deactivate()), "second deactivation failed");
+        require(adapter->removeItemCalls == 2 && !adapter->langBarItem,
+                "reactivated input mode item leaked");
         require(adapter->unpreserveCalls == 1,
                 "failed preserved-key registration was unregistered");
         require(SUCCEEDED(keyboard->SetValue(client, &closed)),
@@ -583,12 +644,16 @@ int wmain(int count, wchar_t **arguments) {
                 "display attribute objects did not keep DLL loaded");
         attributeInfo.Release();
         attributeEnumerator.Release();
+        require(canUnload() == S_FALSE,
+                "retained input mode item did not keep DLL loaded");
+        modeButton.Release();
         require(canUnload() == S_OK, "TIP/edit session reference leak");
-        std::cout
-            << "PASS: actual DLL factory, TSF context, system keyboard "
-               "open/close, preserved-key modes, pass-through, Chinese commit, "
-               "async edits, cancellation and focus isolation (key-sink "
-               "adapter, no registration)\n";
+        std::cout << "PASS: actual DLL factory, TSF context, system keyboard "
+                     "open/close, input mode item/click/lifetime, "
+                     "preserved-key modes, "
+                     "pass-through, Chinese commit, "
+                     "async edits, cancellation and focus isolation (key-sink "
+                     "and language-bar adapters, no registration)\n";
         exit = 0;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';

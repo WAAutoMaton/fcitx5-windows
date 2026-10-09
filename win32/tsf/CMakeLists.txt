@@ -9,6 +9,7 @@ add_library(tsf STATIC
     CompositionSink.cpp
     pipeclient.cpp
     candidatewindow.cpp
+    langbaritem.cpp
     pollstate.cpp
     DisplayAttribute.cpp
 )
