@@ -12,9 +12,7 @@ constexpr wchar_t kModeSwitchDescription[] = L"Fcitx5 Pinyin mode switch";
 constexpr uint32_t kModifierCaps = 1U << 4;
 constexpr uint32_t kModifierRepeat = 1U << 5;
 
-bool keyDown(int key) {
-    return (GetKeyState(key) & 0x8000) || (GetAsyncKeyState(key) & 0x8000);
-}
+bool keyDown(int key) { return (GetKeyState(key) & 0x8000) != 0; }
 
 uint32_t currentModifiers(LPARAM lParam) {
     uint32_t result = 0;
@@ -115,6 +113,24 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
     if (modifiers == UINT32_MAX) {
         modifiers = currentModifiers(lParam);
     }
+    if (!release && isModeSwitchKey(static_cast<uint32_t>(wParam), modifiers)) {
+        if (!(modifiers & kModifierRepeat)) {
+            if (FAILED(setKeyboardOpen(!keyboardOpen_))) {
+                return FALSE;
+            }
+            applyKeyboardMode(true);
+        }
+        handledKeys_.set(VK_SPACE);
+        return TRUE;
+    }
+    if (!release &&
+        !routesKey(static_cast<uint32_t>(wParam), modifiers, keyboardOpen_,
+                   !state_.preedit.empty() || !state_.candidates.empty())) {
+        return FALSE;
+    }
+    if (state_.enabled != keyboardOpen_ && !applyKeyboardMode(true)) {
+        return FALSE;
+    }
     if (!pipe_.key(remoteContextId_, release, static_cast<uint32_t>(wParam),
                    scanCode(lParam), modifiers,
                    static_cast<uint32_t>(GetMessageTime()), reply,
@@ -124,6 +140,9 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
         return FALSE;
     }
     bool consumed = reply.consumed;
+    if (reply.enabled != keyboardOpen_) {
+        setKeyboardOpen(reply.enabled);
+    }
     if (wParam < handledKeys_.size()) {
         if (release) {
             consumed = consumed || handledKeys_.test(wParam);
@@ -154,7 +173,7 @@ STDMETHODIMP Tsf::OnTestKeyDown(ITfContext *context, WPARAM key, LPARAM details,
     *pfEaten = context && context == textEditSinkContext_ && foreground_ &&
                remoteContextId_ && pipe_.connected() &&
                routesKey(static_cast<uint32_t>(key), currentModifiers(details),
-                         state_.enabled,
+                         keyboardOpen_,
                          !state_.preedit.empty() || !state_.candidates.empty());
     return S_OK;
 }

@@ -118,6 +118,17 @@ bool PipeClient::reset(uint64_t contextId, KeyReply &reply) {
            ipc::decodeKeyReply(response.payload, reply);
 }
 
+bool PipeClient::setMode(uint64_t contextId, bool enabled, KeyReply &reply) {
+    ipc::Writer writer;
+    writer.u8(enabled);
+    ipc::Frame response;
+    return request(ipc::MessageType::SetMode, contextId, writer.take(),
+                   response) &&
+           response.type == ipc::MessageType::KeyReply &&
+           ipc::decodeKeyReply(response.payload, reply) &&
+           reply.enabled == enabled;
+}
+
 bool PipeClient::request(ipc::MessageType type, uint64_t contextId,
                          const std::vector<uint8_t> &payload,
                          ipc::Frame &response) {

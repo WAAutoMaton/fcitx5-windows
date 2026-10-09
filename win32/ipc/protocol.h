@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 2;
+constexpr uint16_t kVersion = 3;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -29,6 +29,7 @@ enum class MessageType : uint16_t {
     Ack = 12,
     Reset = 13,
     PollState = 14,
+    SetMode = 15,
 };
 
 constexpr uint32_t kMaxCandidates = 32;

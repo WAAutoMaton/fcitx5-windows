@@ -13,6 +13,7 @@ class Tsf : public ITfTextInputProcessorEx,
             public ITfThreadMgrEventSink,
             public ITfTextEditSink,
             public ITfKeyEventSink,
+            public ITfCompartmentEventSink,
             public ITfCompositionSink,
             public ITfDisplayAttributeProvider {
   public:
@@ -50,6 +51,7 @@ class Tsf : public ITfTextInputProcessorEx,
                          BOOL *pfEaten) override;
     STDMETHODIMP OnPreservedKey(ITfContext *pContext, REFGUID rguid,
                                 BOOL *pfEaten) override;
+    STDMETHODIMP OnChange(REFGUID guid) override;
 
     STDMETHODIMP OnCompositionTerminated(TfEditCookie ecWrite,
                                          ITfComposition *pComposition) override;
@@ -66,6 +68,10 @@ class Tsf : public ITfTextInputProcessorEx,
     bool initTextEditSink(CComPtr<ITfDocumentMgr> documentMgr);
     HRESULT initKeyEventSink();
     void uninitKeyEventSink();
+    HRESULT initKeyboardCompartment();
+    void uninitKeyboardCompartment();
+    HRESULT setKeyboardOpen(bool enabled);
+    bool applyKeyboardMode(bool synchronous);
     bool initRemoteContext();
     void clearRemoteContext();
     BOOL processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
@@ -111,5 +117,8 @@ class Tsf : public ITfTextInputProcessorEx,
     TfGuidAtom attributeAtom_ = TF_INVALID_GUIDATOM;
     bool keyEventSinkAdvised_ = false;
     bool modeSwitchPreserved_ = false;
+    CComPtr<ITfCompartment> keyboardCompartment_;
+    DWORD keyboardCompartmentCookie_ = TF_INVALID_COOKIE;
+    bool keyboardOpen_ = true;
 };
 } // namespace fcitx

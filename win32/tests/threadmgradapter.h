@@ -14,6 +14,8 @@ class ThreadMgrAdapter : public ITfThreadMgr,
         if (!result)
             return E_INVALIDARG;
         *result = nullptr;
+        if (id == IID_ITfCompartmentMgr)
+            return manager_->QueryInterface(id, result);
         if (id == IID_IUnknown || id == IID_ITfThreadMgr)
             *result = static_cast<ITfThreadMgr *>(this);
         else if (id == IID_ITfKeystrokeMgr)
@@ -110,12 +112,22 @@ class ThreadMgrAdapter : public ITfThreadMgr,
                                 BOOL *) override {
         return E_NOTIMPL;
     }
-    STDMETHODIMP PreserveKey(TfClientId, REFGUID, const TF_PRESERVEDKEY *,
-                             const WCHAR *, ULONG) override {
-        return E_NOTIMPL;
+    STDMETHODIMP PreserveKey(TfClientId, REFGUID guid,
+                             const TF_PRESERVEDKEY *key, const WCHAR *,
+                             ULONG) override {
+        ++preserveCalls;
+        if (!key || key->uVKey != VK_SPACE || key->uModifiers != TF_MOD_CONTROL)
+            return E_INVALIDARG;
+        preservedGuid = guid;
+        return preserveResult;
     }
-    STDMETHODIMP UnpreserveKey(REFGUID, const TF_PRESERVEDKEY *) override {
-        return E_NOTIMPL;
+    STDMETHODIMP UnpreserveKey(REFGUID guid,
+                               const TF_PRESERVEDKEY *key) override {
+        if (!key || guid != preservedGuid || key->uVKey != VK_SPACE ||
+            key->uModifiers != TF_MOD_CONTROL)
+            return E_INVALIDARG;
+        ++unpreserveCalls;
+        return S_OK;
     }
     STDMETHODIMP SetPreservedKeyDescription(REFGUID, const WCHAR *,
                                             ULONG) override {
@@ -127,6 +139,11 @@ class ThreadMgrAdapter : public ITfThreadMgr,
     STDMETHODIMP SimulatePreservedKey(ITfContext *, REFGUID, BOOL *) override {
         return E_NOTIMPL;
     }
+
+    GUID preservedGuid = GUID_NULL;
+    unsigned int preserveCalls = 0;
+    unsigned int unpreserveCalls = 0;
+    HRESULT preserveResult = S_OK;
 
   private:
     LONG references_ = 1;

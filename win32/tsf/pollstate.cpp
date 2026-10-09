@@ -41,6 +41,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
+    if (self && message == WM_APP + 2) {
+        self->AddRef();
+        self->applyKeyboardMode(false);
+        self->Release();
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
@@ -58,6 +64,9 @@ void Tsf::pollState() {
         }
     }
     if (!remoteContextId_ && !initRemoteContext()) {
+        return;
+    }
+    if (!applyKeyboardMode(false)) {
         return;
     }
     PipeClient::KeyReply reply;

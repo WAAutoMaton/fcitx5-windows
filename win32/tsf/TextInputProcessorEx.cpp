@@ -20,6 +20,7 @@ STDAPI Tsf::Deactivate() {
         return S_OK;
     }
     initTextEditSink(CComPtr<ITfDocumentMgr>());
+    uninitKeyboardCompartment();
     uninitThreadMgrEventSink();
     uninitKeyEventSink();
     threadMgr_ = nullptr;
@@ -43,6 +44,10 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD) {
     clientId_ = tfClientId;
     pipe_.connect();
     if (!initMessageWindow()) {
+        goto ActivateExError;
+    }
+    activationResult = initKeyboardCompartment();
+    if (FAILED(activationResult)) {
         goto ActivateExError;
     }
     activationResult = initThreadMgrEventSink();

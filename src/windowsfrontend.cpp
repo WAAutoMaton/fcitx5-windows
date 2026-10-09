@@ -532,6 +532,31 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             consumed, entry && entry->uniqueName() == "pinyin"));
         break;
     }
+    case MessageType::SetMode: {
+        uint8_t enabled = 0;
+        if (!reader.u8(enabled) || enabled > 1 || reader.remaining()) {
+            response.type = MessageType::Error;
+            break;
+        }
+        auto &context = *contexts_.at(request.contextId);
+        if (!context.hasFocus()) {
+            response.type = MessageType::Error;
+            break;
+        }
+        const auto entry = instance_.inputMethodEntry(&context);
+        const bool current = entry && entry->uniqueName() == "pinyin";
+        if (current != (enabled != 0)) {
+            context.reset();
+            context.takeCommit();
+            instance_.setCurrentInputMethod(
+                &context, enabled ? "pinyin" : "keyboard-us", true);
+        }
+        const auto updated = instance_.inputMethodEntry(&context);
+        response.type = MessageType::KeyReply;
+        response.payload = ipc::encodeKeyReply(context.snapshot(
+            false, updated && updated->uniqueName() == "pinyin"));
+        break;
+    }
     case MessageType::Reset:
     case MessageType::PollState: {
         auto &context = *contexts_.at(request.contextId);

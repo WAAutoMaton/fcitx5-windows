@@ -54,7 +54,7 @@ bool Tsf::initRemoteContext() {
         return false;
     }
     state_ = std::move(reply);
-    return true;
+    return applyKeyboardMode(false);
 }
 
 void Tsf::clearRemoteContext() {

@@ -15,8 +15,12 @@ the pipe. All engine operations run on Core's event loop through EventDispatcher
 `windowskeyboard` is a static direct-input engine with no XKB dependency. It
 provides the first group entry required by Core; it never commits ASCII itself.
 The Windows group uses `keyboard-us` and `pinyin`. Ctrl+Space switches modes.
-New focused contexts start in Pinyin mode. Existing user groups are not saved or
-overwritten. ASCII fallback is disabled by default and by the Pinyin build script.
+TSF subscribes to the thread manager's `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`:
+system keyboard open/close changes select Pinyin/direct input in Core. Focus
+changes and reconnections preserve that system mode. An exact Ctrl+Space
+preserved key and the ordinary key callback use the same mode synchronization;
+ordinary Space is never registered as a preserved key. Existing user groups are
+not saved or overwritten. ASCII fallback is disabled by default and by the Pinyin build script.
 Core prewarms Pinyin before accepting pipe clients so initial model paging does
 not consume the first key's IPC timeout. Runtime DLL search includes its own bin.
 
@@ -103,6 +107,10 @@ Neither probe registers/unregisters an input method or calls DllRegisterServer.
   isolation. Because this TIP is not registered, a test-only adapter substitutes
   key-sink subscription, and the probe explicitly supplies key/focus callbacks.
   This does not verify Windows' registered TIP activation or OS key dispatch.
+  Mode regressions use a real thread-manager keyboard compartment, including
+  open/close notifications, cancellation, focus changes and a simulated failure
+  to register the exact Ctrl+Space preserved key. Preserved-key callbacks are
+  explicitly invoked; the adapter does not prove real OS hotkey dispatch.
 - CTest: helper functions, protocol framing/snapshots, UTF-8/UTF-16/key policy,
   and real pipe timeout/cancellation followed by a successful read.
 
@@ -111,10 +119,15 @@ a deployed Core must already be running for those two tests.
 
 ## Protocol and Behavior
 
-Protocol v2 uses a pipe name scoped to the user's SID and Windows session. Its
+Protocol v3 uses a pipe name scoped to the user's SID and Windows session. Its
 ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
 overlapped I/O with a 500 ms read/write wait limit; disconnected contexts are destroyed.
+
+`SetMode` sets an explicit Pinyin/direct-input mode rather than replaying a
+toggle keystroke. Repeated requests are idempotent; changing modes cancels the
+current preedit. Core and TSF must both be rebuilt and deployed after this
+protocol upgrade; v2 and v3 do not connect to each other.
 
 Each key response contains consumption, mode, commit, preedit, UTF-8 byte cursor,
 revision and the current candidate page. Reset cancels Core composition. PollState

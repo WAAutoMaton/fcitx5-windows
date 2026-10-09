@@ -29,6 +29,7 @@ class PipeClient {
              KeyReply &reply, uint32_t unicode = 0);
     bool poll(uint64_t contextId, KeyReply &reply);
     bool reset(uint64_t contextId, KeyReply &reply);
+    bool setMode(uint64_t contextId, bool enabled, KeyReply &reply);
 
   private:
     bool request(ipc::MessageType type, uint64_t contextId,

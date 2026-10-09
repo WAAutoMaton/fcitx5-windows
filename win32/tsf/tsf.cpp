@@ -29,6 +29,8 @@ STDAPI Tsf::QueryInterface(REFIID riid, void **ppvObject) {
         *ppvObject = (ITfTextEditSink *)this;
     else if (IsEqualIID(riid, IID_ITfKeyEventSink))
         *ppvObject = (ITfKeyEventSink *)this;
+    else if (IsEqualIID(riid, IID_ITfCompartmentEventSink))
+        *ppvObject = (ITfCompartmentEventSink *)this;
     else if (IsEqualIID(riid, IID_ITfCompositionSink))
         *ppvObject = (ITfCompositionSink *)this;
     else if (IsEqualIID(riid, IID_ITfDisplayAttributeProvider))

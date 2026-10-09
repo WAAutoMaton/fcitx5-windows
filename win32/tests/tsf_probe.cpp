@@ -284,6 +284,33 @@ void press(ITfKeyEventSink *keys, ITfContext *context, uint32_t key,
         pump();
 }
 
+void requirePassedThrough(ITfKeyEventSink *keys, ITfContext *context,
+                          uint32_t key) {
+    BOOL handled = TRUE;
+    require(SUCCEEDED(keys->OnTestKeyDown(context, key, 0, &handled)) &&
+                !handled,
+            "direct-input key was routed to the engine");
+    require(SUCCEEDED(keys->OnKeyDown(context, key, 0, &handled)) && !handled,
+            "direct-input key was consumed");
+}
+
+class KeyboardState {
+  public:
+    KeyboardState() {
+        require(GetKeyboardState(saved_), "keyboard state query failed");
+    }
+    ~KeyboardState() { SetKeyboardState(saved_); }
+    void control(int side) {
+        BYTE state[256]{};
+        state[VK_CONTROL] = 0x80;
+        state[side] = 0x80;
+        require(SetKeyboardState(state), "test modifier setup failed");
+    }
+
+  private:
+    BYTE saved_[256]{};
+};
+
 } // namespace
 
 int wmain(int count, wchar_t **arguments) {
@@ -348,7 +375,7 @@ int wmain(int count, wchar_t **arguments) {
         TfClientId client = TF_CLIENTID_NULL;
         require(SUCCEEDED(manager->ActivateEx(&client, TF_TMAE_NOACTIVATETIP)),
                 "thread manager activation failed");
-        CComPtr<ITfThreadMgr> adapter;
+        CComPtr<ThreadMgrAdapter> adapter;
         adapter.Attach(new ThreadMgrAdapter(manager));
         CComPtr<TextStore> store;
         store.Attach(new TextStore);
@@ -361,12 +388,91 @@ int wmain(int count, wchar_t **arguments) {
                     SUCCEEDED(document->Push(context)) &&
                     SUCCEEDED(manager->SetFocus(document)),
                 "real TSF context creation failed");
+        CComPtr<ITfCompartmentMgr> compartments;
+        CComPtr<ITfCompartment> keyboard;
+        require(SUCCEEDED(manager.QueryInterface(&compartments)) &&
+                    SUCCEEDED(compartments->GetCompartment(
+                        GUID_COMPARTMENT_KEYBOARD_OPENCLOSE, &keyboard)),
+                "keyboard compartment missing");
+        CComVariant open(static_cast<LONG>(1));
+        CComVariant closed(static_cast<LONG>(0));
+        require(SUCCEEDED(keyboard->SetValue(client, &open)),
+                "keyboard compartment initialization failed");
         const auto activation = service->ActivateEx(adapter, client, 0);
         if (FAILED(activation))
             std::cerr << "ActivateEx HRESULT: 0x" << std::hex << activation
                       << std::dec << '\n';
         require(SUCCEEDED(activation), "TIP activation failed");
+        require(adapter->preserveCalls == 1 &&
+                    adapter->preservedGuid != GUID_NULL,
+                "exact Ctrl+Space preserved key was not requested");
         BOOL handled = FALSE;
+        const uint32_t directKeys[] = {VK_SPACE, VK_OEM_PLUS, VK_OEM_MINUS, '0',
+                                       '9'};
+        for (const auto key : directKeys)
+            requirePassedThrough(keys, context, key);
+        require(store->text.empty(), "pass-through key mutated the text store");
+        require(SUCCEEDED(keyboard->SetValue(client, &closed)),
+                "system keyboard close failed");
+        pump(200);
+        requirePassedThrough(keys, context, 'N');
+        requirePassedThrough(keys, context, VK_SPACE);
+        require(SUCCEEDED(keyboard->SetValue(client, &open)),
+                "system keyboard open failed");
+        pump(200);
+        require(SUCCEEDED(keys->OnTestKeyDown(context, 'N', 0, &handled)) &&
+                    handled,
+                "system keyboard reopen did not restore Pinyin");
+        require(SUCCEEDED(keys->OnPreservedKey(context, adapter->preservedGuid,
+                                               &handled)) &&
+                    handled,
+                "preserved mode switch failed");
+        pump();
+        requirePassedThrough(keys, context, 'N');
+        CComVariant mode;
+        require(SUCCEEDED(keyboard->GetValue(&mode)) && mode.vt == VT_I4 &&
+                    mode.lVal == 0,
+                "preserved key did not update the system keyboard mode");
+        require(SUCCEEDED(keys->OnTestKeyUp(context, VK_SPACE, 0, &handled)) &&
+                    handled &&
+                    SUCCEEDED(keys->OnKeyUp(context, VK_SPACE, 0, &handled)) &&
+                    handled,
+                "mode switch release was not consumed");
+        requirePassedThrough(keys, context, 'N');
+        require(SUCCEEDED(keys->OnPreservedKey(context, adapter->preservedGuid,
+                                               &handled)) &&
+                    handled,
+                "preserved Chinese mode switch failed");
+        pump();
+        {
+            KeyboardState keyboardState;
+            for (const auto side : {VK_LCONTROL, VK_RCONTROL}) {
+                keyboardState.control(side);
+                require(SUCCEEDED(keys->OnTestKeyDown(context, VK_SPACE, 0,
+                                                      &handled)) &&
+                            handled &&
+                            SUCCEEDED(keys->OnKeyDown(context, VK_SPACE, 0,
+                                                      &handled)) &&
+                            handled,
+                        "ordinary Ctrl+Space route failed");
+                require(SUCCEEDED(keys->OnKeyDown(context, VK_SPACE,
+                                                  static_cast<LPARAM>(1) << 30,
+                                                  &handled)) &&
+                            handled,
+                        "Ctrl+Space repeat was not consumed");
+                require(SUCCEEDED(keyboard->GetValue(&mode)) &&
+                            mode.vt == VT_I4 && mode.lVal == 0,
+                        "repeated Ctrl+Space toggled mode more than once");
+                require(
+                    SUCCEEDED(keys->OnKeyUp(context, VK_SPACE, 0, &handled)) &&
+                        handled,
+                    "ordinary Ctrl+Space release failed");
+                require(SUCCEEDED(keyboard->SetValue(client, &open)),
+                        "mode restoration failed");
+                pump(200);
+            }
+        }
+        requirePassedThrough(keys, context, VK_SPACE);
         const auto writes = store->writes;
         require(SUCCEEDED(keys->OnTestKeyDown(context, 'N', 0, &handled)) &&
                     handled &&
@@ -381,6 +487,16 @@ int wmain(int count, wchar_t **arguments) {
         const std::wstring hello = L"\u4f60\u597d";
         require(store->text == hello,
                 "pinyin Chinese commit did not reach the TSF text store");
+        press(keys, context, 'N');
+        require(SUCCEEDED(keyboard->SetValue(client, &closed)),
+                "system close during composition failed");
+        pump(200);
+        require(store->text == hello,
+                "system keyboard close did not cancel preedit");
+        requirePassedThrough(keys, context, 'N');
+        require(SUCCEEDED(keyboard->SetValue(client, &open)),
+                "system reopen after cancellation failed");
+        pump(200);
         store->denySynchronous = true;
         press(keys, context, 'N');
         press(keys, context, 'I');
@@ -407,6 +523,20 @@ int wmain(int count, wchar_t **arguments) {
         pump(200);
         require(store->text == hello && otherStore->text.empty(),
                 "focus switch leaked composition");
+        require(SUCCEEDED(keyboard->SetValue(client, &closed)),
+                "keyboard close before focus switch failed");
+        pump(200);
+        require(SUCCEEDED(manager->SetFocus(document)) &&
+                    SUCCEEDED(events->OnSetFocus(document, otherDocument)),
+                "English mode focus switch failed");
+        pump(200);
+        requirePassedThrough(keys, context, 'N');
+        requirePassedThrough(keys, context, VK_SPACE);
+        require(SUCCEEDED(manager->SetFocus(otherDocument)) &&
+                    SUCCEEDED(events->OnSetFocus(otherDocument, document)) &&
+                    SUCCEEDED(keyboard->SetValue(client, &open)),
+                "Pinyin focus restoration failed");
+        pump(200);
         press(keys, otherContext, 'N', false);
         require(SUCCEEDED(manager->SetFocus(document)),
                 "second focus switch failed");
@@ -416,6 +546,28 @@ int wmain(int count, wchar_t **arguments) {
         require(store->text == hello && otherStore->text.empty(),
                 "late edit reached the wrong context");
         require(SUCCEEDED(service->Deactivate()), "TIP deactivation failed");
+        require(adapter->unpreserveCalls == 1,
+                "preserved key was not removed on deactivation");
+        adapter->preserveResult = E_FAIL;
+        require(SUCCEEDED(service->ActivateEx(adapter, client, 0)),
+                "preserved-key failure disabled the TIP");
+        require(SUCCEEDED(keyboard->SetValue(client, &closed)),
+                "system close without preserved key failed");
+        pump(200);
+        requirePassedThrough(keys, context, 'N');
+        require(SUCCEEDED(keyboard->SetValue(client, &open)),
+                "system reopen without preserved key failed");
+        pump(200);
+        require(SUCCEEDED(keys->OnTestKeyDown(context, 'N', 0, &handled)) &&
+                    handled,
+                "system mode sync depends on preserved-key registration");
+        require(SUCCEEDED(service->Deactivate()), "second deactivation failed");
+        require(adapter->unpreserveCalls == 1,
+                "failed preserved-key registration was unregistered");
+        require(SUCCEEDED(keyboard->SetValue(client, &closed)),
+                "keyboard close after deactivation failed");
+        require(SUCCEEDED(keyboard->SetValue(client, &open)),
+                "keyboard reopen after deactivation failed");
         manager->SetFocus(nullptr);
         document->Pop(TF_POPF_ALL);
         otherDocument->Pop(TF_POPF_ALL);
@@ -432,9 +584,11 @@ int wmain(int count, wchar_t **arguments) {
         attributeInfo.Release();
         attributeEnumerator.Release();
         require(canUnload() == S_OK, "TIP/edit session reference leak");
-        std::cout << "PASS: actual DLL factory, TSF context, Chinese commit, "
-                     "async edits, cancellation and focus isolation (key-sink "
-                     "adapter, no registration)\n";
+        std::cout
+            << "PASS: actual DLL factory, TSF context, system keyboard "
+               "open/close, preserved-key modes, pass-through, Chinese commit, "
+               "async edits, cancellation and focus isolation (key-sink "
+               "adapter, no registration)\n";
         exit = 0;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';

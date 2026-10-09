@@ -157,7 +157,8 @@
 ## 进度更新：Core/TSF 基础拼音链路
 
 - 当前已实现用户级 Windows Named Pipe：`win32/ipc/protocol.h` 定义版本化 framing，Core 端服务在 `src/windowsfrontend.cpp`，TSF 端客户端在 `win32/tsf/pipeclient.cpp`。
-- 协议 v2 包括 context/焦点/按键、Reset 和 PollState，返回预编辑、UTF-8 字节光标、候选页、mode 和 revision。TSF 使用 100 ms 同线程轮询接收延迟变化，不是服务端异步推送。
+- 协议 v3 包括 context/焦点/按键、Reset、PollState 和幂等 SetMode，返回预编辑、UTF-8 字节光标、候选页、mode 和 revision。TSF 使用 100 ms 同线程轮询接收延迟变化，不是服务端异步推送。升级协议必须同时更新 Core 与 TSF DLL。
+- TSF 订阅线程管理器的 `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`，将系统输入法开关同步到 Core 的 Pinyin/direct-input 模式；新焦点 context 和重连继承该状态。只注册精确 Ctrl+Space preserved key，不注册普通 Space。免注册 probe 覆盖真实 compartment 通知和显式模拟的快捷键回调，不能据此宣称真实系统热键派发已验证。
 - 管道按 SID/Windows session 命名，设置当前用户 ACL、拒绝远程访问、支持多连接，并校验 context 的连接归属。客户端有可取消的有界 overlapped I/O 和重连；服务端回收断开的 contexts。
 - 默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`。静态 Windows direct-input 引擎只放行按键，不绕过真实拼音引擎提交 ASCII。
 - AMD64 真实拼音 IPC 和免注册 TSF context 文本插入已验证，包括 `nihao` 中文选词/提交、异步取消、焦点及迟到请求隔离。尚未验证真实注册 TIP 的系统激活、按键派发和普通应用输入，也未验证候选窗口视觉效果及 ARM64 拼音/TSF。

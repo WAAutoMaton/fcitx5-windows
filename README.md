@@ -4,7 +4,8 @@
 
 Core 5.1.22 connects the TSF DLL to chinese-addons 5.1.15 Pinyin with libime
 1.1.17. The basic preedit/candidate/Chinese-commit path is covered by IPC and
-unregistered TSF-context probes; registered application input remains unverified.
+unregistered TSF-context probes. System keyboard open/close synchronization is
+also covered; actual Windows hotkey dispatch still requires application testing.
 
 See [build, deployment and validation](docs/pinyin.md). Start with:
 
@@ -36,6 +37,9 @@ Start-Process -FilePath $core -WorkingDirectory (Split-Path $core)
 Use `Win+Space` to select `Fcitx5`, then type `nihao` in a text application.
 Use number keys or Space to select a candidate, and `Ctrl+Space` to switch
 between Pinyin and direct input. Core must remain running while the TSF is used.
+
+Keep Core and TSF from the same protocol version. The mode synchronization uses
+protocol v3; rebuild and deploy both components when upgrading from v2.
 
 To stop Core, run `Get-Process Fcitx5 | Stop-Process`. To unregister the TSF,
 run the following command as administrator:

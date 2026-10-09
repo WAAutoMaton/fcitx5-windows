@@ -4,6 +4,7 @@ add_library(tsf STATIC
     ThreadMgrEventSink.cpp
     TextEditSink.cpp
     KeyEventSink.cpp
+    compartment.cpp
     EditSession.cpp
     CompositionSink.cpp
     pipeclient.cpp

@@ -93,6 +93,19 @@ int main(int argumentCount, char **arguments) {
         reply = key(client, context, VK_SPACE, 2);
         require(reply.consumed && reply.enabled, "Chinese mode switch failed");
         type(client, context, "NI");
+        require(client.setMode(context, false, reply) && !reply.enabled &&
+                    reply.preedit.empty() && reply.candidates.empty() &&
+                    reply.commit.empty(),
+                "explicit English mode did not cancel Pinyin");
+        require(client.setMode(context, false, reply) && !reply.enabled,
+                "explicit mode is not idempotent");
+        require(!key(client, context, 'N').consumed,
+                "explicit English mode did not pass through letters");
+        require(client.setMode(context, true, reply) && reply.enabled,
+                "explicit Chinese mode failed");
+        require(client.setMode(context, true, reply) && reply.enabled,
+                "explicit Chinese mode is not idempotent");
+        type(client, context, "NI");
         fcitx::PipeClient second;
         const auto secondContext = create(second);
         require(second.poll(secondContext, reply) && reply.preedit.empty(),
@@ -100,7 +113,7 @@ int main(int argumentCount, char **arguments) {
         require(client.poll(context, reply) && !reply.preedit.empty(),
                 "second connection reset first context");
         fcitx::PipeClient::KeyReply unauthorized;
-        require(!second.poll(context, unauthorized),
+        require(!second.setMode(context, false, unauthorized),
                 "cross-connection context access allowed");
         require(client.focusOut(context) && client.destroyContext(context),
                 "context destruction failed");
