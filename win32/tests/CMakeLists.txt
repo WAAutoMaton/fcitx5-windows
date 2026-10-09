@@ -14,6 +14,12 @@ add_test_target(test_langbar test_langbar.cpp ../tsf/langbaritem.cpp ../dll/util
 target_compile_definitions(test_langbar PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(test_langbar PRIVATE user32 gdi32 oleaut32 uuid)
 
+add_executable(test_register test_register.cpp ../dll/register.cpp ../dll/util.cpp)
+target_compile_options(test_register PRIVATE -UNDEBUG)
+target_link_libraries(test_register PRIVATE advapi32 user32 shell32 ole32 oleaut32 uuid)
+add_dependencies(test_register fcitx5-x86_64)
+add_test(NAME test_register COMMAND test_register $<TARGET_FILE:fcitx5-x86_64>)
+
 add_executable(ipc_probe ipc_probe.cpp ../tsf/pipeclient.cpp)
 target_include_directories(ipc_probe PRIVATE "${CMAKE_SOURCE_DIR}/ipc")
 target_link_libraries(ipc_probe PRIVATE advapi32)

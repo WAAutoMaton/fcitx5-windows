@@ -1,10 +1,8 @@
 #include "register.h"
+#include "resource.h"
 #include "util.h"
 #include <atlcomcli.h>
-#include <filesystem>
 #include <msctf.h>
-
-namespace fs = std::filesystem;
 
 #define FCITX5 "Fcitx5"
 #define THREADING_MODEL "ThreadingModel"
@@ -57,28 +55,45 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A
       - {9A92B895-29B9-4F19-9627-9F626C9490F2}
         Description: Fcitx5
         Enable: 0x00000001
-        IconFile: /path/to/icon in the same directory with dll
+        IconFile: /path/to/fcitx5-x86_64.dll
         IconIndex: 0x00000000
 */
 BOOL RegisterProfiles() {
-    std::wstring pchDesc = stringToWString(FCITX5, CP_UTF8);
-    WCHAR dllPath[MAX_PATH];
-    GetModuleFileNameW(dllInstance, dllPath, MAX_PATH);
-    fs::path path = dllPath;
-    path = path.remove_filename().append("penguin.ico");
     CComPtr<ITfInputProcessorProfileMgr> mgr;
-    mgr.CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr, CLSCTX_ALL);
-    auto hr = mgr->RegisterProfile(
-        FCITX_CLSID, TEXTSERVICE_LANGID_HANS, PROFILE_GUID, pchDesc.c_str(),
-        pchDesc.size() * sizeof(WCHAR), path.c_str(),
-        path.wstring().size() * sizeof(WCHAR), 0, nullptr, 0, 1, 0);
-    mgr.Release();
-    return hr == S_OK;
+    if (FAILED(mgr.CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr,
+                                    CLSCTX_ALL))) {
+        return FALSE;
+    }
+    return SUCCEEDED(RegisterProfile(mgr, dllInstance));
 }
 
-// No documentation about what they means.
+HRESULT RegisterProfile(ITfInputProcessorProfileMgr *manager,
+                        HINSTANCE module) {
+    if (!manager || !module) {
+        return E_INVALIDARG;
+    }
+    if (!FindResourceA(module, MAKEINTRESOURCEA(IDI_FCITX5), RT_GROUP_ICON)) {
+        return HRESULT_FROM_WIN32(ERROR_RESOURCE_NAME_NOT_FOUND);
+    }
+    WCHAR dllPath[32768]{};
+    const auto length = GetModuleFileNameW(module, dllPath, ARRAYSIZE(dllPath));
+    if (!length) {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+    if (length >= ARRAYSIZE(dllPath)) {
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    }
+    constexpr WCHAR description[] = L"Fcitx5";
+    // The DLL contains one group icon; profile indices are zero-based.
+    return manager->RegisterProfile(
+        FCITX_CLSID, TEXTSERVICE_LANGID_HANS, PROFILE_GUID, description,
+        ARRAYSIZE(description) - 1, dllPath, length, 0, nullptr, 0, TRUE, 0);
+}
+
+// Desktop input-indicator support does not declare Windows Store compatibility.
 const GUID Categories[] = {GUID_TFCAT_TIP_KEYBOARD,
-                           GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER};
+                           GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                           GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT};
 
 /*
 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}
@@ -93,15 +108,25 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A
         - ...
 */
 BOOL RegisterCategories() {
-    ITfCategoryMgr *mgr;
-    CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
-                     IID_ITfCategoryMgr, reinterpret_cast<void **>(&mgr));
-    HRESULT hr = S_OK;
-    for (const auto &guid : Categories) {
-        hr |= mgr->RegisterCategory(FCITX_CLSID, guid, FCITX_CLSID);
+    CComPtr<ITfCategoryMgr> mgr;
+    if (FAILED(mgr.CoCreateInstance(CLSID_TF_CategoryMgr))) {
+        return FALSE;
     }
-    mgr->Release();
-    return hr == S_OK;
+    return SUCCEEDED(RegisterCategories(mgr));
+}
+
+HRESULT RegisterCategories(ITfCategoryMgr *manager) {
+    if (!manager) {
+        return E_INVALIDARG;
+    }
+    for (const auto &guid : Categories) {
+        const auto result =
+            manager->RegisterCategory(FCITX_CLSID, guid, FCITX_CLSID);
+        if (FAILED(result)) {
+            return result;
+        }
+    }
+    return S_OK;
 }
 
 void UnregisterCategoriesAndProfiles() {

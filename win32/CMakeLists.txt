@@ -8,6 +8,7 @@ if(NOT DEFINED CMAKE_CXX_COMPILER)
 endif()
 
 project(fcitx5-win32 VERSION 0.1.0)
+enable_language(RC)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

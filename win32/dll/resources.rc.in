@@ -1,0 +1,3 @@
+#include "resource.h"
+
+IDI_FCITX5 ICON "@PROJECT_BINARY_DIR@/dll/penguin.ico"

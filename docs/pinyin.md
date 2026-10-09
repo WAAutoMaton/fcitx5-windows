@@ -35,6 +35,19 @@ coloring. No extra runtime icon files or Core protocol changes are required.
 This is a Windows input-indicator item, not a `Shell_NotifyIcon` tray icon;
 its display is controlled by Windows and the user's language-bar settings.
 
+The desktop TIP registers `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT` so Windows can
+recognize its input-indicator support without declaring unverified Windows Store
+compatibility. The branding icon is embedded in the TSF DLL as `IDI_FCITX5`, the
+only group icon, and the profile refers to the DLL path with icon index 0.
+`RegisterProfile` receives character counts for the description and DLL path.
+The generated `penguin.ico` remains a build input; it is no longer the profile's
+runtime icon file. Its existing generation and checksum are unchanged.
+
+After updating an existing deployment, explicitly re-register the rebuilt DLL
+to update the categories and profile icon metadata; replacing the binary alone
+does not update these settings. Restart the test application so it loads the
+rebuilt DLL. These registration changes are not performed by the test scripts.
+
 ## Compatibility Patches
 
 Initialize the pinned submodules, then apply the patches kept in the main repo:
@@ -105,6 +118,11 @@ cmake --build win32/build/pinyin-tsf
 ./scripts/test-pinyin.ps1
 ```
 
+The TSF DLL now also requires RC compilation for its embedded branding icon.
+With the GNU-style Clang driver, use LLVM's `llvm-rc`; if an old CMake cache
+selects the SDK's `rc.exe`, reconfigure with
+`-DCMAKE_RC_COMPILER="C:/Program Files/LLVM/bin/llvm-rc.exe"`.
+
 The test script starts only the isolated Core, runs both probes and CTest, then
 stops the process it started. It refuses to run alongside an existing Core.
 Neither probe registers/unregisters an input method or calls DllRegisterServer.
@@ -131,6 +149,10 @@ Neither probe registers/unregisters an input method or calls DllRegisterServer.
   real pipe timeout/cancellation followed by a successful read, and language-bar
   COM identity, sink cookies, state notifications and nonblank/distinct monochrome
   icon pixels.
+- `test_register`: actual DLL branding resource and Shell icon extraction,
+  plus profile/category calls captured by fake COM managers to verify character
+  lengths, DLL path, icon index, `SYSTRAYSUPPORT` and failure handling. It never
+  invokes system registration and does not prove taskbar rendering.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers both probes with CTest;
 a deployed Core must already be running for those two tests.
@@ -171,10 +193,11 @@ by the Pinyin engine; the popup does not insert candidate text itself.
   host applications still require explicit approval to register the DLL.
 - Candidate rendering, DPI behavior and screen-reader integration are not
   verified in those applications; the window does not implement ITfUIElement.
-- The input mode Language Bar item is implemented, but Windows 10/11 taskbar
-  appearance, theme coloring, Explorer restart and multiple-monitor DPI behavior
-  still need registered-TIP validation. Interface/probe success does not prove
-  the item is displayed by the system.
+- The user confirmed the input indicator works after rebuilding and registering
+  the DLL with `SYSTRAYSUPPORT` and the embedded branding icon. Theme coloring,
+  Explorer restart, multiple-monitor DPI and broader Windows-version coverage
+  still need registered-TIP validation. The automated probes do not verify
+  taskbar rendering.
 - The first version has keyboard-only candidates, no candidate mouse selection,
   ordinary notification-area tray/configuration UI or automatic Core startup.
 - Password/secure contexts, dead keys, AltGr/non-US layouts, forwarded keys and
