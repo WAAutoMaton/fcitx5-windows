@@ -23,11 +23,14 @@
 | `win32/dll/` | COM 类工厂、DLL 入口、输入法注册与注销、内嵌品牌图标和辅助函数 |
 | `win32/tsf/` | TSF 生命周期、事件订阅、按键回调、编辑会话、composition、候选窗、语言栏输入模式项和 Pipe 客户端 |
 | `win32/ipc/` | Core/TSF 共用的 Named Pipe framing 和协议定义 |
+| `win32/settings/` | 独立 WinUI 3 设置程序，使用 MSBuild 构建拼音设置和只读词库页 |
 | `win32/assets/` | 输入法图标，使用 ImageMagick 将 SVG 转为 ICO |
 | `win32/tests/` | Windows 工程的 CTest 测试 |
 | `win32/scripts/` | 开发期注册、注销、DLL 占用释放、格式化和格式检查脚本 |
 | `docs/pinyin.md` | 拼音构建、隔离部署、IPC/TSF 设计和验证边界 |
-| `.github/workflows/ci.yml` | 核心双架构构建、TSF 构建和测试、AMD64 拼音集成验证、核心开发包发布 |
+| `docs/build.md` | 统一构建、部署、注册/释放脚本和验证入口 |
+| `docs/windows-settings-design.md`、`docs/windows-candidate-rendering.md` | 设置/服务控制和候选窗的当前实现、设计与验证边界 |
+| `.github/workflows/ci.yml` | 核心双架构构建、TSF 测试、AMD64 拼音/词库集成验证、WinUI 构建和核心开发包发布 |
 
 ## 当前架构与实现边界
 
@@ -65,7 +68,7 @@
 - `test_register` 加载实际 DLL 检查内嵌品牌图标和 Shell 图标提取，使用模拟 COM 管理器验证 profile 字符长度、DLL 路径、类别和失败返回；不执行系统注册或修改输入法设置。
 - 语言栏右键通过原生 popup menu 提供“输入法设置”“重启服务”“关闭服务”。重启会重启/启动 Core，只有原本打开的 Settings 才重新打开；关闭会停止两者并暂停自动拉起。TSF 在 Settings 自身进程内时，由短暂运行的 `Fcitx5 --restart-services/--stop-services` 控制进程等待宿主退出，避免等待自身。真实已注册指示器右键派发尚未验证；左键仍切换中英文。
 - 语言栏右键另提供“用户数据文件夹”，后台通过 Windows Roaming AppData known folder 打开 `%APPDATA%/Fcitx5`（含 `config/fcitx5` 设置和 `pinyin` 用户词典、学习历史），不存在时创建目录。服务关闭时仍可使用，不启动 Core/Settings，不变更 IPC 协议。
-- `scripts/deploy-tsf.ps1 -Prefix -TsfBuild` 将 DLL 复制到隔离安装树的 `tsf`，自动启动固定定位相邻 `bin/Fcitx5.exe`；Settings 位于 `settings/Fcitx5Settings.exe`。脚本不注册或注销，旧构建目录 DLL 不能自动推断 Core 安装路径。
+- `scripts/deploy-tsf.ps1 -Prefix -TsfBuild` 将 DLL 复制到隔离安装树的 `tsf`；部署后的 TSF 在激活时固定定位并后台启动相邻 `bin/Fcitx5.exe`，Settings 位于 `settings/Fcitx5Settings.exe`。部署脚本本身不启动服务、不注册或注销，旧构建目录 DLL 不能自动推断 Core 安装路径。
 - `win32/settings` 是第三套独立 MSBuild 工程，使用框架依赖的 Windows App SDK 1.8；要求当前用户有 x64 Framework/DDLM >= 8000.994.2142.0 和 Visual C++ 运行库。`scripts/build-settings.ps1 -Prefix` 部署到隔离安装树的 `settings`，不安装系统运行时。
 - 设置窗口提供全拼/双拼及八种内置键位；Core 在主事件循环切换 `pinyin`/`shuangpin` entry 和真实 `ShuangpinProfile`，保存用户 `conf/windows.conf` 并在重启恢复。存储失败先返回，不清空解码上下文；成功切换取消预编辑，英文 context 保持关闭。设置运行时代次拒绝旧预编辑但保留已经接收的提交。
 - 第三方词库使用上游 `%APPDATA%/Fcitx5/pinyin/dictionaries`，加载 Fcitx5/libime 二进制 `.dict`，全拼/双拼共用。Core 每秒扫描该目录的普通 `.dict`/`.disable` 文件，连续两次稳定后在主事件循环调用上游 `dictmanager` 重载；解析仍走现有工作线程，完成回调及状态在 Core 主线程。支持新增、替换、重命名、删除，不递归子目录；损坏文件独立报告失败，`name.dict.disable` 延续上游停用语义。未修改词库格式或固定候选排序。
@@ -76,9 +79,9 @@
 - 完整 Windows `InputContext` 能力仍在完善；当前按焦点创建/销毁远端 context，不持久保存多个输入框的未提交预编辑。
 - 全拼及小鹤/自然码双拼真实中文提交已由 IPC/TSF probes 验证；其他双拼键位、五笔、Rime 的真实输入和完整应用兼容性仍需验证。
 - 基础消费/放行、Ctrl+Space、按键释放和布局字符转换已接入；死键、AltGr、复杂非美式布局、密码/安全 context 和完整快捷键尚未验证。
-- 周边文本、转发按键、格式化预编辑区间和跨断线提交可靠性尚未实现。
+- 周边文本、转发按键、Core 格式化预编辑区间的完整映射和跨断线提交可靠性尚未实现；现有 TSF composition 已有基础下划线显示属性。
 - 候选鼠标交互、TSF UIElement/无障碍、普通通知区域托盘、原生剪贴板和全面 DPI 适配尚未实现或验证；已有 WinUI 拼音设置窗口，当前 200% 缩放已截图检查，跨屏 DPI/主题/文本缩放仍需全面验证。
-- 统一安装包、核心与 DLL 的联合部署，以及 TSF 的 ARM64/x86 构建与验证。
+- 统一安装包及 TSF 的 ARM64/x86 构建与验证尚未实现；Core/TSF/Settings 的联合构建及隔离目录部署已由 `scripts/build-and-deploy.ps1` 实现。
 - 默认配置关闭上游 X11、Wayland、DBus、server 和 keyboard engine 等组件；不要直接启用 Linux 前端来替代 Windows 实现。
 - 上游已有候选、配置、引擎管理和输入上下文等抽象，优先复用；插件能构建不代表其 Windows 系统后端已经实现。
 
@@ -98,8 +101,9 @@
 
 ## 构建与验证
 
-- `scripts/build-and-deploy.ps1` 是 AMD64 Release 统一入口：默认预编译数据，初始化固定子模块并应用补丁，在 `build/all` 隔离构建和暂存 Core/TSF/Settings，初始化 VS x64 环境并明确使用独立 LLVM/llvm-rc，默认运行 TSF CTest，成功后复制运行树到 `dist/pinyin`。支持 `-Prefix`/`-BuildRoot`/工具及依赖路径/`-DataArchive`/`-Jobs`/`-SkipTests`，`-WhatIf` 无构建及部署副作用。不安装工具/运行时，不注册/注销、不停止或启动服务；目标或暂存文件占用时退出。最终复制不是原子切换，部署前需由用户关闭服务及加载该 DLL 的应用，或选择另一隔离前缀。`build-pinyin.ps1 -BuildRoot` 供统一入口隔离缓存，默认单独调用仍使用 `build`。
+- `scripts/build-and-deploy.ps1` 是 AMD64 Release 统一入口：默认预编译数据，初始化固定子模块并应用补丁，在 `build/all` 隔离构建 Core/libime/addons/TSF，调度独立 Settings 构建并将三套工程产物暂存于 `build/all/prefix`，初始化 VS x64 环境并明确使用独立 LLVM/llvm-rc，默认运行 TSF CTest，成功后复制运行树到 `dist/pinyin`。支持 `-Prefix`/`-BuildRoot`/工具及依赖路径/`-DataArchive`/`-Jobs`/`-SkipTests`，`-WhatIf` 无构建及部署副作用。不安装工具/运行时，不注册/注销、不停止或启动服务；目标或暂存文件占用时退出。最终复制不是原子切换，部署前需由用户关闭服务及加载该 DLL 的应用，或选择另一隔离前缀。`build-pinyin.ps1 -BuildRoot` 供统一入口隔离缓存，默认单独调用仍使用 `build`。
 - 预编译数据共享缓存位于 `build/pinyin-data`；下载前还查找该目录及 `build/deps` 的 `libime*.pkg.tar.zst`（包括既有 `libime-data.pkg.tar.zst`），必须匹配锁定 SHA256 才复用。显式 `-DataArchive` 也会先校验并填充标准缓存。已有解包目录或部署文件不单独作为版本校验依据；重复构建继续使用 Ninja 增量缓存。
+- `-BuildRoot` 控制 Core/libime/addons/TSF 的构建目录及暂存前缀，不改变 Settings 的 MSBuild 输出/缓存 `win32/build/settings`。三套工程仍独立；Settings 产物构建后复制到统一暂存运行树。
 
 ### 核心工程
 
@@ -184,6 +188,8 @@
 - 完成后简要报告修改文件、行为变化、执行的验证和仍未验证的内容；架构或实现进度改变时更新本文件。
 
 ## 当前验证记录
+
+以下保留各功能落地时的验证结果；历史记录中的 8 项或更少测试是当时的集合。当前默认 CTest 为 9 项，`ENABLE_PINYIN_INTEGRATION_TESTS=ON` 另增加三个拼音 probes，共 12 项；词库和服务 probes 由各自脚本运行，不在该选项的 CTest 集合内。
 
 - DirectWrite/Direct2D 候选窗已通过 `win32/build/candidate-d2d` AMD64 TSF Release 构建、9 项默认 CTest 和修改文件格式检查。`test_candidate` 验证 96/120/144/192/288 DPI 同一绘制函数的彩色像素、单色 VS15 心形、长文本省略，三种 owner DPI awareness、线程状态恢复、不抢焦点、边缘定位及 owner 销毁/资源重建；192 DPI 原生 HWND 截图及五种 DPI 离屏图片位于 `build/candidate-d2d-preview`。本机 100 次暖启动选中项更新的 show + UpdateWindow 调用耗时 P50 2.086 ms、P95 3.323 ms，不等同于输入端到端延迟或 GDI 对比。用户关闭 Core 后，`scripts/test-pinyin.ps1 -Prefix ./dist/pinyin -TsfBuild ./win32/build/candidate-d2d` 已通过真实 Core 的 `ipc_probe`、`settings_probe`、加载新 DLL 的 `tsf_probe` 及 9 项 CTest，覆盖全拼/小鹤/自然码中文提交、异步编辑与焦点隔离；测试使用独立设置文件，结束后 Core/Settings 均未运行，Core 日志无错误。未注册/注销或替换默认部署 DLL；probes 使用按键/语言栏适配器，真实应用、物理跨屏 DPI、主题/高对比度及系统文本缩放仍需验证；尚无 TSF 布局变化订阅或超高候选页滚动。
 - 统一构建脚本已从干净 `build/all` 构建 Core/libime/chinese-addons、TSF Release、WinUI Release 并部署至 `dist/one-click-test`，8 项 CTest 通过；重复增量构建、重复部署、任意工作目录及完整环境恢复（含空值环境变量）均已验证，386 个部署文件与暂存文件 SHA256 一致。`scripts/test-build-and-deploy.ps1` 覆盖解析、空格/单引号路径、无副作用 `-WhatIf`、非法路径/Jobs 及独占/只读文件拒绝。未更新默认部署、注册/注销或启动服务；Source 数据生成仍未在本地完整验证。

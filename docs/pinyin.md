@@ -25,10 +25,15 @@ sessions on the TSF owning thread.
 | --- | --- |
 | [src/main.cpp](../src/main.cpp) | Host initialization, in-memory input group and Pinyin warmup |
 | [src/windowsfrontend.cpp](../src/windowsfrontend.cpp) | Windows InputContext and Core pipe service |
+| [src/windowssettings.cpp](../src/windowssettings.cpp) | Pinyin scheme/profile application and authoritative persistence |
+| [src/windowsdictionaries.cpp](../src/windowsdictionaries.cpp) | Stable directory scans, addon reload and dictionary status queries |
 | [win32/ipc/protocol.h](../win32/ipc/protocol.h) | Shared framing and snapshot format |
 | [win32/tsf/pipeclient.cpp](../win32/tsf/pipeclient.cpp) | TSF pipe client and bounded I/O |
 | [win32/tsf/EditSession.cpp](../win32/tsf/EditSession.cpp) | Composition and document edits |
 | [win32/tsf/langbaritem.cpp](../win32/tsf/langbaritem.cpp) | Input mode button, notifications and lifetime |
+| [win32/tsf/servicecontrol.cpp](../win32/tsf/servicecontrol.cpp) | Background service commands and user-data folder opening |
+| [win32/tsf/candidatewindow.cpp](../win32/tsf/candidatewindow.cpp) | DirectWrite/Direct2D candidate popup and DPI positioning |
+| [win32/settings/SettingsWindow.cpp](../win32/settings/SettingsWindow.cpp) | WinUI Pinyin/dictionary tabs and background IPC |
 | [win32/dll/register.cpp](../win32/dll/register.cpp) | Profile, branding icon and capability registration |
 
 ### Input Modes and Indicator
@@ -74,10 +79,11 @@ only group icon, and the profile refers to the DLL path with icon index 0.
 The generated `penguin.ico` remains a build input; it is no longer the profile's
 runtime icon file. Its existing generation and checksum are unchanged.
 
-After updating an existing deployment, explicitly re-register the rebuilt DLL
-to update the categories and profile icon metadata; replacing the binary alone
-does not update these settings. Restart the test application so it loads the
-rebuilt DLL. These registration changes are not performed by the test scripts.
+When an update changes registered categories or profile icon metadata,
+explicitly re-register the rebuilt DLL; replacing the binary alone does not
+update these settings. Restart the test application so it loads the rebuilt DLL.
+Candidate rendering and Pinyin setting changes do not change registration
+metadata. Test scripts do not perform registration.
 
 ## Compatibility Patches
 
@@ -177,7 +183,8 @@ Windows SDK/ATL, Ninja and ImageMagick, not the MSYS2 clang compiler. Run these
 commands from the repository root after deploying Core:
 
 ```powershell
-cmake -S win32 -B win32/build/pinyin-tsf -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake -S win32 -B win32/build/pinyin-tsf -G Ninja -DCMAKE_BUILD_TYPE=Debug `
+  '-DCMAKE_RC_COMPILER=C:/Program Files/LLVM/bin/llvm-rc.exe'
 cmake --build win32/build/pinyin-tsf
 ./scripts/test-pinyin.ps1
 ```
@@ -187,7 +194,8 @@ With the GNU-style Clang driver, use LLVM's `llvm-rc`; if an old CMake cache
 selects the SDK's `rc.exe`, reconfigure with
 `-DCMAKE_RC_COMPILER="C:/Program Files/LLVM/bin/llvm-rc.exe"`.
 
-The test script starts only the isolated Core, runs both probes and CTest, then
+The test script starts only the isolated Core with an independent Windows
+settings file, runs `ipc_probe`, `settings_probe`, `tsf_probe` and CTest, then
 stops the process it started. It refuses to run alongside an existing Core.
 Neither the probes nor the CTest tests register/unregister an input method or
 call `DllRegisterServer`. The separate install/uninstall/release scripts do
@@ -207,6 +215,10 @@ upstream test suite.
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
   selection, backspace, cancellation, Ctrl+C pass-through, Ctrl+Space switching,
   and separate connections/context ownership.
+- `settings_probe`: real full/Xiaohe/Ziranma candidates and Chinese commits,
+  English mode preservation, invalid settings, revision conflicts, idempotence
+  and the `GB Standard` configuration mapping. The UI test separately exercises
+  restart persistence and save/cancel behavior.
 - `tsf_probe`: actual DLL loading/factory/interfaces, actual Windows TSF document
   contexts backed by an in-memory ITextStoreACP, composition, Chinese commit,
   synchronous-to-asynchronous edit fallback, cancellation, late edits and focus
@@ -226,16 +238,21 @@ upstream test suite.
   real pipe timeout/cancellation followed by a successful read, and language-bar
   COM identity, sink cookies, state notifications and nonblank/distinct monochrome
   icon pixels.
+- `test_candidate`: production DirectWrite/Direct2D rendering at five synthetic
+  DPIs, color emoji and monochrome VS15, ellipsis/layout reuse, owner awareness,
+  thread DPI restoration, focus, positioning and resource recreation. See
+  [candidate verification](windows-candidate-rendering.md#verification).
 - `test_register`: actual DLL branding resource and Shell icon extraction,
   plus profile/category calls captured by fake COM managers to verify character
   lengths, DLL path, icon index, `SYSTRAYSUPPORT` and failure handling. It never
   invokes system registration and does not prove taskbar rendering.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers all three probes with CTest;
-a deployed Core must already be running, bringing the total to ten. Release
-builds and the default eight tests passed for this change; earlier Debug and
-clean Release verification covered the previous six-test set. Real Pinyin and
-settings probes passed with the deployed Core.
+a deployed Core must already be running, bringing the total to twelve.
+`dictionaries_probe` and `service_probe` are built but invoked by their separate
+scripts, rather than registered by this option. The latest candidate-rendering
+validation passed AMD64 Release, all nine default tests and the three Pinyin
+probes; see [the recorded scope](windows-candidate-rendering.md#verification).
 
 `scripts/test-pinyin.ps1` accepts `-Prefix` and `-TsfBuild` for other deployment
 and TSF build directories. Logs are written to `build/pinyin-test/core.stdout.log`
@@ -297,7 +314,8 @@ not persist separate unfinished preedits for multiple input fields.
 ## Windows Settings
 
 Right-clicking the language-bar input mode item opens a native menu with
-`输入法设置`, `重启服务` and `关闭服务`. The settings command asks Core to launch the independent WinUI 3
+`输入法设置`, `用户数据文件夹`, `重启服务` and `关闭服务`. The settings
+command asks Core to launch the independent WinUI 3
 `settings/Fcitx5Settings.exe`. The Core connection and the settings launch are
 separate steps: a running Core can accept IPC while the settings window is
 missing or unable to initialize. The real OS right-click dispatch still
@@ -438,7 +456,7 @@ folder button, and captures `dictionaries.png`.
 
 ### Input Settings
 
-`GetSettings`, `SetSettings`, and `OpenSettings` are connection-independent
+`GetSettings`, `SetSettings`, and `OpenSettings` are context-independent
 requests with context ID zero. Core alone writes the authority file
 `conf/windows.conf` under the Fcitx user package configuration directory.
 The profile is also applied through the upstream addon interface; its Pinyin
@@ -477,7 +495,7 @@ registration. The settings variant requires the installed WinUI runtime and
 also models a Settings process hosting TSF. It is separate from default CTest
 because it requires a complete deployment and starts real service processes.
 
-The service-control change passed AMD64 Core, TSF Release and WinUI Release
+The earlier service-control validation passed AMD64 Core, TSF Release and WinUI Release
 builds, all eight default CTests, the service probe with actual WinUI, and all
 three existing Pinyin probes. The WinUI save/cancel, restart and single-instance
 test passed again with screenshots in `build/service-settings-ui-test`.

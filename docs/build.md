@@ -36,14 +36,14 @@ Run from the repository root:
 
 The script initializes pinned submodules, applies compatibility patches and
 builds Core/libime/chinese-addons, TSF and WinUI Settings. It stages the complete
-runtime under `build/all/prefix`, runs the eight default TSF CTest tests, then
+runtime under `build/all/prefix`, runs the nine default TSF CTest tests, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
 
 | Option | Default / Behavior |
 | --- | --- |
 | `-Prefix` | `dist/pinyin`; target runtime tree, must be inside the repository |
-| `-BuildRoot` | `build/all`; build/staging directory inside the repository, separate from `-Prefix` |
+| `-BuildRoot` | `build/all`; Core/libime/addons/TSF build and staging parent inside the repository; must not overlap `-Prefix` |
 | `-MSYS2Root` | `C:/msys64` |
 | `-LLVMRoot` | `C:/Program Files/LLVM`; standalone LLVM with `clang`, `clang++`, `llvm-rc` |
 | `-DependencyPrefix` | Optional matching clang64 Boost/zstd prefix; uses `build/deps/clang64` if present |
@@ -60,6 +60,10 @@ are resolved from the current working directory. For an isolated deployment:
 ./scripts/build-and-deploy.ps1 -Prefix ./dist/next
 ./scripts/build-and-deploy.ps1 -WhatIf
 ```
+
+Settings uses the independent MSBuild output/cache under `win32/build/settings`,
+then copies its runtime files into the staging prefix. `-BuildRoot` does not
+relocate that MSBuild cache.
 
 Precompiled data is shared in `build/pinyin-data`. Before downloading, the script
 also checks local `libime*.pkg.tar.zst` archives in `build/deps` and
@@ -121,6 +125,13 @@ require an interactive desktop and installed Settings runtimes. See
 [probe coverage and limits](pinyin.md#build-and-test-tsf) for the distinction
 between actual TSF contexts, simulated callbacks and real OS dispatch.
 
+Default CTest includes `test_candidate`, which exercises the production
+DirectWrite/Direct2D draw function and popup lifecycle without Core or TIP
+registration. See [candidate rendering validation](windows-candidate-rendering.md#verification)
+for preview images and the remaining physical-monitor/application checks.
+Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the nine
+default tests; it requires a running deployed Core.
+
 The following script regressions do not perform real registration or terminate
 applications:
 
@@ -165,8 +176,9 @@ For diagnosing or releasing a loaded DLL, preview the release helper:
 ./win32/scripts/release-tsf.ps1 -Prefix "$PWD/dist/another" -Force -WhatIf
 ```
 
-Without `-WhatIf`, this helper requires an elevated PowerShell and unregisters
-TSF by default. `-SkipUnregister` skips that step. `-Force` also terminates
+Real unregistration requires an elevated PowerShell. The helper unregisters
+TSF by default; `-SkipUnregister` skips that step and its elevation check.
+`-Force` also terminates
 processes verified to load the exact DLL path, potentially including editors,
 browsers and Explorer; save work before using it. Owners whose paths cannot be
 verified are not terminated. It does not stop Core/Settings as services; use the

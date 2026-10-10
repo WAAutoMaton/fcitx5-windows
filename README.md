@@ -10,6 +10,8 @@ WinUI settings app provides Pinyin configuration. There is no unified installer 
   Xiaohe/Ziranma Shuangpin commits are verified by IPC and TSF probes.
 - Keyboard candidate selection with number keys or Space, and `Ctrl+Space`
   switching between Chinese and direct input.
+- A nonactivating candidate popup with DirectWrite layout, Direct2D color-font
+  rendering and Per-Monitor V2 positioning.
 - A Windows input-mode indicator showing `中` or `A`; clicking it switches modes.
 - Settings for full/double Pinyin and eight built-in Shuangpin profiles, plus
   third-party dictionary loading status and automatic dictionary reload.
@@ -37,7 +39,7 @@ From the repository root in a normal Windows PowerShell terminal, run:
 ```
 
 This initializes pinned submodules, applies Windows patches, builds AMD64 Release
-Core, TSF and Settings, runs the eight default TSF tests, and deploys to
+Core, TSF and Settings, runs the nine default TSF tests, and deploys to
 `dist/pinyin`. It uses checksum-verified precompiled dictionary/model data and
 reuses the build cache on subsequent runs.
 
@@ -89,6 +91,7 @@ for previews, alternate paths and troubleshooting.
 - [Build, deployment and validation](docs/build.md)
 - [Pinyin architecture, individual builds and validation limits](docs/pinyin.md)
 - [Windows settings design](docs/windows-settings-design.md)
+- [Candidate rendering and DPI validation](docs/windows-candidate-rendering.md)
 
 ## Credits
 
