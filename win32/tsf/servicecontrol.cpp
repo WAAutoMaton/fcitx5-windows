@@ -2,8 +2,43 @@
 #include "tsf.h"
 #include <chrono>
 #include <filesystem>
+#include <memory>
+#include <shellapi.h>
+#include <shlobj.h>
 
 namespace fcitx {
+namespace {
+DWORD openUserDataFolder() {
+    const auto initialized = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (FAILED(initialized)) {
+        return HRESULT_CODE(initialized);
+    }
+    struct ComLifetime {
+        ~ComLifetime() { CoUninitialize(); }
+    } lifetime;
+    PWSTR roaming = nullptr;
+    const auto result =
+        SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming);
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> directory(
+        roaming, &CoTaskMemFree);
+    if (FAILED(result)) {
+        return HRESULT_CODE(result);
+    }
+    const auto path = std::filesystem::path(directory.get()) / L"Fcitx5";
+    std::error_code error;
+    std::filesystem::create_directories(path, error);
+    if (error) {
+        return static_cast<DWORD>(error.value());
+    }
+    SHELLEXECUTEINFOW execute{sizeof(execute)};
+    execute.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    execute.lpVerb = L"open";
+    execute.lpFile = path.c_str();
+    execute.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&execute) ? ERROR_SUCCESS : GetLastError();
+}
+} // namespace
 
 void Tsf::requestService(UINT command) {
     if (serviceTask_.valid()) {
@@ -39,6 +74,9 @@ void Tsf::requestService(UINT command) {
         serviceTask_ =
             std::async(std::launch::async, [core, command]() -> ServiceResult {
                 try {
+                    if (command == LangBarItem::kUserDataMessage) {
+                        return {openUserDataFolder()};
+                    }
                     if ((command == LangBarItem::kRestartMessage ||
                          command == LangBarItem::kStopMessage) &&
                         ipc::isServiceProcess(L"Settings")) {
@@ -112,13 +150,17 @@ void Tsf::pollServiceTask() {
     }
     if (error && command != kEnsureServiceMessage) {
         const auto text =
-            L"\u670d\u52a1\u64cd\u4f5c\u5931\u8d25\u3002\n"
-            L"\u670d\u52a1\u5df2\u5173\u95ed\u65f6\uff0c\u8bf7\u5148"
-            L"\u9009\u62e9\u201c\u91cd\u542f\u670d\u52a1\u201d\u3002\n"
-            L"\u8bf7\u786e\u8ba4 DLL\u3001Core \u548c\u8bbe\u7f6e"
-            L"\u7a0b\u5e8f\u5df2\u90e8\u7f72\u5230\u540c\u4e00"
-            L"\u5b89\u88c5\u76ee\u5f55\u3002\nWindows error: " +
-            std::to_wstring(error);
+            command == LangBarItem::kUserDataMessage
+                ? L"\u65e0\u6cd5\u6253\u5f00\u7528\u6237\u6570"
+                  L"\u636e\u6587\u4ef6\u5939\u3002\nWindows error: " +
+                      std::to_wstring(error)
+                : L"\u670d\u52a1\u64cd\u4f5c\u5931\u8d25\u3002\n"
+                  L"\u670d\u52a1\u5df2\u5173\u95ed\u65f6\uff0c\u8bf7\u5148"
+                  L"\u9009\u62e9\u201c\u91cd\u542f\u670d\u52a1\u201d\u3002\n"
+                  L"\u8bf7\u786e\u8ba4 DLL\u3001Core \u548c\u8bbe\u7f6e"
+                  L"\u7a0b\u5e8f\u5df2\u90e8\u7f72\u5230\u540c\u4e00"
+                  L"\u5b89\u88c5\u76ee\u5f55\u3002\nWindows error: " +
+                      std::to_wstring(error);
         MessageBoxW(nullptr, text.c_str(), L"Fcitx5", MB_OK | MB_ICONERROR);
     }
 }

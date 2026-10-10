@@ -54,6 +54,7 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         return 0;
     }
     if (self && (message == LangBarItem::kSettingsMessage ||
+                 message == LangBarItem::kUserDataMessage ||
                  message == LangBarItem::kRestartMessage ||
                  message == LangBarItem::kStopMessage ||
                  message == kEnsureServiceMessage)) {

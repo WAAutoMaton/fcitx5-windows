@@ -323,6 +323,12 @@ $settings = (Resolve-Path ".\dist\pinyin\settings\Fcitx5Settings.exe").Path
 Start-Process -FilePath $settings -WorkingDirectory (Split-Path $settings)
 ```
 
+The `用户数据文件夹` menu command opens `%APPDATA%/Fcitx5` in the Windows
+file manager, creating it when absent. This directory contains settings under
+`config/fcitx5` and Pinyin learning data under `pinyin` (`user.dict` and
+`user.history`). It uses Windows' roaming AppData known folder and remains
+available while services are stopped, without starting Core or Settings.
+
 `重启服务` gracefully stops and restarts Core, or starts it when absent. If
 Settings was open, it closes and reopens after Core is ready; otherwise it
 stays closed. `关闭服务` gracefully stops both processes and inhibits automatic

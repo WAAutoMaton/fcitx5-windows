@@ -21,6 +21,8 @@ struct MenuCommand {
 constexpr MenuCommand kCommands[] = {
     {LangBarItem::kSettingsMenuId, LangBarItem::kSettingsMessage,
      L"\u8f93\u5165\u6cd5\u8bbe\u7f6e"},
+    {LangBarItem::kUserDataMenuId, LangBarItem::kUserDataMessage,
+     L"\u7528\u6237\u6570\u636e\u6587\u4ef6\u5939"},
     {LangBarItem::kRestartMenuId, LangBarItem::kRestartMessage,
      L"\u91cd\u542f\u670d\u52a1"},
     {LangBarItem::kStopMenuId, LangBarItem::kStopMessage,

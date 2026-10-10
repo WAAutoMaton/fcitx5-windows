@@ -12,9 +12,11 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     static constexpr UINT kSettingsMessage = WM_APP + 4;
     static constexpr UINT kRestartMessage = WM_APP + 5;
     static constexpr UINT kStopMessage = WM_APP + 6;
+    static constexpr UINT kUserDataMessage = WM_APP + 8;
     static constexpr UINT kSettingsMenuId = 1;
     static constexpr UINT kRestartMenuId = 2;
     static constexpr UINT kStopMenuId = 3;
+    static constexpr UINT kUserDataMenuId = 4;
     LangBarItem(HWND dispatchWindow, bool chineseMode);
     ~LangBarItem();
 

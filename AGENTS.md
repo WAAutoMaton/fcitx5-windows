@@ -63,6 +63,7 @@
 - `test_dll` 仍仅测试辅助函数；`test_langbar` 覆盖语言栏 COM 接口、通知、图标像素和生命周期。`ipc_probe` 验证真实拼音，`tsf_probe` 加载实际 DLL 并使用真实 TSF context 和内存 text store，但以测试适配器代替未注册 TIP 的按键订阅和语言栏管理器，并显式模拟按键/焦点/语言栏点击回调。
 - `test_register` 加载实际 DLL 检查内嵌品牌图标和 Shell 图标提取，使用模拟 COM 管理器验证 profile 字符长度、DLL 路径、类别和失败返回；不执行系统注册或修改输入法设置。
 - 语言栏右键通过原生 popup menu 提供“输入法设置”“重启服务”“关闭服务”。重启会重启/启动 Core，只有原本打开的 Settings 才重新打开；关闭会停止两者并暂停自动拉起。TSF 在 Settings 自身进程内时，由短暂运行的 `Fcitx5 --restart-services/--stop-services` 控制进程等待宿主退出，避免等待自身。真实已注册指示器右键派发尚未验证；左键仍切换中英文。
+- 语言栏右键另提供“用户数据文件夹”，后台通过 Windows Roaming AppData known folder 打开 `%APPDATA%/Fcitx5`（含 `config/fcitx5` 设置和 `pinyin` 用户词典、学习历史），不存在时创建目录。服务关闭时仍可使用，不启动 Core/Settings，不变更 IPC 协议。
 - `scripts/deploy-tsf.ps1 -Prefix -TsfBuild` 将 DLL 复制到隔离安装树的 `tsf`，自动启动固定定位相邻 `bin/Fcitx5.exe`；Settings 位于 `settings/Fcitx5Settings.exe`。脚本不注册或注销，旧构建目录 DLL 不能自动推断 Core 安装路径。
 - `win32/settings` 是第三套独立 MSBuild 工程，使用框架依赖的 Windows App SDK 1.8；要求当前用户有 x64 Framework/DDLM >= 8000.994.2142.0 和 Visual C++ 运行库。`scripts/build-settings.ps1 -Prefix` 部署到隔离安装树的 `settings`，不安装系统运行时。
 - 设置窗口提供全拼/双拼及八种内置键位；Core 在主事件循环切换 `pinyin`/`shuangpin` entry 和真实 `ShuangpinProfile`，保存用户 `conf/windows.conf` 并在重启恢复。存储失败先返回，不清空解码上下文；成功切换取消预编辑，英文 context 保持关闭。设置运行时代次拒绝旧预编辑但保留已经接收的提交。
@@ -178,6 +179,7 @@
 
 ## 当前验证记录
 
+- “用户数据文件夹”菜单改动已通过 `win32/build/userdata-tsf` 的 TSF Release 构建、8 项默认 CTest 和修改文件格式检查；`test_langbar` 覆盖四项菜单的文字、命令派发和停用后迟到点击。未执行注册/注销，实际 Explorer 打开和真实 OS 右键派发仍需验证。
 - AMD64 Core、libime、chinese-addons 已构建；使用 SHA256 固定预编译数据的拼音部署链路已验证。本次 Core、TSF Release 和 WinUI Release 构建、8 项默认 CTest 均已通过；先前 TSF Debug/干净 Release 记录仍有效。默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`；direct-input 引擎只放行按键，不自行提交 ASCII。
 - `ipc_probe` 验证真实拼音，`tsf_probe` 验证实际 DLL 和真实 TSF context 的文本插入，包括 `nihao` 中文选词/提交、异步取消、焦点及迟到请求隔离、compartment 和语言栏生命周期。probe 的按键订阅、语言栏管理和点击/快捷键回调使用测试适配器，不能据此宣称真实 OS 派发已验证。只注册精确 Ctrl+Space preserved key，不注册普通 Space。
 - 用户实测确认重新注册后的“中/A”输入指示器功能正常；测试应用和完整 Windows 版本矩阵未记录。普通应用输入、候选窗口视觉效果、主题、Explorer 重启、多显示器 DPI 和 ARM64 拼音/TSF 仍未完成全面验证。
