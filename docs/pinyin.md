@@ -274,8 +274,11 @@ not persist separate unfinished preedits for multiple input fields.
 
 Right-clicking the language-bar input mode item opens a native menu with an
 input-method settings command. It asks Core to launch the independent WinUI 3
-`settings/Fcitx5Settings.exe`. The real OS right-click dispatch still requires
-registered-TIP validation; unit tests exercise menu construction and commands.
+`settings/Fcitx5Settings.exe`. The Core connection and the settings launch are
+separate steps: a running Core can accept IPC while the settings window is
+missing or unable to initialize. The real OS right-click dispatch still
+requires registered-TIP validation; unit tests exercise menu construction and
+commands.
 
 Build and deploy the x64 settings application separately:
 
@@ -283,9 +286,40 @@ Build and deploy the x64 settings application separately:
 ./scripts/build-settings.ps1 -Configuration Release -Prefix "$PWD/dist/pinyin"
 ```
 
-It uses framework-dependent Windows App SDK 1.8 deployment. Install the matching
-x64 Framework and DDLM packages (minimum `8000.994.2142.0`) and the Visual C++
-runtime for the current user. Build/test scripts do not install these packages.
+The command must use the same prefix as the deployed Core. It creates
+`dist/pinyin/settings/Fcitx5Settings.exe`, which is the path calculated by Core
+from its own `bin/Fcitx5.exe` location. It uses framework-dependent Windows App
+SDK 1.8 deployment. Install the matching x64 Framework and DDLM packages
+(minimum `8000.994.2142.0`) and the Visual C++ runtime for the current user.
+Build/test scripts do not install these packages.
+
+Start Core once before opening settings. The input indicator's `输入法设置`
+command sends `OpenSettings` through the Core pipe; it does not start Core and
+it does not require registering the settings executable. After registering the
+TSF DLL and restarting the application that hosts it, select Fcitx5 with
+`Win+Space`, right-click the Fcitx5 input-mode item and choose `输入法设置`.
+For a direct launch while Core is already running:
+
+```powershell
+$settings = (Resolve-Path ".\dist\pinyin\settings\Fcitx5Settings.exe").Path
+Start-Process -FilePath $settings -WorkingDirectory (Split-Path $settings)
+```
+
+Run only one Core process per user/session. A second Core process cannot claim
+the existing named pipe and exits. To distinguish connection and deployment
+failures, run the probes from the repository root:
+
+```powershell
+& .\win32\build\pinyin-tsf\tests\ipc_probe.exe --ready
+& .\win32\build\pinyin-tsf\tests\settings_probe.exe --open-settings
+```
+
+The first command checks the Core handshake. If it passes but the second fails,
+Core is reachable and the problem is the settings executable or its Windows
+App SDK/Visual C++ runtime. Keep Core, TSF and the settings deployment from
+the same protocol revision; after a protocol upgrade rebuild and redeploy all
+three components.
+
 The UI supports full/double pinyin, eight built-in profiles, save/cancel,
 single-instance activation, system theme resources and PerMonitorV2 DPI.
 An existing custom profile is preserved but cannot be created/imported here.

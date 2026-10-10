@@ -94,6 +94,19 @@ An old cache may select the SDK's `rc.exe` for the GNU-style Clang driver.
 Reconfigure with `-DCMAKE_RC_COMPILER="C:/Program Files/LLVM/bin/llvm-rc.exe"`
 if resource compilation fails for that reason.
 
+Build and deploy the independent settings window after building Core. This
+copies `Fcitx5Settings.exe` and its Windows App SDK files to the `settings`
+directory that Core uses when the language-bar command is selected:
+
+```powershell
+./scripts/build-settings.ps1 -Configuration Release -Prefix "$PWD/dist/pinyin"
+```
+
+The settings application is framework-dependent. Install the matching x64
+Windows App SDK 1.8 Framework/DDLM runtime and Visual C++ runtime for the
+current user before opening it. The build script does not install these
+system runtimes.
+
 Before starting Core manually, run the integration checks:
 
 ```powershell
@@ -124,11 +137,34 @@ $core = (Resolve-Path ".\dist\pinyin\bin\Fcitx5.exe").Path
 $coreProcess = Start-Process -FilePath $core -WorkingDirectory (Split-Path $core) -PassThru
 ```
 
+Start only one Core process for the current user and Windows session. The TSF
+DLL and the settings application both connect to that process through the same
+user/session-scoped named pipe. Starting Core a second time will not create a
+second service; the second process exits when the pipe name is already in use.
+
 Use `Win+Space` to select `Fcitx5`, then type `nihao` in a text application.
 Use number keys or Space to select a candidate, and `Ctrl+Space` to switch
 between Pinyin and direct input, or click the input mode icon. English mode
 shows `A` without deselecting Fcitx5. Core must remain running while the TSF is
 used. Keep the deployed `bin`, `lib` and `share` directories together.
+
+Right-click the Fcitx5 input-mode item in the Windows input indicator and
+choose `输入法设置` to open the settings window. Core launches
+`dist/pinyin/settings/Fcitx5Settings.exe`; the settings executable is not part
+of TSF registration and must have been deployed by `build-settings.ps1` first.
+The same executable can be started directly after Core is running:
+
+```powershell
+$settings = (Resolve-Path ".\dist\pinyin\settings\Fcitx5Settings.exe").Path
+Start-Process -FilePath $settings -WorkingDirectory (Split-Path $settings)
+```
+
+If the menu reports that settings cannot be opened, first check that Core is
+still running and that the settings executable exists at that exact path. A
+successful `ipc_probe --ready` confirms the Core connection; `OpenSettings`
+can still fail when the settings deployment or its Windows App SDK runtime is
+missing. If Core and TSF were rebuilt after a protocol change, deploy and
+restart both sides together.
 
 The branding icon is embedded in the DLL. Registration points the profile at
 that DLL and declares `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT`; `penguin.ico` is only a
