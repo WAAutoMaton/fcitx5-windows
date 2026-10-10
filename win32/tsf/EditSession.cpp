@@ -1,3 +1,4 @@
+#include "dpiawareness.h"
 #include "textutil.h"
 #include "tsf.h"
 #include <new>
@@ -326,12 +327,19 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
     BOOL clipped = FALSE;
     HWND window = nullptr;
     if (SUCCEEDED(context->GetActiveView(&view)) && view &&
-        SUCCEEDED(view->GetTextExt(cookie, range, &anchor, &clipped)) &&
-        !clipped && SUCCEEDED(view->GetWnd(&window))) {
-        candidates_.show(reply, window, anchor);
-    } else {
-        candidates_.hide();
+        SUCCEEDED(view->GetWnd(&window))) {
+        // Query TSF geometry in the owner's coordinate space before converting
+        // it to the candidate window's physical screen coordinates.
+        ScopedDpiAwareness scope(window ? GetWindowDpiAwarenessContext(window)
+                                        : GetThreadDpiAwarenessContext());
+        if (scope.valid() &&
+            SUCCEEDED(view->GetTextExt(cookie, range, &anchor, &clipped)) &&
+            !clipped) {
+            candidates_.show(reply, window, anchor);
+            return S_OK;
+        }
     }
+    candidates_.hide();
     return S_OK;
 }
 

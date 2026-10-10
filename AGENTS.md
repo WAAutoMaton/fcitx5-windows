@@ -58,6 +58,7 @@
 - TSF 已有激活/停用、线程管理和文本编辑事件订阅、焦点文档切换处理以及按键事件订阅。
 - 按键经 Core 交给真实 Pinyin 引擎，返回消费结果、中文提交、预编辑、光标和候选页；TSF 持续维护 composition，通过独立 edit session 写入文档。
 - TSF 有基础预编辑下划线、UTF-16 光标和不抢焦点的候选浮窗，支持同步编辑失败后异步排队、取消和焦点切换。
+- 候选浮窗使用 DirectWrite 统一测量/排版、Direct2D 彩色字体绘制，标签/正文/注释分列并按字形高度计算行高；显式 VS15 文本样式优先单色符号字体。窗口独立使用 PMv2，TSF 几何查询按 owner awareness 执行并将锚点转为物理屏幕坐标，所有临时 DPI 状态均恢复。绘制资源及不变文本 layout 复用，立即提交避免等待屏幕刷新；不变更 Core/IPC 或输入法注册信息。设计与验证边界见 `docs/windows-candidate-rendering.md`。
 - TSF 已实现 `GUID_LBI_INPUTMODE` Language Bar 输入模式项，激活时添加、停用时移除；中文显示“中”、英文显示“A”，英文模式不隐藏图标。点击通过 TSF 消息窗口切换现有 keyboard compartment；这不是 `Shell_NotifyIcon` 普通托盘图标，显示由系统语言栏设置控制。透明单色图标由 GDI 绘制，并声明 `TF_LBI_STYLE_TEXTCOLORICON` 供系统主题着色。
 - 语言栏对象停用后隐藏并解除窗口绑定；对象独立持有 DLL 引用，迟到点击不影响新激活实例。用户已在重新注册后确认输入指示器功能正常，多显示器 DPI、主题及 Explorer 重启行为仍未验证。
 - `test_dll` 仍仅测试辅助函数；`test_langbar` 覆盖语言栏 COM 接口、通知、图标像素和生命周期。`ipc_probe` 验证真实拼音，`tsf_probe` 加载实际 DLL 并使用真实 TSF context 和内存 text store，但以测试适配器代替未注册 TIP 的按键订阅和语言栏管理器，并显式模拟按键/焦点/语言栏点击回调。
@@ -184,6 +185,7 @@
 
 ## 当前验证记录
 
+- DirectWrite/Direct2D 候选窗已通过 `win32/build/candidate-d2d` AMD64 TSF Release 构建、9 项默认 CTest 和修改文件格式检查。`test_candidate` 验证 96/120/144/192/288 DPI 同一绘制函数的彩色像素、单色 VS15 心形、长文本省略，三种 owner DPI awareness、线程状态恢复、不抢焦点、边缘定位及 owner 销毁/资源重建；192 DPI 原生 HWND 截图及五种 DPI 离屏图片位于 `build/candidate-d2d-preview`。本机 100 次暖启动选中项更新的 show + UpdateWindow 调用耗时 P50 2.086 ms、P95 3.323 ms，不等同于输入端到端延迟或 GDI 对比。用户关闭 Core 后，`scripts/test-pinyin.ps1 -Prefix ./dist/pinyin -TsfBuild ./win32/build/candidate-d2d` 已通过真实 Core 的 `ipc_probe`、`settings_probe`、加载新 DLL 的 `tsf_probe` 及 9 项 CTest，覆盖全拼/小鹤/自然码中文提交、异步编辑与焦点隔离；测试使用独立设置文件，结束后 Core/Settings 均未运行，Core 日志无错误。未注册/注销或替换默认部署 DLL；probes 使用按键/语言栏适配器，真实应用、物理跨屏 DPI、主题/高对比度及系统文本缩放仍需验证；尚无 TSF 布局变化订阅或超高候选页滚动。
 - 统一构建脚本已从干净 `build/all` 构建 Core/libime/chinese-addons、TSF Release、WinUI Release 并部署至 `dist/one-click-test`，8 项 CTest 通过；重复增量构建、重复部署、任意工作目录及完整环境恢复（含空值环境变量）均已验证，386 个部署文件与暂存文件 SHA256 一致。`scripts/test-build-and-deploy.ps1` 覆盖解析、空格/单引号路径、无副作用 `-WhatIf`、非法路径/Jobs 及独占/只读文件拒绝。未更新默认部署、注册/注销或启动服务；Source 数据生成仍未在本地完整验证。
 - 预编译缓存复用更新已通过本地包复用、标准缓存命中、损坏缓存修复及不匹配 SHA256 拒绝的脚本回归；不带 `-DataArchive` 的统一入口已复用 `build/pinyin-data` 标准缓存完成增量构建/隔离部署和 8 项 CTest，无词库下载。日志位于 `build/one-click-cache-reuse.log`。
 - 第三方词库改动已通过 AMD64 Core/chinese-addons、TSF Release、WinUI Release 构建、8 项默认 CTest 和原有三个拼音 probes；`scripts/test-dictionaries.ps1` 通过真实启动加载、全拼/小鹤/自然码候选、热增删改、Unicode 路径、坏词库、停用及预编辑保留。WinUI 自动化通过词库加载状态、实际 Explorer 目录打开及原有保存/取消/重启/单实例检查；200% 缩放的正常及最小窗口截图位于 `build/dictionaries-settings-ui-test`。本次只使用 `dist/dictionaries-test` 隔离部署，未注册/注销或替换已注册 DLL；真实 OS 派发、跨屏 DPI、完整主题仍未验证。
@@ -193,7 +195,7 @@
 - 用户实测确认重新注册后的“中/A”输入指示器功能正常；测试应用和完整 Windows 版本矩阵未记录。普通应用输入、候选窗口视觉效果、主题、Explorer 重启、多显示器 DPI 和 ARM64 拼音/TSF 仍未完成全面验证。
 - `scripts/test-pinyin.ps1` 默认使用 `dist/pinyin` 和 `win32/build/pinyin-tsf`，可通过 `-Prefix` / `-TsfBuild` 指定隔离路径；已有 Core 运行时拒绝执行。脚本使用独立 Windows 设置文件启动 Core、运行三个 probes 和 CTest，再停止自身启动的进程，日志在 `build/pinyin-test`；不执行注册、注销或修改系统输入法设置。
 - `scripts/test-dictionaries.ps1` 使用独立 Windows 设置文件和唯一命名的临时词库，验证实际 Core 启动加载、动态新增/替换/重命名/删除、中文路径、坏文件、停用标记、全拼/小鹤/自然码候选及重载期间保留预编辑。要求已有 Core/Settings 关闭；只停止自身启动的 Core，清理临时文件并恢复输入设置，不执行注册/注销。词库转换及加载状态以真实插件为准，文件扩展名不表示其他输入法的词库格式可直接兼容。
-- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将 ipc_probe、tsf_probe、settings_probe 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 8 项（新增 `test_service`），不等同于真实应用输入或上游全套测试。
+- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将 ipc_probe、tsf_probe、settings_probe 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 9 项（含 `test_service`、`test_candidate`），不等同于真实应用输入或上游全套测试。
 - `scripts/test-service.ps1 -Prefix -TsfBuild [-WithSettings]` 加载部署树中的实际 DLL，以测试适配器激活 TSF 并模拟菜单命令，验证真实 Core 自动启动、关闭、重启、暂停自动启动及 DLL 生命周期；`-WithSettings` 额外验证实际 WinUI 窗口重新打开和 Settings 宿主的委托退出。拒绝已有 Core/Settings，结束恢复原有服务控制状态，不执行系统注册或修改输入法设置。
 - 本次使用 `win32/build/service-tsf` 和 `dist/pinyin/tsf` 通过上述服务控制 probe（含实际 WinUI、Settings 宿主委托及手动停止后的迟到启动拒绝），并重新通过 `scripts/test-pinyin.ps1` 的三个 probes 和 8 项 CTest。`scripts/test-settings-ui.ps1` 重新通过保存/取消、双拼键位、重启恢复和单实例，截图位于 `build/service-settings-ui-test`。未执行注册/注销，真实 OS 右键派发仍未验证。
 - 注册/释放脚本更新通过 `win32/tests/test_scripts.ps1` 的模拟回归及三个管理脚本的真实 `-WhatIf` 预览，覆盖任意工作目录、含空格/单引号路径、失败退出码、参数错误、精确路径筛选和 ctfmon 预览无副作用；未执行真实注册/注销、UAC 提权或终止应用。

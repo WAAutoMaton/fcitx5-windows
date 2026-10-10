@@ -199,9 +199,9 @@ For CTest alone, without starting Core:
 ctest --test-dir win32/build/pinyin-tsf --output-on-failure
 ```
 
-The default eight tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
-`test_transport`, `test_service`, `test_langbar` and `test_register`. Root/upstream tests are
-disabled by the default build configuration; these eight tests are not the full
+The default nine tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
+`test_candidate`, `test_transport`, `test_service`, `test_langbar` and `test_register`. Root/upstream tests are
+disabled by the default build configuration; these nine tests are not the full
 upstream test suite.
 
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
@@ -285,8 +285,11 @@ cause the original key to be replayed; the error resets the input state.
 
 TSF keeps a persistent composition, converts byte cursors into UTF-16 offsets,
 applies a dotted underline, replaces the composition range on commit and cancels
-on focus loss. A nonactivating Win32 candidate popup uses the context's text
-extent and basic DPI/work-area bounds. Candidate selection and paging are handled
+on focus loss. A nonactivating Win32 candidate popup uses DirectWrite layouts,
+Direct2D color-font drawing and Per-Monitor V2 DPI/work-area bounds. Label, body
+and comment columns use measured text heights and native ellipsis trimming.
+See [candidate rendering](windows-candidate-rendering.md) for design, previews
+and remaining validation. Candidate selection and paging are handled
 by the Pinyin engine; the popup does not insert candidate text itself.
 Focus changes create/destroy remote contexts; the current implementation does
 not persist separate unfinished preedits for multiple input fields.
