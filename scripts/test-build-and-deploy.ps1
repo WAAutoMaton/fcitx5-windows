@@ -22,6 +22,33 @@ try {
         [void][Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors)
         if ($parseErrors.Count) { throw "Parse error in $file" }
     }
+    $buildAst = [Management.Automation.Language.Parser]::ParseFile(
+        $entry, [ref]$tokens, [ref]$parseErrors)
+    $toolDirectories = @((Join-Path $temporary 'first tools'), (Join-Path $temporary 'second tools'))
+    foreach ($directory in $toolDirectories) {
+        New-Item -ItemType Directory -Force $directory | Out-Null
+        foreach ($tool in @('cmake', 'git')) {
+            Copy-Item -LiteralPath "$env:SystemRoot/System32/cmd.exe" -Destination "$directory/$tool.exe"
+        }
+    }
+    $originalPath = $env:PATH
+    try {
+        $env:PATH = $toolDirectories -join ';'
+        foreach ($tool in @('cmake', 'git')) {
+            $assignment = $buildAst.Find({ param($node)
+                $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+                    $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+                    $node.Left.VariablePath.UserPath -eq $tool
+            }, $true)
+            . ([scriptblock]::Create($assignment.Extent.Text))
+            $executable = Get-Variable -Name $tool -ValueOnly
+            if ($executable -isnot [string] -or $executable -ne (Join-Path $toolDirectories[0] "$tool.exe")) {
+                throw "$tool resolution did not select the first executable in PATH."
+            }
+            & $executable /d /c 'exit 0'
+            if ($LASTEXITCODE -ne 0) { throw "Resolved $tool could not be invoked." }
+        }
+    } finally { $env:PATH = $originalPath }
     $archiveAst = [Management.Automation.Language.Parser]::ParseFile(
         "$PSScriptRoot/build-pinyin.ps1", [ref]$tokens, [ref]$parseErrors)
     $archiveFunction = $archiveAst.Find({ param($node)
@@ -82,7 +109,7 @@ try {
             Assert-Failure { & $entry -Prefix $prefix -BuildRoot $buildRoot } 'file is in use or not writable'
         } finally { [IO.File]::SetAttributes($locked, $attributes) }
         if ([IO.File]::ReadAllText($locked) -ne 'fixture; never loaded') { throw 'Preflight changed the file.' }
-        Write-Output 'PASS: archive reuse/hash rejection/cache repair, parsing, arbitrary-CWD/space/quote paths, WhatIf, environment preservation, invalid arguments, locked and read-only deployment rejection.'
+        Write-Output 'PASS: multiple tools in PATH, archive reuse/hash rejection/cache repair, parsing, arbitrary-CWD/space/quote paths, WhatIf, environment preservation, invalid arguments, locked and read-only deployment rejection.'
     } finally { Pop-Location }
 } finally {
     # Delete only this test's verified unique workspace directory.

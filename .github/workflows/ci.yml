@@ -231,6 +231,9 @@ jobs:
           if ((Get-FileHash build/installer-deps/vc_redist.x64.exe -Algorithm SHA256).Hash -ne 'CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B') { throw 'VC++ runtime hash mismatch.' }
           if ((Get-FileHash build/installer-deps/WindowsAppRuntimeInstall-x64.exe -Algorithm SHA256).Hash -ne '7C092E85FC1E3E7CB2BD7D549AAAB03CAF924131F15D9B20B1855457A98205AA') { throw 'Windows App Runtime hash mismatch.' }
 
+      - name: Test unified build script
+        run: ./scripts/test-build-and-deploy.ps1
+
       - name: Build complete runtime tree
         run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/installer-stage -BuildRoot ./build/installer -DataMode Prebuilt
 

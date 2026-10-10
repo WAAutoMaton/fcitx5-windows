@@ -94,8 +94,8 @@ if (!$DependencyPrefix -and (Test-Path -LiteralPath "$root/build/deps/clang64" -
 if ($DependencyPrefix) { $DependencyPrefix = Resolve-BuildPath $DependencyPrefix }
 if ($DataArchive) { $DataArchive = Resolve-BuildPath $DataArchive }
 
-$cmake = (Get-Command cmake.exe -CommandType Application -ErrorAction Stop).Source
-$git = (Get-Command git.exe -CommandType Application -ErrorAction Stop).Source
+$cmake = (Get-Command cmake.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+$git = (Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 $null = Get-Command magick.exe -CommandType Application -ErrorAction Stop
 $ninja = Require-BuildTool "$MSYS2Root/clang64/bin/ninja.exe"
 $null = Require-BuildTool "$MSYS2Root/clang64/bin/clang++.exe"
