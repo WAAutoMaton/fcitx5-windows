@@ -1,8 +1,9 @@
 # Windows Pinyin Integration
 
 This guide describes the AMD64 Pinyin integration and its current validation
-scope as of 2026-10-10. For manual registration, startup and unregistration,
-see [Run in the README](../README.md#run).
+scope as of 2026-10-10. For a quick start, see [Run in the README](../README.md#run).
+For build options, deployment and registration details, see the
+[build guide](build.md).
 
 ## Versions and Architecture
 
@@ -61,9 +62,9 @@ message window, so late clicks cannot affect another activation. It holds an
 independent DLL reference until released.
 
 The icon reflects the system keyboard compartment, not Core connection health.
-It can show a mode while Core is unavailable. Core must be started separately
-and remain running for Pinyin input; neither the DLL nor registration launches
-it automatically.
+It can show a mode while Core is unavailable. TSF activation starts Core in the
+background, and Core must remain running for Pinyin input. Registration itself
+does not start services.
 
 The desktop TIP registers `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT` so Windows can
 recognize its input-indicator support without declaring unverified Windows Store
@@ -111,7 +112,7 @@ For a single command that also builds/deploys TSF and Settings, use
 `./scripts/build-and-deploy.ps1`. It defaults to `Prebuilt`, stages the complete
 runtime under `build/all/prefix`, runs default TSF CTest, then copies to
 `dist/pinyin`. It initializes the VS x64 environment itself. See the
-[README options and update procedure](../README.md#one-command-build-and-deploy).
+[build options and update procedure](build.md#unified-build-options).
 
 Prerequisites: CMake 3.27+, MSYS2 clang64 Clang/Ninja/pkgconf/ECM/dlfcn/libuv/
 gettext, zstd, and Boost headers/iostreams. No script installs or upgrades system
@@ -245,7 +246,7 @@ check fails.
 If a registered DLL is locked during a rebuild, close applications using it or
 build TSF in a new directory and pass that directory with `-TsfBuild`. Repeating
 unregistration alone does not unload it from running applications. See the
-[README release helper instructions](../README.md#run) before using
+[release helper instructions](build.md#registration-and-dll-management) before using
 `release-tsf.ps1`: it defaults to `dist/pinyin/tsf/fcitx5-x86_64.dll`, supports
 `-Prefix`/`-DllPath`, and `-Force` terminates owners with verified exact DLL paths;
 these can include editors, browsers or Explorer. Preview with `-Force -WhatIf`
@@ -491,8 +492,7 @@ Registered-TIP OS menu dispatch remains unverified.
   broader Windows-version coverage still need registered-TIP validation.
   The automated probes do not verify taskbar rendering.
 - Candidates currently have keyboard-only selection, with no candidate mouse
-  interaction, ordinary notification-area tray, automatic Core
-  startup or unified Core/TSF installer.
+  interaction, ordinary notification-area tray or unified Core/TSF installer.
 - Xiaohe and Ziranma Shuangpin commits are validated by probes. Other profiles,
   Wubi, Rime and Windows Store compatibility need broader validation.
   `SYSTRAYSUPPORT` does not declare `IMMERSIVESUPPORT`.
