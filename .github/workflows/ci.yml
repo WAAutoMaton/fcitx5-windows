@@ -8,15 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-fcitx5-clang:
+  build-core-arm64:
     runs-on: windows-2025
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x86_64, arm64]
-        include:
-          - { arch: x86_64, cmake_arch: AMD64, pkg_arch: x86_64  }
-          - { arch: arm64, cmake_arch: ARM64, pkg_arch: aarch64 }
 
     steps:
       - uses: actions/checkout@v6
@@ -27,18 +20,15 @@ jobs:
         run: |
           C:/msys64/usr/bin/pacman -Syu --noconfirm
           C:/msys64/usr/bin/pacman -S --noconfirm `
-            mingw-w64-clang-${{ matrix.pkg_arch }}-extra-cmake-modules `
-            mingw-w64-clang-${{ matrix.pkg_arch }}-dlfcn `
-            mingw-w64-clang-${{ matrix.pkg_arch }}-libuv `
+            mingw-w64-clang-aarch64-extra-cmake-modules `
+            mingw-w64-clang-aarch64-dlfcn `
+            mingw-w64-clang-aarch64-libuv `
+            mingw-w64-clang-aarch64-clang `
             mingw-w64-clang-x86_64-clang `
             mingw-w64-clang-x86_64-cmake `
             mingw-w64-clang-x86_64-ninja `
             mingw-w64-clang-x86_64-pkgconf `
             mingw-w64-clang-x86_64-gettext-tools
-          if ("${{ matrix.arch }}" -eq "arm64") {
-            C:/msys64/usr/bin/pacman -S --noconfirm `
-              mingw-w64-clang-aarch64-clang
-          }
           Add-Content $env:GITHUB_PATH "C:/msys64/clang64/bin"
 
       - name: Apply Windows compatibility patches
@@ -46,30 +36,31 @@ jobs:
 
       - name: Build
         run: |
-          cmake -B build/${{ matrix.arch }} -G Ninja `
+          cmake -B build/arm64 -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
-            -DARCH=${{ matrix.cmake_arch }}
-          cmake --build build/${{ matrix.arch }}
+            -DARCH=ARM64
+          cmake --build build/arm64
 
       - name: Package
         env:
-          DESTDIR: dist/${{ matrix.arch }}
+          DESTDIR: dist/arm64
         run: |
-          cmake --install build/${{ matrix.arch }}
-          $prefixLine = cmake -LA -N build/${{ matrix.arch }} |
+          cmake --install build/arm64
+          $prefixLine = cmake -LA -N build/arm64 |
             Select-String '^CMAKE_INSTALL_PREFIX:'
           if (!$prefixLine) { throw 'CMAKE_INSTALL_PREFIX was not found in the build cache.' }
           $prefix = ($prefixLine.Line -split '=', 2)[1]
           $relativePrefix = $prefix -replace '^[A-Za-z]:[\\/]*', ''
-          $stagingRoot = (Resolve-Path "dist/${{ matrix.arch }}").Path
+          $stagingRoot = (Resolve-Path 'dist/arm64').Path
           $installRoot = Join-Path $stagingRoot $relativePrefix
           if (!(Test-Path (Join-Path $installRoot 'bin'))) {
             throw "Installed bin directory was not found at $installRoot"
           }
-          $archive = Join-Path (Split-Path -Parent $stagingRoot) "Fcitx5-${{ matrix.arch }}-dev.tar.bz2"
+          $archive = Join-Path (Split-Path -Parent $stagingRoot) 'Fcitx5-arm64-dev.tar.bz2'
           Push-Location $installRoot
           try {
             tar cjf $archive bin/lib* include lib
+            if ($LASTEXITCODE -ne 0) { throw 'ARM64 developer archive failed.' }
           } finally {
             Pop-Location
           }
@@ -77,115 +68,16 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          archive: false
-          name: Fcitx5-${{ matrix.arch }}
-          path: |
-            dist/Fcitx5-${{ matrix.arch }}*.tar.bz2
+          name: Fcitx5-arm64
+          path: dist/Fcitx5-arm64-dev.tar.bz2
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Setup tmate session
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
 
-  build-win32:
-    runs-on: windows-2025
-    defaults:
-      run:
-        working-directory: win32
-    steps:
-      - name: Disable CRLF
-        working-directory: .
-        run: git config --global core.autocrlf false
-
-      - uses: actions/checkout@v6
-
-      - name: Build
-        run: |
-          cmake -B build -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
-
-      - name: Check validity
-        run: md5sum -c checksum
-
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-
-  test-pinyin-x64:
-    runs-on: windows-2025
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install Core dependencies
-        run: |
-          C:/msys64/usr/bin/pacman -S --noconfirm `
-            mingw-w64-clang-x86_64-clang `
-            mingw-w64-clang-x86_64-cmake `
-            mingw-w64-clang-x86_64-ninja `
-            mingw-w64-clang-x86_64-pkgconf `
-            mingw-w64-clang-x86_64-gettext-tools `
-            mingw-w64-clang-x86_64-extra-cmake-modules `
-            mingw-w64-clang-x86_64-dlfcn `
-            mingw-w64-clang-x86_64-libuv `
-            mingw-w64-clang-x86_64-boost `
-            mingw-w64-clang-x86_64-zstd
-
-      - name: Build and deploy Pinyin Core
-        run: ./scripts/build-pinyin.ps1 -DataMode Prebuilt
-
-      - name: Build TSF with Windows SDK and ATL
-        run: |
-          $vs = & 'C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe' `
-            -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.ATLMFC -property installationPath
-          if (!$vs) { throw 'Visual Studio with ATL is required.' }
-          & cmd.exe /c "`"$vs\Common7\Tools\VsDevCmd.bat`" -arch=amd64 >nul && set" |
-            ForEach-Object {
-              if ($_ -match '^([^=]+)=(.*)$') {
-                [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
-              }
-            }
-          cmake -S win32 -B win32/build/pinyin-tsf -G Ninja `
-            -DCMAKE_BUILD_TYPE=Debug `
-            '-DCMAKE_C_COMPILER=C:/Program Files/LLVM/bin/clang.exe' `
-            '-DCMAKE_CXX_COMPILER=C:/Program Files/LLVM/bin/clang++.exe' `
-            -DCMAKE_MAKE_PROGRAM=C:/msys64/clang64/bin/ninja.exe
-          cmake --build win32/build/pinyin-tsf
-
-      - name: Verify real Pinyin and unregistered TSF text contexts
-        run: ./scripts/test-pinyin.ps1
-
-      - name: Verify third-party dictionary loading
-        run: ./scripts/test-dictionaries.ps1
-
-      - name: Upload diagnostic logs
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pinyin-test-logs
-          path: build/pinyin-test/*.log
-
-  build-settings:
-    runs-on: windows-2025
-    steps:
-      - uses: actions/checkout@v6
-      - name: Build framework-dependent WinUI settings
-        run: ./scripts/build-settings.ps1 -Configuration Release
-      - name: Upload settings application
-        uses: actions/upload-artifact@v7
-        with:
-          name: Fcitx5-settings-x64
-          path: |
-            win32/build/settings/Release/*.exe
-            win32/build/settings/Release/*.dll
-            win32/build/settings/Release/*.pri
-            win32/build/settings/Release/*.winmd
-
-  package-installer-x64:
+  build-x64:
     runs-on: windows-2025
     steps:
       - name: Disable CRLF
@@ -211,6 +103,163 @@ jobs:
             mingw-w64-clang-x86_64-zstd
           Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
 
+      - name: Build complete Release runtime tree without tests
+        run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/ci-runtime -BuildRoot ./build/ci-x64 -DataMode Prebuilt -SkipTests
+
+      - name: Prepare portable TSF tests and probes
+        run: |
+          $build = (Resolve-Path build/ci-x64/tsf).Path.Replace('\', '/')
+          $manifest = & ctest --test-dir $build --show-only=json-v1
+          if ($LASTEXITCODE -ne 0) { throw 'CTest enumeration failed.' }
+          $tests = ($manifest | Out-String | ConvertFrom-Json).tests
+          if (!$tests.Count) { throw 'No default TSF tests were found.' }
+          $bundle = 'build/ci-x64/test-bundle'
+          New-Item -ItemType Directory -Force "$bundle/tests", "$bundle/dll" | Out-Null
+          Copy-Item "$build/tests/*.exe" "$bundle/tests"
+          Copy-Item "$build/dll/fcitx5-x86_64.dll", "$build/dll/penguin.ico" "$bundle/dll"
+          function Convert-TestArgument([string]$Value) {
+            $value = $Value.Replace('\', '/')
+            if ($value.StartsWith("$build/", [StringComparison]::OrdinalIgnoreCase)) {
+              return @{ path = $value.Substring($build.Length + 1) }
+            } elseif ([IO.Path]::IsPathRooted($value)) {
+              throw "Test argument is outside the TSF build: $Value"
+            }
+            return @{ value = $Value }
+          }
+          $registration = foreach ($test in $tests) {
+            if (@($test.properties | Where-Object name -ne 'WORKING_DIRECTORY').Count) {
+              throw "Unsupported portable test properties: $($test.name)"
+            }
+            @{
+              name = $test.name
+              command = @($test.command | ForEach-Object { Convert-TestArgument $_ })
+              workingDirectory = Convert-TestArgument ($test.properties | Where-Object name -eq 'WORKING_DIRECTORY').value
+            }
+          }
+          ConvertTo-Json -InputObject @($registration) -Depth 5 | Set-Content "$bundle/tests.json" -Encoding utf8
+
+      - name: Upload shared runtime tree
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-runtime-x64
+          path: dist/ci-runtime/
+          if-no-files-found: error
+
+      - name: Upload portable TSF tests and probes
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-tests-x64
+          path: build/ci-x64/test-bundle/
+          if-no-files-found: error
+
+      - name: Package x64 Core developer files without rebuilding
+        run: |
+          cmake --install build/ci-x64/pinyin-core --prefix "$PWD/dist/core-dev-x64"
+          if ($LASTEXITCODE -ne 0) { throw 'Core developer installation failed.' }
+          $archive = Join-Path $PWD 'dist/Fcitx5-x86_64-dev.tar.bz2'
+          Push-Location dist/core-dev-x64
+          try {
+            tar cjf $archive bin/lib* include lib
+            if ($LASTEXITCODE -ne 0) { throw 'x64 developer archive failed.' }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Upload x64 Core developer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-x86_64
+          path: dist/Fcitx5-x86_64-dev.tar.bz2
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Upload settings application
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-settings-x64
+          path: dist/ci-runtime/settings/
+          if-no-files-found: error
+
+  test-x64:
+    needs: build-x64
+    runs-on: windows-2025
+    steps:
+      - name: Disable CRLF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+
+      - name: Download shared runtime tree
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-runtime-x64
+          path: dist/ci-runtime
+
+      - name: Download portable TSF tests and probes
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-tests-x64
+          path: build/ci-tests
+
+      - name: Restore portable CTest registration
+        run: |
+          $bundle = (Resolve-Path build/ci-tests).Path.Replace('\', '/')
+          $tests = Get-Content "$bundle/tests.json" -Raw | ConvertFrom-Json
+          if (!$tests.Count) { throw 'No portable TSF tests were found.' }
+          function Format-TestArgument($Argument) {
+            $value = if ($Argument.path) { "$bundle/$($Argument.path)" } else { $Argument.value }
+            return '"' + $value.Replace('\', '/').Replace('$', '\$').Replace('"', '\"') + '"'
+          }
+          $registration = foreach ($test in $tests) {
+            $name = Format-TestArgument @{ value = $test.name }
+            $arguments = @($test.command | ForEach-Object { Format-TestArgument $_ })
+            'add_test(' + $name + ' ' + ($arguments -join ' ') + ')'
+            'set_tests_properties(' + $name + ' PROPERTIES WORKING_DIRECTORY ' + (Format-TestArgument $test.workingDirectory) + ')'
+          }
+          $registration | Set-Content "$bundle/CTestTestfile.cmake" -Encoding utf8
+
+      - name: Test unified build script
+        run: ./scripts/test-build-and-deploy.ps1
+
+      - name: Check generated icon against the existing checksum
+        run: |
+          $expected = ((Get-Content win32/checksum -Raw).Trim() -split '\s+')[0]
+          $actual = (Get-FileHash build/ci-tests/dll/penguin.ico -Algorithm MD5).Hash
+          if ($actual -ne $expected) { throw 'Generated icon checksum mismatch.' }
+
+      - name: Verify real Pinyin and unregistered TSF text contexts
+        run: ./scripts/test-pinyin.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
+
+      - name: Verify third-party dictionary loading
+        run: ./scripts/test-dictionaries.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
+
+      - name: Upload diagnostic logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pinyin-test-logs
+          path: |
+            build/pinyin-test/*.log
+            build/dictionaries-test/*.log
+            build/ci-tests/Testing/Temporary/*.log
+
+  package-installer-x64:
+    needs: build-x64
+    runs-on: windows-2025
+    steps:
+      - name: Disable CRLF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Download shared runtime tree
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-runtime-x64
+          path: dist/installer-stage
+
       - name: Install Inno Setup compiler
         run: winget install --id JRSoftware.InnoSetup.7 -e --silent --accept-source-agreements --accept-package-agreements
 
@@ -235,12 +284,6 @@ jobs:
           if ((Get-FileHash build/installer-deps/vc_redist.x64.exe -Algorithm SHA256).Hash -ne 'CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B') { throw 'VC++ runtime hash mismatch.' }
           if ((Get-FileHash build/installer-deps/WindowsAppRuntimeInstall-x64.exe -Algorithm SHA256).Hash -ne '7C092E85FC1E3E7CB2BD7D549AAAB03CAF924131F15D9B20B1855457A98205AA') { throw 'Windows App Runtime hash mismatch.' }
 
-      - name: Test unified build script
-        run: ./scripts/test-build-and-deploy.ps1
-
-      - name: Build complete runtime tree
-        run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/installer-stage -BuildRoot ./build/installer -DataMode Prebuilt
-
       - name: Test installer packaging script
         run: ./scripts/test-build-installer.ps1
 
@@ -264,21 +307,32 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Fcitx5-installer-x64
-          archive: false
+          compression-level: 0
+          if-no-files-found: error
           path: |
             dist/installer/*.exe
             dist/installer/*.sha256
             dist/installer/*.txt
 
   release:
-    needs: [build-fcitx5-clang, package-installer-x64]
+    needs: [build-core-arm64, build-x64, test-x64, package-installer-x64]
     if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifact
+      - name: Download ARM64 Core developer artifact
         uses: actions/download-artifact@v8
         with:
-          merge-multiple: true
+          name: Fcitx5-arm64
+
+      - name: Download x64 Core developer artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-x86_64
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-installer-x64
 
       - name: Create Nightly release
         uses: 'marvinpinto/action-automatic-releases@latest'

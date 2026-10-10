@@ -36,7 +36,7 @@ Run from the repository root:
 
 The script initializes pinned submodules, applies compatibility patches and
 builds Core/libime/chinese-addons, TSF and WinUI Settings. It stages the complete
-runtime under `build/all/prefix`, runs the nine default TSF CTest tests, then
+runtime under `build/all/prefix`, runs the ten default TSF CTest tests, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
 
@@ -75,6 +75,37 @@ version. Source-data generation has not been validated end to end locally.
 For individual Core, TSF and Settings builds, see the
 [Pinyin integration guide](pinyin.md#build-and-deploy-core). A plain root CMake
 build does not build/deploy libime, chinese-addons, TSF, Settings or Pinyin data.
+
+## CI Build and Artifact Flow
+
+The workflow builds each x64 component once in Release. Build and validation
+run in separate jobs:
+
+| Job | Responsibility |
+| --- | --- |
+| `build-core-arm64` | Build and archive ARM64 Core developer files; no ARM64 TSF or Pinyin integration validation |
+| `build-x64` | Run the unified build with `-SkipTests`; upload the complete runtime tree, portable TSF tests/probes, x64 Core developer archive and standalone Settings artifact |
+| `test-x64` | Download the x64 runtime and tests; run build-script regressions, the existing icon checksum, Pinyin/TSF/settings probes, default CTest and dictionary integration checks |
+| `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
+| `release` | Wait for both architectures, x64 tests and packaging to succeed, then publish the developer archives and installers |
+
+`test-x64` and `package-installer-x64` both depend only on `build-x64`, so they
+can start in parallel as soon as that job finishes. Packaging can succeed even
+if tests fail, but Nightly publication remains blocked. The standalone Debug
+TSF build is no longer part of this workflow.
+
+The portable test bundle includes test executables, probes, the actual TSF DLL
+and generated icon. A relative-path JSON manifest comes from
+`ctest --show-only=json-v1`; the test runner restores CTest registration with its
+downloaded bundle's absolute commands and working directories, without
+reconfiguring CMake or depending on the original runner's checkout path.
+The x64 Core developer archive uses a separate install of the existing Core
+build, keeping libime/chinese-addons files out of that archive.
+
+All multi-file artifacts use the artifact action's default ZIP archive mode.
+Already compressed developer archives and installer artifacts use compression
+level zero. Release downloads only the named developer and installer artifacts,
+without merging the internal runtime and test bundles.
 
 ## Deployment and Updates
 
@@ -129,7 +160,7 @@ Default CTest includes `test_candidate`, which exercises the production
 DirectWrite/Direct2D draw function and popup lifecycle without Core or TIP
 registration. See [candidate rendering validation](windows-candidate-rendering.md#verification)
 for preview images and the remaining physical-monitor/application checks.
-Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the nine
+Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the ten
 default tests; it requires a running deployed Core.
 
 The following script regressions do not perform real registration or terminate

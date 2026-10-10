@@ -5,7 +5,7 @@
 - 本文件适用于整个仓库；子目录中的 `AGENTS.md` 对其目录有更具体的约束时，优先遵守子目录说明。
 - 本项目是尚未完成的 Fcitx5 Windows port，使用 C++20、CMake 和 PowerShell。
 - 默认使用中文沟通，保留代码标识符、接口名称和命令的原文。
-- 以下进度更新于 2026-10-10。功能变化时同步更新相关说明，以实际代码为准，不把已知缺口当作永久设计限制。
+- 以下进度更新于 2026-10-11。功能变化时同步更新相关说明，以实际代码为准，不把已知缺口当作永久设计限制。
 - 不要将“可以编译”“可以注册为输入法”“可以提交固定字符”描述为“已经支持 Fcitx5 输入”。
 
 ## 项目结构
@@ -30,7 +30,7 @@
 | `docs/pinyin.md` | 拼音构建、隔离部署、IPC/TSF 设计和验证边界 |
 | `docs/build.md` | 统一构建、部署、注册/释放脚本和验证入口 |
 | `docs/windows-settings-design.md`、`docs/windows-candidate-rendering.md` | 设置/服务控制和候选窗的当前实现、设计与验证边界 |
-| `.github/workflows/ci.yml` | 核心双架构构建、TSF 测试、AMD64 拼音/词库集成验证、WinUI 构建和核心开发包发布 |
+| `.github/workflows/ci.yml` | ARM64 Core 构建、x64 统一构建及产物复用、独立测试/安装包并行执行和 Nightly 发布 |
 
 ## 当前架构与实现边界
 
@@ -150,7 +150,7 @@
 
 - 当前 DLL 目标名固定为 `fcitx5-x86_64`，构建配置没有提供 TSF 双架构矩阵；不要仅凭目标名称推断实际产物架构。
 - 修改辅助函数时运行现有测试；修改 COM/TSF 行为时，优先补充相关回归测试，并明确哪些验证仍需真实 Windows 应用配合。
-- CI 中 `md5sum -c checksum` 检查生成图标。只有图标或生成流程有意变化时才考虑更新 checksum，不能为了通过检查直接替换它。
+- CI 的 `test-x64` 使用 `Get-FileHash -Algorithm MD5` 将测试包中的生成图标与 `win32/checksum` 核对。只有图标或生成流程有意变化时才考虑更新 checksum，不能为了通过检查直接替换它。
 
 ### 格式与结果报告
 
@@ -189,6 +189,8 @@
 
 ## 当前验证记录
 
+- CI 已拆分为 `build-core-arm64`、`build-x64`、`test-x64`、`package-installer-x64` 和 `release`。x64 Core/libime/addons/TSF/Settings 统一 Release 构建一次，构建 job 跳过测试；测试与打包同时依赖该构建，下载同一运行树。默认 CTest 导出相对路径 JSON 清单，由测试 runner 按下载目录恢复绝对命令及工作目录，保留图标校验、脚本回归和拼音/词库 probes；原独立 Debug TSF 构建不再执行。x64 开发包单独安装已经构建的 Core，不混入拼音依赖。多文件 artifact 使用默认 ZIP 模式，修复安装包六文件上传与 `archive: false` 冲突；release 只下载开发包及安装包，并等待测试和打包全部成功。本机 YAML/job 依赖及 artifact 对应检查、全部 Windows run 块的 PowerShell 语法检查、两个脚本回归通过；已有 Release 测试包经 ZIP 解包至含空格/单引号的新目录后 10 项 CTest 和图标校验通过，Core 实际安装/开发包的 125 项内容及无拼音依赖验证、现有双安装包六文件 ZIP 和元数据检查通过，验证文件在 `build/ci-workflow-validation`。当次 Core 已运行，未停止服务或重跑拼音/词库 probes；GitHub runner 上完整产物传递及发布仍需重跑确认。
+
 - 安装包 CI 将检查通过的 Inno Setup 7 完整路径经 `GITHUB_ENV` 传给两个打包调用的 `-IsccPath`；打包脚本校验主版本为 7，不再搜索版本 6 安装目录，manifest 记录实际版本。`scripts/test-build-installer.ps1` 已覆盖 PATH 中为 6 时显式选择 7、默认及显式选择 6 的拒绝和实际版本记录；脚本及修改后的 CI PowerShell 语法检查、`git diff --check` 通过。本机使用显式 7.1.0 路径和 `build/all/prefix` 实际编译两种包，产物及日志位于 `build/ci-inno7-validation`；未执行安装器、注册/注销或修改输入法设置，GitHub runner 上的完整 CI 尚待重跑确认。
 
 - 安装包 CI 同时打包并发布含 VC++/Windows App Runtime 的 `Fcitx5-<run>-x64-setup.exe` 和不含它们的 `Fcitx5-<run>-x64-no-runtime-setup.exe`，共享完整暂存运行树，各自生成 manifest 和 SHA256。`scripts/build-installer.ps1 -SkipRuntimes` 不要求外部运行库安装程序存在；使用者须预先满足运行库要求，用户阶段仍检查 Settings runtime。`scripts/test-build-installer.ps1` 已通过模拟编译器回归，覆盖双版本开关、缺失依赖、独立清单/校验值、失败返回和无副作用预览；PowerShell 解析、发布附件模式及 `git diff --check` 已通过。本机当前用户目录的 Inno Setup 7.1.0 已实际编译两个版本，无警告/错误，产物位于 `dist/installer-variants`（含运行库约 172.69 MiB，不含约 48.87 MiB），依赖锁哈希及 EXE 校验值核对通过。实际 ISPP 及编译日志确认不含版无运行库文件条目或安装步骤，日志在 `build/installer-variants`；未运行安装器、注册/注销或修改输入法设置，双版本系统安装仍需 CI/干净 VM 验证。
@@ -211,4 +213,4 @@
 - 注册/释放脚本更新通过 `win32/tests/test_scripts.ps1` 的模拟回归及三个管理脚本的真实 `-WhatIf` 预览，覆盖任意工作目录、含空格/单引号路径、失败退出码、参数错误、精确路径筛选和 ctfmon 预览无副作用；未执行真实注册/注销、UAC 提权或终止应用。
 - 本次 `settings_probe` 验证全拼/小鹤/自然码候选与提交、英文保持、冲突/幂等/非法值、国标配置映射；只读存储失败保持真实解码预编辑。`tsf_probe` 额外覆盖小鹤/自然码文档写入及设置变化时旧异步预编辑取消。
 - 经用户明确授权安装当前用户 DDLM 后，`scripts/test-settings-ui.ps1` 验证实际 WinUI 框架依赖窗口的加载、确定/取消、键位选择、重启恢复、单实例，截图在 `build/settings-ui-test`。未执行输入法注册/注销；真实右键派发、跨屏 DPI 和完整主题验证仍未完成。
-- 安装包第一阶段已接入：`win32/setup/Fcitx5SetupHelper.exe` 提供受限的机器注册/注销、当前用户 TSF 启用/默认/激活、Core 就绪检查、维护状态和 Restart Manager 占用查询；`scripts/build-installer.ps1` 与 `installer/fcitx5.iss` 生成 Inno Setup x64 EXE，`.github/workflows/ci.yml` 的 `package-installer-x64` 下载固定哈希的 VC++/Windows App Runtime、构建完整暂存树并上传安装器 artifact。`win32/build/installer-tsf` 的 10 项 CTest 已通过；本机没有执行注册、用户输入法切换、真实 Inno 编译、安装/卸载或重启清理。Inno/Windows App Runtime 及真实 Windows 应用安装验收仍需 CI/干净 VM 验证；当前只提供 x64 TSF。
+- 安装包第一阶段已接入：`win32/setup/Fcitx5SetupHelper.exe` 提供受限的机器注册/注销、当前用户 TSF 启用/默认/激活、Core 就绪检查、维护状态和 Restart Manager 占用查询；`scripts/build-installer.ps1` 与 `installer/fcitx5.iss` 生成 Inno Setup x64 EXE，`.github/workflows/ci.yml` 的 `package-installer-x64` 下载固定哈希的 VC++/Windows App Runtime、复用 `build-x64` 上传的完整运行树并上传安装器 artifact。`win32/build/installer-tsf` 的 10 项 CTest 已通过；第一阶段接入时没有执行注册、用户输入法切换、真实 Inno 编译、安装/卸载或重启清理；后续本机 Inno 编译记录见本节开头。Inno/Windows App Runtime 及真实 Windows 应用安装验收仍需 CI/干净 VM 验证；当前只提供 x64 TSF。
