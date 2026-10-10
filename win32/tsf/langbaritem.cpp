@@ -117,7 +117,9 @@ STDMETHODIMP LangBarItem::GetInfo(TF_LANGBARITEMINFO *pInfo) {
     *pInfo = {};
     pInfo->clsidService = FCITX_CLSID;
     pInfo->guidItem = GUID_LBI_INPUTMODE;
-    pInfo->dwStyle = TF_LBI_STYLE_BTN_TOGGLE |
+    // Declare both behaviors so the language bar routes left clicks to the
+    // toggle and right clicks through InitMenu/OnMenuSelect.
+    pInfo->dwStyle = TF_LBI_STYLE_BTN_MENU | TF_LBI_STYLE_BTN_TOGGLE |
                      TF_LBI_STYLE_HIDDENSTATUSCONTROL |
                      TF_LBI_STYLE_TEXTCOLORICON;
     pInfo->ulSort = 0;

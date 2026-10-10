@@ -148,6 +148,8 @@ int main() {
     assert(item->GetInfo(&info) == S_OK);
     assert(info.clsidService == fcitx::FCITX_CLSID);
     assert(info.guidItem == GUID_LBI_INPUTMODE);
+    assert((info.dwStyle & TF_LBI_STYLE_BTN_MENU) != 0);
+    assert((info.dwStyle & TF_LBI_STYLE_BTN_TOGGLE) != 0);
     assert(info.dwStyle & TF_LBI_STYLE_TEXTCOLORICON);
     UpdateSink sink;
     DWORD cookie = 0, duplicate = 0;
