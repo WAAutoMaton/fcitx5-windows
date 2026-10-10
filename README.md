@@ -18,7 +18,7 @@ Pipe scoped to the current user's SID and Windows session. No Core C++ objects
 or runtime ABI cross the pipe. Pipe requests are dispatched to Core's event
 loop; TSF applies replies through edit sessions on its owning thread.
 
-Protocol v3 returns key consumption, Chinese commits, preedit, cursor and
+Protocol v4 returns key consumption, Chinese commits, preedit, cursor and
 candidate pages, and provides explicit mode switching and state polling.
 TSF polls every 100 ms for delayed output and retries disconnected connections
 every two seconds. Failed requests are not replayed; IPC or document-edit
@@ -47,10 +47,20 @@ candidate appearance, themes, Explorer restart and multiple-monitor DPI still
 need testing.
 
 Only AMD64 Core/TSF/Pinyin has been exercised locally. The Core CI also builds
-ARM64; this does not establish ARM64 Pinyin or TSF support. Shuangpin, Wubi and
+ARM64; this does not establish ARM64 Pinyin or TSF support. Full Pinyin and
+Xiaohe/Ziranma Shuangpin commits are covered by IPC and TSF probes. Wubi and
 Rime are not validated. Candidate mouse selection, TSF UIElement/accessibility,
-configuration UI, surrounding text, dead keys/AltGr, password/secure contexts and
+surrounding text, dead keys/AltGr, password/secure contexts and
 Windows Store compatibility are not claimed as supported.
+
+Right-clicking the input mode item provides an input-method settings command.
+The independent WinUI 3 settings app selects full/double pinyin and built-in
+Shuangpin profiles; changes are saved and applied by Core. It uses x64 Windows
+App SDK 1.8 framework-dependent deployment. Build it with
+`scripts/build-settings.ps1 -Prefix "$PWD/dist/pinyin"` and install the matching
+runtime separately. Actual window save/cancel, restart and single-instance
+behavior were tested; registered-indicator right-click dispatch and multi-monitor
+DPI still require validation. See [the settings design](docs/windows-settings-design.md).
 
 ## Build and Validate
 
@@ -90,7 +100,7 @@ Before starting Core manually, run the integration checks:
 ./scripts/test-pinyin.ps1
 ```
 
-This starts a Core process, runs real Pinyin IPC and TSF probes plus six CTest
+This starts a Core process, runs real Pinyin IPC, settings and TSF probes plus seven CTest
 tests, then stops the Core it started. It refuses to run alongside an existing
 Core. Tests include language-bar state/lifetime, embedded DLL icon extraction
 and registration arguments captured by fake COM managers. These build and

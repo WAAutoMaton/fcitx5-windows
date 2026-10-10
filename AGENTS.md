@@ -40,7 +40,7 @@
 
 ### IPC、线程与状态设计
 
-- `win32/ipc/protocol.h` 定义协议 v3 framing；服务在 `src/windowsfrontend.cpp`，客户端在 `win32/tsf/pipeclient.cpp`。协议包括 context、焦点、按键、Reset、PollState 和幂等 SetMode；回复包含消费结果、提交、预编辑、UTF-8 字节光标、候选页、mode 和 revision。升级协议必须同时更新 Core 与 TSF DLL。
+- `win32/ipc/protocol.h` 定义协议 v4 framing；服务在 `src/windowsfrontend.cpp`，客户端在 `win32/tsf/pipeclient.cpp`。新增 context-independent 的 OpenSettings/GetSettings/SetSettings；按键回复增加设置运行时代次。升级协议必须同时更新 Core、TSF DLL 和设置程序。
 - 管道按 SID/Windows session 命名，设置当前用户 ACL、拒绝远程访问、支持多连接，并校验 context 的连接归属。服务端回收断开的 contexts；客户端采用可取消 overlapped I/O，每次读写等待上限为 500 ms。
 - 服务线程通过 `EventDispatcher` 将请求投递到 Core 主事件循环；TSF 在自身线程通过隐藏消息窗口每 100 ms 轮询延迟变化，断开后在有焦点 context 时每两秒尝试重连。当前没有服务端异步推送，超时请求不重放。
 - TSF 订阅线程管理器的 `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`，系统开关、Ctrl+Space 和语言栏点击复用同一模式状态及 Core SetMode。新的焦点 context 和重连继承该状态；预编辑按焦点创建/销毁，不保存多个输入框的未提交文本。
@@ -60,14 +60,17 @@
 - 语言栏对象停用后隐藏并解除窗口绑定；对象独立持有 DLL 引用，迟到点击不影响新激活实例。用户已在重新注册后确认输入指示器功能正常，多显示器 DPI、主题及 Explorer 重启行为仍未验证。
 - `test_dll` 仍仅测试辅助函数；`test_langbar` 覆盖语言栏 COM 接口、通知、图标像素和生命周期。`ipc_probe` 验证真实拼音，`tsf_probe` 加载实际 DLL 并使用真实 TSF context 和内存 text store，但以测试适配器代替未注册 TIP 的按键订阅和语言栏管理器，并显式模拟按键/焦点/语言栏点击回调。
 - `test_register` 加载实际 DLL 检查内嵌品牌图标和 Shell 图标提取，使用模拟 COM 管理器验证 profile 字符长度、DLL 路径、类别和失败返回；不执行系统注册或修改输入法设置。
+- 语言栏右键通过原生 popup menu 提供“输入法设置”，选中后经消息窗口请求 Core 启动独立 WinUI 3/C++/WinRT 设置程序。真实已注册指示器右键派发尚未验证；左键仍切换中英文。
+- `win32/settings` 是第三套独立 MSBuild 工程，使用框架依赖的 Windows App SDK 1.8；要求当前用户有 x64 Framework/DDLM >= 8000.994.2142.0 和 Visual C++ 运行库。`scripts/build-settings.ps1 -Prefix` 部署到隔离安装树的 `settings`，不安装系统运行时。
+- 设置窗口提供全拼/双拼及八种内置键位；Core 在主事件循环切换 `pinyin`/`shuangpin` entry 和真实 `ShuangpinProfile`，保存用户 `conf/windows.conf` 并在重启恢复。存储失败先返回，不清空解码上下文；成功切换取消预编辑，英文 context 保持关闭。设置运行时代次拒绝旧预编辑但保留已经接收的提交。
 
 ### 尚未实现或接入
 
 - 完整 Windows `InputContext` 能力仍在完善；当前按焦点创建/销毁远端 context，不持久保存多个输入框的未提交预编辑。
-- 拼音已接入并验证；双拼、五笔、Rime 的实际输入和部署尚未验证。
+- 全拼及小鹤/自然码双拼真实中文提交已由 IPC/TSF probes 验证；其他双拼键位、五笔、Rime 的真实输入和完整应用兼容性仍需验证。
 - 基础消费/放行、Ctrl+Space、按键释放和布局字符转换已接入；死键、AltGr、复杂非美式布局、密码/安全 context 和完整快捷键尚未验证。
 - 周边文本、转发按键、格式化预编辑区间和跨断线提交可靠性尚未实现。
-- 候选鼠标交互、TSF UIElement/无障碍、普通通知区域托盘、配置界面、原生剪贴板和全面 DPI 适配尚未实现或验证；语言栏输入模式项已实现，用户已确认重新注册后的输入指示器功能正常。
+- 候选鼠标交互、TSF UIElement/无障碍、普通通知区域托盘、原生剪贴板和全面 DPI 适配尚未实现或验证；已有 WinUI 拼音设置窗口，当前 200% 缩放已截图检查，跨屏 DPI/主题/文本缩放仍需全面验证。
 - 统一安装包、核心与 DLL 的联合部署，以及 TSF 的 ARM64/x86 构建与验证。
 - 默认配置关闭上游 X11、Wayland、DBus、server 和 keyboard engine 等组件；不要直接启用 Linux 前端来替代 Windows 实现。
 - 上游已有候选、配置、引擎管理和输入上下文等抽象，优先复用；插件能构建不代表其 Windows 系统后端已经实现。
@@ -171,8 +174,10 @@
 
 ## 当前验证记录
 
-- AMD64 Core、libime、chinese-addons 已构建；使用 SHA256 固定预编译数据的拼音部署链路已验证。TSF Debug 和干净 Release 构建、6 项默认 CTest 均已通过。默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`；direct-input 引擎只放行按键，不自行提交 ASCII。
+- AMD64 Core、libime、chinese-addons 已构建；使用 SHA256 固定预编译数据的拼音部署链路已验证。本次 Core、TSF Release 和 WinUI Release 构建、7 项默认 CTest 均已通过；先前 TSF Debug/干净 Release 记录仍有效。默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`；direct-input 引擎只放行按键，不自行提交 ASCII。
 - `ipc_probe` 验证真实拼音，`tsf_probe` 验证实际 DLL 和真实 TSF context 的文本插入，包括 `nihao` 中文选词/提交、异步取消、焦点及迟到请求隔离、compartment 和语言栏生命周期。probe 的按键订阅、语言栏管理和点击/快捷键回调使用测试适配器，不能据此宣称真实 OS 派发已验证。只注册精确 Ctrl+Space preserved key，不注册普通 Space。
 - 用户实测确认重新注册后的“中/A”输入指示器功能正常；测试应用和完整 Windows 版本矩阵未记录。普通应用输入、候选窗口视觉效果、主题、Explorer 重启、多显示器 DPI 和 ARM64 拼音/TSF 仍未完成全面验证。
-- `scripts/test-pinyin.ps1` 默认使用 `dist/pinyin` 和 `win32/build/pinyin-tsf`，可通过 `-Prefix` / `-TsfBuild` 指定隔离路径；已有 Core 运行时拒绝执行。脚本启动 Core、运行两个 probes 和 CTest，再停止自身启动的进程，日志在 `build/pinyin-test`；不执行注册、注销或修改系统输入法设置。
-- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将两个 probes 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 6 项，不等同于真实应用输入或上游全套测试。
+- `scripts/test-pinyin.ps1` 默认使用 `dist/pinyin` 和 `win32/build/pinyin-tsf`，可通过 `-Prefix` / `-TsfBuild` 指定隔离路径；已有 Core 运行时拒绝执行。脚本使用独立 Windows 设置文件启动 Core、运行三个 probes 和 CTest，再停止自身启动的进程，日志在 `build/pinyin-test`；不执行注册、注销或修改系统输入法设置。
+- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将 ipc_probe、tsf_probe、settings_probe 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 7 项，不等同于真实应用输入或上游全套测试。
+- 本次 `settings_probe` 验证全拼/小鹤/自然码候选与提交、英文保持、冲突/幂等/非法值、国标配置映射；只读存储失败保持真实解码预编辑。`tsf_probe` 额外覆盖小鹤/自然码文档写入及设置变化时旧异步预编辑取消。
+- 经用户明确授权安装当前用户 DDLM 后，`scripts/test-settings-ui.ps1` 验证实际 WinUI 框架依赖窗口的加载、确定/取消、键位选择、重启恢复、单实例，截图在 `build/settings-ui-test`。未执行输入法注册/注销；真实右键派发、跨屏 DPI 和完整主题验证仍未完成。

@@ -8,11 +8,14 @@ if (!$TsfBuild) { $TsfBuild = "$root/win32/build/pinyin-tsf" }
 $core = (Resolve-Path "$Prefix/bin/Fcitx5.exe").Path
 $probe = (Resolve-Path "$TsfBuild/tests/ipc_probe.exe").Path
 $tsfProbe = (Resolve-Path "$TsfBuild/tests/tsf_probe.exe").Path
+$settingsProbe = (Resolve-Path "$TsfBuild/tests/settings_probe.exe").Path
 $dll = (Resolve-Path "$TsfBuild/dll/fcitx5-x86_64.dll").Path
 $log = "$root/build/pinyin-test"
 New-Item -ItemType Directory -Force $log | Out-Null
 if (Get-Process Fcitx5 -ErrorAction SilentlyContinue) { throw 'Stop the running Core before this isolated test.' }
+$testSettings = "$log/windows-$([guid]::NewGuid().ToString('N')).conf"
 $process = Start-Process -FilePath $core -WindowStyle Hidden -PassThru -WorkingDirectory "$Prefix/bin" `
+    -ArgumentList @('--windows-settings-file', "`"$testSettings`"") `
     -RedirectStandardOutput "$log/core.stdout.log" -RedirectStandardError "$log/core.stderr.log"
 try {
     $connected = $false
@@ -30,10 +33,15 @@ try {
     if (!$connected) { throw 'Pinyin IPC integration failed.' }
     & $probe
     if ($LASTEXITCODE -ne 0) { throw 'Pinyin IPC regression failed.' }
+    & $settingsProbe
+    if ($LASTEXITCODE -ne 0) { throw 'Pinyin settings regression failed.' }
     & $tsfProbe $dll
     if ($LASTEXITCODE -ne 0) { throw 'Pinyin TSF integration failed.' }
     & ctest --test-dir $TsfBuild --output-on-failure
     if ($LASTEXITCODE -ne 0) { throw 'CTest failed.' }
 } finally {
-    if (!$process.HasExited) { Stop-Process -Id $process.Id }
+    if (!$process.HasExited) {
+        Stop-Process -Id $process.Id
+        $process.WaitForExit()
+    }
 }

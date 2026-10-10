@@ -43,7 +43,7 @@ void setupEnv() {
     setenv("LIBIME_MODEL_DIRS", (rootPath / "lib" / "libime").string());
 }
 
-void start() {
+void start(const ::fs::path &settingsFile) {
     Log::setLogRule("*=3,notimedate");
     setupEnv();
     instance = std::make_unique<Instance>(0, nullptr);
@@ -59,6 +59,9 @@ void start() {
         group.setDefaultLayout("us");
         group.inputMethodList().emplace_back("keyboard-us");
         group.inputMethodList().emplace_back("pinyin");
+        if (imManager.entry("shuangpin")) {
+            group.inputMethodList().emplace_back("shuangpin");
+        }
         group.setDefaultInputMethod("pinyin");
         imManager.addEmptyGroup(group.name());
         imManager.setGroup(std::move(group));
@@ -78,8 +81,8 @@ void start() {
     }
     dispatcher = std::make_unique<fcitx::EventDispatcher>();
     dispatcher->attach(&instance->eventLoop());
-    pipeServer = std::make_unique<fcitx::win32::WindowsPipeServer>(*instance,
-                                                                   *dispatcher);
+    pipeServer = std::make_unique<fcitx::win32::WindowsPipeServer>(
+        *instance, *dispatcher, settingsFile);
     pipeServer->start();
     instance->eventLoop().exec();
     pipeServer->stop();
@@ -89,7 +92,21 @@ void start() {
 }
 } // namespace fcitx
 
-int main() {
-    fcitx::start();
-    return 0;
+int main(int argc, char **argv) {
+    try {
+        fs::path settingsFile;
+        if (argc == 3 &&
+            std::string_view(argv[1]) == "--windows-settings-file") {
+            settingsFile = fs::absolute(fs::path(
+                std::u8string(reinterpret_cast<const char8_t *>(argv[2]))));
+        } else if (argc != 1) {
+            throw std::runtime_error(
+                "Usage: Fcitx5 [--windows-settings-file PATH]");
+        }
+        fcitx::start(settingsFile);
+        return 0;
+    } catch (const std::exception &error) {
+        FCITX_ERROR() << error.what();
+        return 1;
+    }
 }

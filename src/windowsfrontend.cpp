@@ -6,6 +6,7 @@
 #include <fcitx-utils/log.h>
 #include <fcitx/candidatelist.h>
 #include <fcitx/inputmethodentry.h>
+#include <fcitx/inputmethodmanager.h>
 #include <fcitx/inputpanel.h>
 #include <utility>
 
@@ -201,6 +202,12 @@ void WindowsInputContext::forwardKeyImpl(const ForwardKeyEvent &) {}
 
 void WindowsInputContext::updatePreeditImpl() {}
 
+void WindowsInputContext::resetPreedit() {
+    auto committed = takeCommit();
+    reset();
+    pendingCommit_ = std::move(committed);
+}
+
 ipc::KeyReply WindowsInputContext::snapshot(bool consumed, bool enabled) {
     ipc::KeyReply reply;
     reply.consumed = consumed;
@@ -233,8 +240,18 @@ ipc::KeyReply WindowsInputContext::snapshot(bool consumed, bool enabled) {
 }
 
 WindowsPipeServer::WindowsPipeServer(Instance &instance,
-                                     EventDispatcher &dispatcher)
-    : instance_(instance), dispatcher_(dispatcher) {}
+                                     EventDispatcher &dispatcher,
+                                     std::filesystem::path settingsFile)
+    : instance_(instance), dispatcher_(dispatcher),
+      settings_(instance, std::move(settingsFile)),
+      settingsEpoch_(settings_.revision()) {}
+
+ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
+                                          bool consumed) {
+    auto reply = context.snapshot(consumed, settings_.chineseMode(&context));
+    reply.settingsRevision = settingsEpoch_;
+    return reply;
+}
 
 WindowsPipeServer::~WindowsPipeServer() { stop(); }
 
@@ -396,6 +413,9 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     ipc::Writer writer;
     if ((request.type == MessageType::Hello &&
          (request.contextId || !request.payload.empty())) ||
+        (ipc::globalSettingsRequest(request.type) &&
+         (request.contextId || (request.type != MessageType::SetSettings &&
+                                !request.payload.empty()))) ||
         (request.type == MessageType::CreateContext && request.contextId) ||
         ((request.type == MessageType::FocusIn ||
           request.type == MessageType::FocusOut ||
@@ -409,6 +429,7 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     }
     if (request.type != MessageType::Hello &&
         request.type != MessageType::CreateContext &&
+        !ipc::globalSettingsRequest(request.type) &&
         (!owners_.contains(request.contextId) ||
          owners_.at(request.contextId) != clientId)) {
         response.type = MessageType::Error;
@@ -417,6 +438,38 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     }
 
     switch (request.type) {
+    case MessageType::OpenSettings:
+    case MessageType::GetSettings:
+    case MessageType::SetSettings: {
+        auto error = ipc::SettingsError::None;
+        if (request.type == MessageType::OpenSettings) {
+            error = settings_.openWindow();
+        } else if (request.type == MessageType::SetSettings) {
+            ipc::PinyinSettings requested;
+            const bool valid = ipc::decodeSettings(request.payload, requested);
+            error = valid ? settings_.apply(requested)
+                          : ipc::SettingsError::Invalid;
+            if (valid && settings_.resetRequired()) {
+                ++settingsEpoch_;
+                std::vector<WindowsInputContext *> enabled;
+                for (auto &[id, context] : contexts_) {
+                    if (settings_.chineseMode(context.get())) {
+                        enabled.push_back(context.get());
+                    }
+                    context->resetPreedit();
+                }
+                instance_.inputMethodManager().setDefaultInputMethod(
+                    settings_.chineseEntry());
+                for (auto *context : enabled) {
+                    instance_.setCurrentInputMethod(
+                        context, settings_.chineseEntry(), true);
+                }
+            }
+        }
+        response.type = MessageType::SettingsReply;
+        response.payload = ipc::encodeSettingsReply(settings_.snapshot(error));
+        break;
+    }
     case MessageType::Hello:
         response.type = MessageType::HelloReply;
         writer.u16(ipc::kVersion);
@@ -451,7 +504,8 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             writer.string("unknown context");
         } else {
             iter->second->focusIn();
-            instance_.setCurrentInputMethod(iter->second.get(), "pinyin", true);
+            instance_.setCurrentInputMethod(iter->second.get(),
+                                            settings_.chineseEntry(), true);
         }
         response.payload = writer.take();
         break;
@@ -527,9 +581,7 @@ void WindowsPipeServer::process(const ipc::Frame &request,
         }
 #endif
         response.type = MessageType::KeyReply;
-        const auto entry = instance_.inputMethodEntry(&context);
-        response.payload = ipc::encodeKeyReply(context.snapshot(
-            consumed, entry && entry->uniqueName() == "pinyin"));
+        response.payload = ipc::encodeKeyReply(snapshot(context, consumed));
         break;
     }
     case MessageType::SetMode: {
@@ -543,18 +595,16 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             response.type = MessageType::Error;
             break;
         }
-        const auto entry = instance_.inputMethodEntry(&context);
-        const bool current = entry && entry->uniqueName() == "pinyin";
+        const bool current = settings_.chineseMode(&context);
         if (current != (enabled != 0)) {
             context.reset();
             context.takeCommit();
             instance_.setCurrentInputMethod(
-                &context, enabled ? "pinyin" : "keyboard-us", true);
+                &context, enabled ? settings_.chineseEntry() : "keyboard-us",
+                true);
         }
-        const auto updated = instance_.inputMethodEntry(&context);
         response.type = MessageType::KeyReply;
-        response.payload = ipc::encodeKeyReply(context.snapshot(
-            false, updated && updated->uniqueName() == "pinyin"));
+        response.payload = ipc::encodeKeyReply(snapshot(context, false));
         break;
     }
     case MessageType::Reset:
@@ -564,10 +614,8 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             context.reset();
             context.takeCommit();
         }
-        const auto entry = instance_.inputMethodEntry(&context);
         response.type = MessageType::KeyReply;
-        response.payload = ipc::encodeKeyReply(
-            context.snapshot(false, entry && entry->uniqueName() == "pinyin"));
+        response.payload = ipc::encodeKeyReply(snapshot(context, false));
         break;
     }
     default:

@@ -166,6 +166,22 @@ jobs:
           name: pinyin-test-logs
           path: build/pinyin-test/*.log
 
+  build-settings:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build framework-dependent WinUI settings
+        run: ./scripts/build-settings.ps1 -Configuration Release
+      - name: Upload settings application
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-settings-x64
+          path: |
+            win32/build/settings/Release/*.exe
+            win32/build/settings/Release/*.dll
+            win32/build/settings/Release/*.pri
+            win32/build/settings/Release/*.winmd
+
   release:
     needs: build-fcitx5-clang
     if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}

@@ -9,6 +9,8 @@ namespace fcitx {
 class LangBarItem : public ITfLangBarItemButton, public ITfSource {
   public:
     static constexpr UINT kToggleMessage = WM_APP + 3;
+    static constexpr UINT kSettingsMessage = WM_APP + 4;
+    static constexpr UINT kSettingsMenuId = 1;
     LangBarItem(HWND dispatchWindow, bool chineseMode);
     ~LangBarItem();
 

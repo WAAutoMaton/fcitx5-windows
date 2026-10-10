@@ -1,6 +1,7 @@
 add_executable(Fcitx5
     main.cpp
     windowsfrontend.cpp
+    windowssettings.cpp
 )
 target_link_libraries(Fcitx5 Fcitx5::Core advapi32)
 

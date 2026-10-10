@@ -34,7 +34,8 @@ sessions on the TSF owning thread.
 
 `windowskeyboard` is a static direct-input engine with no XKB dependency. It
 provides the first group entry required by Core; it never commits ASCII itself.
-The Windows group uses `keyboard-us` and `pinyin`. Ctrl+Space switches modes.
+The Windows group uses `keyboard-us`, `pinyin` and, when installed, `shuangpin`.
+Ctrl+Space switches direct/Chinese modes using the selected Pinyin scheme.
 TSF subscribes to the thread manager's `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`:
 system keyboard open/close changes select Pinyin/direct input in Core. Focus
 changes and reconnections preserve that system mode. An exact Ctrl+Space
@@ -181,9 +182,9 @@ For CTest alone, without starting Core:
 ctest --test-dir win32/build/pinyin-tsf --output-on-failure
 ```
 
-The default six tests are `test_dll`, `test_protocol`, `test_input`,
+The default seven tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
 `test_transport`, `test_langbar` and `test_register`. Root/upstream tests are
-disabled by the default build configuration; these six tests are not the full
+disabled by the default build configuration; these seven tests are not the full
 upstream test suite.
 
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
@@ -213,10 +214,11 @@ upstream test suite.
   lengths, DLL path, icon index, `SYSTRAYSUPPORT` and failure handling. It never
   invokes system registration and does not prove taskbar rendering.
 
-Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers both probes with CTest;
-a deployed Core must already be running for those two tests, bringing the total
-to eight. Debug and clean Release TSF builds and the default six tests have
-passed locally; the real Pinyin probes have also passed with the deployed Core.
+Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers all three probes with CTest;
+a deployed Core must already be running, bringing the total to ten. Release
+builds and the default seven tests passed for this change; earlier Debug and
+clean Release verification covered the previous six-test set. Real Pinyin and
+settings probes passed with the deployed Core.
 
 `scripts/test-pinyin.ps1` accepts `-Prefix` and `-TsfBuild` for other deployment
 and TSF build directories. Logs are written to `build/pinyin-test/core.stdout.log`
@@ -233,24 +235,24 @@ editors, browsers or Explorer.
 
 ## Protocol and Behavior
 
-Protocol v3 uses a pipe name scoped to the user's SID and Windows session. Its
+Protocol v4 uses a pipe name scoped to the user's SID and Windows session. Its
 ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
 overlapped I/O with a 500 ms wait limit per read/write operation; this is not a
 single 500 ms deadline for the entire request. Disconnected clients' contexts
 are destroyed. The pipe name retains the historical `fcitx5-windows-v2-` prefix;
-compatibility is checked using the framing/handshake version, which is v3.
+compatibility is checked using the framing/handshake version, which is v4.
 
 `SetMode` sets an explicit Pinyin/direct-input mode rather than replaying a
 toggle keystroke. Repeated requests are idempotent; changing modes cancels the
 current preedit. Core and TSF must both be rebuilt and deployed after this
-protocol upgrade; v2 and v3 do not connect to each other.
+protocol upgrade; older versions do not connect to v4.
 
 Each key response contains consumption, mode, commit, preedit, UTF-8 byte cursor,
-revision and the current candidate page. Reset cancels Core composition. PollState
+revision, settings epoch and the current candidate page. Reset cancels Core composition. PollState
 collects deferred engine updates on Core's event loop. TSF's 100 ms owning-thread
-timer polls while a foreground document context exists and no edit request is
-pending; it is not a guaranteed output latency. Disconnected clients retry
+timer polls while a foreground document context exists, including during pending
+edits so settings changes invalidate old preedit; it is not a guaranteed output latency. Disconnected clients retry
 every two seconds while a foreground context exists. Requests are not replayed
 after a timeout.
 
@@ -268,6 +270,51 @@ by the Pinyin engine; the popup does not insert candidate text itself.
 Focus changes create/destroy remote contexts; the current implementation does
 not persist separate unfinished preedits for multiple input fields.
 
+## Windows Settings
+
+Right-clicking the language-bar input mode item opens a native menu with an
+input-method settings command. It asks Core to launch the independent WinUI 3
+`settings/Fcitx5Settings.exe`. The real OS right-click dispatch still requires
+registered-TIP validation; unit tests exercise menu construction and commands.
+
+Build and deploy the x64 settings application separately:
+
+```powershell
+./scripts/build-settings.ps1 -Configuration Release -Prefix "$PWD/dist/pinyin"
+```
+
+It uses framework-dependent Windows App SDK 1.8 deployment. Install the matching
+x64 Framework and DDLM packages (minimum `8000.994.2142.0`) and the Visual C++
+runtime for the current user. Build/test scripts do not install these packages.
+The UI supports full/double pinyin, eight built-in profiles, save/cancel,
+single-instance activation, system theme resources and PerMonitorV2 DPI.
+An existing custom profile is preserved but cannot be created/imported here.
+
+`GetSettings`, `SetSettings`, and `OpenSettings` are connection-independent
+requests with context ID zero. Core alone writes the authority file
+`conf/windows.conf` under the Fcitx user package configuration directory.
+The profile is also applied through the upstream addon interface; its Pinyin
+configuration file is a mirror. Switching cancels unfinished preedit, keeps
+English contexts in direct mode and applies to new/reconnected contexts.
+Save errors and stale-revision conflicts are reported. Timed-out writes are
+queried before retrying. Core/TSF/settings must be deployed together.
+
+For isolated settings persistence tests, Core accepts
+`--windows-settings-file ABSOLUTE_PATH`. This overrides the Windows settings
+file only; upstream dictionaries and addon configuration still use user paths.
+
+```powershell
+./scripts/test-settings-ui.ps1 -Prefix "$PWD/dist/pinyin"
+# Also validate the Core launch request through a freshly built probe:
+./scripts/test-settings-ui.ps1 -Prefix "$PWD/dist/pinyin" -TsfBuild "$PWD/win32/build/pinyin-tsf"
+```
+
+This UI Automation test starts/stops its own Core/settings processes, uses a
+separate settings file and captures screenshots. Run on an interactive desktop
+with the required runtime. It does not register or unregister the TIP. Real
+full/Xiaohe/Ziranma conversion is covered by `settings_probe` and `tsf_probe`.
+See [the design](windows-settings-design.md) for deployment and validation details.
+
 ## Remaining Validation and Limits
 
 - The user confirmed the registered input indicator works. This is narrower
@@ -280,10 +327,11 @@ not persist separate unfinished preedits for multiple input fields.
   broader Windows-version coverage still need registered-TIP validation.
   The automated probes do not verify taskbar rendering.
 - Candidates currently have keyboard-only selection, with no candidate mouse
-  interaction, ordinary notification-area tray/configuration UI, automatic Core
+  interaction, ordinary notification-area tray, automatic Core
   startup or unified Core/TSF installer.
-- Shuangpin, Wubi and Rime input/deployment and Windows Store compatibility have
-  not been validated. `SYSTRAYSUPPORT` does not declare `IMMERSIVESUPPORT`.
+- Xiaohe and Ziranma Shuangpin commits are validated by probes. Other profiles,
+  Wubi, Rime and Windows Store compatibility need broader validation.
+  `SYSTRAYSUPPORT` does not declare `IMMERSIVESUPPORT`.
 - Password/secure contexts, dead keys, AltGr/non-US layouts, forwarded keys and
   surrounding-text editing are not claimed as supported. Secure-mode and other
   unimplemented TSF categories are no longer declared.

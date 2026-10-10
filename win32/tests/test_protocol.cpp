@@ -38,6 +38,7 @@ int main() {
     snapshot.preedit = "nihao";
     snapshot.preeditCursor = 5;
     snapshot.revision = 42;
+    snapshot.settingsRevision = 7;
     snapshot.selected = 0;
     snapshot.candidates.push_back({"\xe4\xbd\xa0\xe5\xa5\xbd", "1", "ni hao"});
     KeyReply reply;
@@ -45,7 +46,7 @@ int main() {
     assert(decodeKeyReply(payload, reply));
     assert(reply.consumed && reply.preedit == "nihao" &&
            reply.preeditCursor == 5);
-    assert(reply.revision == 42 &&
+    assert(reply.revision == 42 && reply.settingsRevision == 7 &&
            reply.candidates.front().text == snapshot.candidates.front().text);
     payload.push_back(0);
     assert(!decodeKeyReply(payload, reply));
@@ -57,5 +58,39 @@ int main() {
     snapshot.selected = UINT32_MAX;
     snapshot.candidates.resize(kMaxCandidates + 1);
     assert(!decodeKeyReply(encodeKeyReply(snapshot), reply));
+    PinyinSettings settings;
+    settings.scheme = PinyinScheme::Double;
+    settings.profile = ShuangpinProfile::Xiaohe;
+    settings.revision = 19;
+    PinyinSettings restored;
+    assert(decodeSettings(encodeSettings(settings), restored) &&
+           restored == settings);
+    auto settingsPayload = encodeSettings(settings);
+    settingsPayload[0] = 2;
+    assert(!decodeSettings(settingsPayload, restored));
+    settingsPayload = encodeSettings(settings);
+    settingsPayload[1] = 255;
+    assert(!decodeSettings(settingsPayload, restored));
+    settingsPayload = encodeSettings(settings);
+    settingsPayload.pop_back();
+    assert(!decodeSettings(settingsPayload, restored));
+    settingsPayload = encodeSettings(settings);
+    settingsPayload.push_back(0);
+    assert(!decodeSettings(settingsPayload, restored));
+    settings.revision = 0;
+    assert(!decodeSettings(encodeSettings(settings), restored));
+    SettingsReply settingsReply;
+    settingsReply.error = SettingsError::Conflict;
+    settingsReply.pinyinAvailable = settingsReply.shuangpinAvailable = true;
+    settingsReply.settings = restored;
+    SettingsReply restoredReply;
+    assert(
+        decodeSettingsReply(encodeSettingsReply(settingsReply), restoredReply));
+    assert(restoredReply.error == SettingsError::Conflict &&
+           restoredReply.settings == restored &&
+           restoredReply.shuangpinAvailable);
+    assert(profileConfigValue(ShuangpinProfile::GB) == "GB Standard");
+    assert(globalSettingsRequest(MessageType::GetSettings) &&
+           !globalSettingsRequest(MessageType::SetMode));
     return 0;
 }

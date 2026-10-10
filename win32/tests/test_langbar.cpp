@@ -31,6 +31,34 @@ class UpdateSink : public ITfLangBarItemSink {
     DWORD lastFlags = 0;
 };
 
+class TestMenu : public ITfMenu {
+  public:
+    STDMETHODIMP QueryInterface(REFIID id, void **result) override {
+        if (!result) {
+            return E_INVALIDARG;
+        }
+        *result = nullptr;
+        if (id != IID_IUnknown && id != IID_ITfMenu) {
+            return E_NOINTERFACE;
+        }
+        *result = static_cast<ITfMenu *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++references; }
+    STDMETHODIMP_(ULONG) Release() override { return --references; }
+    STDMETHODIMP AddMenuItem(UINT id, DWORD flags, HBITMAP, HBITMAP,
+                             const WCHAR *text, ULONG length,
+                             ITfMenu **submenu) override {
+        assert(id == fcitx::LangBarItem::kSettingsMenuId && !flags && !submenu);
+        assert(std::wstring(text, length) == L"\u8f93\u5165\u6cd5\u8bbe\u7f6e");
+        ++items;
+        return S_OK;
+    }
+    ULONG references = 1;
+    unsigned items = 0;
+};
+
 std::vector<DWORD> iconPixels(ITfLangBarItemButton *item) {
     HICON icon = nullptr;
     assert(item->GetIcon(&icon) == S_OK && icon);
@@ -96,6 +124,26 @@ int main() {
     assert(item->GetText(nullptr) == E_INVALIDARG);
     assert(item->GetTooltipString(nullptr) == E_INVALIDARG);
     assert(item->GetIcon(nullptr) == E_INVALIDARG);
+    assert(item->InitMenu(nullptr) == E_INVALIDARG);
+    TestMenu menu;
+    assert(item->InitMenu(&menu) == S_OK && menu.items == 1);
+    assert(item->OnMenuSelect(999) == E_INVALIDARG);
+    const auto dispatch =
+        CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                        nullptr, nullptr);
+    assert(dispatch);
+    CComPtr<LangBarItem> bound;
+    bound.Attach(new LangBarItem(dispatch, true));
+    assert(bound->OnMenuSelect(LangBarItem::kSettingsMenuId) == S_OK);
+    MSG message{};
+    assert(PeekMessageW(&message, dispatch, LangBarItem::kSettingsMessage,
+                        LangBarItem::kSettingsMessage, PM_REMOVE));
+    bound.p->detach();
+    assert(bound->OnMenuSelect(LangBarItem::kSettingsMenuId) == S_OK);
+    assert(!PeekMessageW(&message, dispatch, LangBarItem::kSettingsMessage,
+                         LangBarItem::kSettingsMessage, PM_REMOVE));
+    bound.Release();
+    DestroyWindow(dispatch);
     TF_LANGBARITEMINFO info{};
     assert(item->GetInfo(&info) == S_OK);
     assert(info.clsidService == fcitx::FCITX_CLSID);

@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 3;
+constexpr uint16_t kVersion = 4;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -30,7 +30,65 @@ enum class MessageType : uint16_t {
     Reset = 13,
     PollState = 14,
     SetMode = 15,
+    OpenSettings = 16,
+    GetSettings = 17,
+    SetSettings = 18,
+    SettingsReply = 19,
 };
+
+enum class PinyinScheme : uint8_t { Full = 0, Double = 1 };
+enum class ShuangpinProfile : uint8_t {
+    Ziranma = 0,
+    MS,
+    Ziguang,
+    ABC,
+    Zhongwenzhixing,
+    PinyinJiajia,
+    Xiaohe,
+    GB,
+    Custom,
+};
+enum class SettingsError : uint8_t {
+    None = 0,
+    Invalid,
+    Unavailable,
+    Conflict,
+    SaveFailed,
+    ApplyFailed,
+    LaunchFailed,
+};
+
+struct PinyinSettings {
+    PinyinScheme scheme = PinyinScheme::Full;
+    ShuangpinProfile profile = ShuangpinProfile::Ziranma;
+    uint64_t revision = 1;
+    bool operator==(const PinyinSettings &) const = default;
+};
+
+struct SettingsReply {
+    SettingsError error = SettingsError::None;
+    PinyinSettings settings;
+    bool pinyinAvailable = false;
+    bool shuangpinAvailable = false;
+};
+
+constexpr bool validSettings(const PinyinSettings &settings) {
+    return settings.scheme <= PinyinScheme::Double &&
+           settings.profile <= ShuangpinProfile::Custom && settings.revision;
+}
+
+constexpr std::string_view profileConfigValue(ShuangpinProfile profile) {
+    constexpr std::string_view values[] = {
+        "Ziranma",      "MS",     "Ziguang",     "ABC",   "Zhongwenzhixing",
+        "PinyinJiajia", "Xiaohe", "GB Standard", "Custom"};
+    const auto index = static_cast<unsigned>(profile);
+    return index < sizeof(values) / sizeof(values[0]) ? values[index] : "";
+}
+
+constexpr bool globalSettingsRequest(MessageType type) {
+    return type == MessageType::OpenSettings ||
+           type == MessageType::GetSettings || type == MessageType::SetSettings;
+}
 
 constexpr uint32_t kMaxCandidates = 32;
 
@@ -47,6 +105,7 @@ struct KeyReply {
     std::string preedit;
     uint32_t preeditCursor = 0;
     uint64_t revision = 0;
+    uint64_t settingsRevision = 0;
     uint32_t selected = UINT32_MAX;
     bool hasPrev = false;
     bool hasNext = false;
@@ -162,6 +221,65 @@ class Reader {
     size_t offset_ = 0;
 };
 
+inline std::vector<uint8_t> encodeSettings(const PinyinSettings &settings) {
+    Writer writer;
+    writer.u8(static_cast<uint8_t>(settings.scheme));
+    writer.u8(static_cast<uint8_t>(settings.profile));
+    writer.u64(settings.revision);
+    return writer.take();
+}
+
+inline bool readSettings(Reader &reader, PinyinSettings &settings) {
+    uint8_t scheme = 0, profile = 0;
+    if (!reader.u8(scheme) || !reader.u8(profile) ||
+        !reader.u64(settings.revision)) {
+        return false;
+    }
+    settings.scheme = static_cast<PinyinScheme>(scheme);
+    settings.profile = static_cast<ShuangpinProfile>(profile);
+    return validSettings(settings);
+}
+
+inline bool decodeSettings(const std::vector<uint8_t> &payload,
+                           PinyinSettings &settings) {
+    Reader reader(payload.data(), payload.size());
+    PinyinSettings result;
+    if (!readSettings(reader, result) || reader.remaining()) {
+        return false;
+    }
+    settings = result;
+    return true;
+}
+
+inline std::vector<uint8_t> encodeSettingsReply(const SettingsReply &reply) {
+    Writer writer;
+    writer.u8(static_cast<uint8_t>(reply.error));
+    writer.u8(reply.pinyinAvailable);
+    writer.u8(reply.shuangpinAvailable);
+    const auto settings = encodeSettings(reply.settings);
+    writer.bytes(settings.data(), settings.size());
+    return writer.take();
+}
+
+inline bool decodeSettingsReply(const std::vector<uint8_t> &payload,
+                                SettingsReply &reply) {
+    Reader reader(payload.data(), payload.size());
+    SettingsReply result;
+    uint8_t error = 0, pinyin = 0, shuangpin = 0;
+    if (!reader.u8(error) ||
+        error > static_cast<uint8_t>(SettingsError::LaunchFailed) ||
+        !reader.u8(pinyin) || pinyin > 1 || !reader.u8(shuangpin) ||
+        shuangpin > 1 || !readSettings(reader, result.settings) ||
+        reader.remaining()) {
+        return false;
+    }
+    result.error = static_cast<SettingsError>(error);
+    result.pinyinAvailable = pinyin;
+    result.shuangpinAvailable = shuangpin;
+    reply = result;
+    return true;
+}
+
 inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
     Writer writer;
     writer.u8(reply.consumed);
@@ -170,6 +288,7 @@ inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
     writer.string(reply.preedit);
     writer.u32(reply.preeditCursor);
     writer.u64(reply.revision);
+    writer.u64(reply.settingsRevision);
     writer.u32(reply.selected);
     writer.u8(reply.hasPrev);
     writer.u8(reply.hasNext);
@@ -192,9 +311,10 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
         enabled > 1 || !reader.string(result.commit) ||
         !reader.string(result.preedit) || !reader.u32(result.preeditCursor) ||
         result.preeditCursor > result.preedit.size() ||
-        !reader.u64(result.revision) || !reader.u32(result.selected) ||
-        !reader.u8(hasPrev) || hasPrev > 1 || !reader.u8(hasNext) ||
-        hasNext > 1 || !reader.u32(count) || count > kMaxCandidates ||
+        !reader.u64(result.revision) || !reader.u64(result.settingsRevision) ||
+        !reader.u32(result.selected) || !reader.u8(hasPrev) || hasPrev > 1 ||
+        !reader.u8(hasNext) || hasNext > 1 || !reader.u32(count) ||
+        count > kMaxCandidates ||
         (result.selected != UINT32_MAX && result.selected >= count)) {
         return false;
     }

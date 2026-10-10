@@ -30,6 +30,10 @@ class PipeClient {
     bool poll(uint64_t contextId, KeyReply &reply);
     bool reset(uint64_t contextId, KeyReply &reply);
     bool setMode(uint64_t contextId, bool enabled, KeyReply &reply);
+    bool getSettings(ipc::SettingsReply &reply);
+    bool setSettings(const ipc::PinyinSettings &settings,
+                     ipc::SettingsReply &reply);
+    bool openSettings(ipc::SettingsReply &reply);
 
   private:
     bool request(ipc::MessageType type, uint64_t contextId,

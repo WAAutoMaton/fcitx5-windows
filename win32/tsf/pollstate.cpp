@@ -53,11 +53,28 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
+    if (self && message == LangBarItem::kSettingsMessage) {
+        self->AddRef();
+        PipeClient connection;
+        ipc::SettingsReply reply;
+        if (!connection.connect() || !connection.openSettings(reply) ||
+            reply.error != ipc::SettingsError::None) {
+            MessageBoxW(nullptr,
+                        L"\u65e0\u6cd5\u6253\u5f00\u8f93\u5165\u6cd5\u8bbe"
+                        L"\u7f6e\u3002\n"
+                        L"\u8bf7\u786e\u8ba4 Core "
+                        L"\u5df2\u542f\u52a8\uff0c\u4e14\u8bbe\u7f6e\u7a0b"
+                        L"\u5e8f\u5df2\u90e8\u7f72\u3002",
+                        L"Fcitx5", MB_OK | MB_ICONERROR);
+        }
+        self->Release();
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
 void Tsf::pollState() {
-    if (!textEditSinkContext_ || !foreground_ || editRequested_) {
+    if (!textEditSinkContext_ || !foreground_) {
         return;
     }
     if (!pipe_.connected()) {
@@ -81,6 +98,13 @@ void Tsf::pollState() {
         pipe_.disconnect();
         nextReconnect_ = GetTickCount64() + 2000;
         return;
+    }
+    if (editRequested_ && reply.settingsRevision == state_.settingsRevision &&
+        reply.commit.empty()) {
+        return;
+    }
+    if (reply.settingsRevision != state_.settingsRevision) {
+        candidates_.hide();
     }
     if (!reply.commit.empty() || !reply.preedit.empty() || composition_ ||
         !reply.candidates.empty() || candidates_.visible()) {

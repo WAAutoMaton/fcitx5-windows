@@ -1,4 +1,5 @@
 #include "../dll/util.h"
+#include "../tsf/pipeclient.h"
 #include "threadmgradapter.h"
 #include <algorithm>
 #include <atlcomcli.h>
@@ -585,6 +586,45 @@ int wmain(int count, wchar_t **arguments) {
         pump(200);
         require(store->text == hello && otherStore->text.empty(),
                 "late edit reached the wrong context");
+        fcitx::PipeClient configuration;
+        fcitx::ipc::SettingsReply originalSettings, appliedSettings;
+        require(configuration.connect() &&
+                    configuration.getSettings(originalSettings),
+                "TSF settings connection failed");
+        auto newSettings = originalSettings.settings;
+        newSettings.scheme = fcitx::ipc::PinyinScheme::Double;
+        newSettings.profile = fcitx::ipc::ShuangpinProfile::Xiaohe;
+        press(keys, context, 'N', false);
+        require(configuration.setSettings(newSettings, appliedSettings) &&
+                    appliedSettings.error == fcitx::ipc::SettingsError::None,
+                "TSF Xiaohe switch failed");
+        pump(250);
+        require(store->text == hello,
+                "old asynchronous preedit survived scheme change");
+        for (const auto letter : std::string("NIHC")) {
+            press(keys, context, letter);
+        }
+        press(keys, context, VK_SPACE, false);
+        newSettings = appliedSettings.settings;
+        newSettings.profile = fcitx::ipc::ShuangpinProfile::Ziranma;
+        require(configuration.setSettings(newSettings, appliedSettings) &&
+                    appliedSettings.error == fcitx::ipc::SettingsError::None,
+                "TSF Ziranma switch failed");
+        pump(200);
+        require(store->text == hello + hello,
+                "settings change lost the queued real Xiaohe commit");
+        for (const auto letter : std::string("NIHK")) {
+            press(keys, context, letter);
+        }
+        press(keys, context, VK_SPACE);
+        require(store->text == hello + hello + hello,
+                "TSF did not commit real Ziranma Chinese text");
+        newSettings = originalSettings.settings;
+        newSettings.revision = appliedSettings.settings.revision;
+        require(configuration.setSettings(newSettings, appliedSettings) &&
+                    appliedSettings.error == fcitx::ipc::SettingsError::None,
+                "TSF settings restoration failed");
+        pump(200);
         require(SUCCEEDED(service->Deactivate()), "TIP deactivation failed");
         require(adapter->removeItemCalls == 1 && !adapter->langBarItem,
                 "input mode item was not removed on deactivation");

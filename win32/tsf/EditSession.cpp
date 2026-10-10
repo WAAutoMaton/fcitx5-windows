@@ -184,10 +184,17 @@ void Tsf::finishEdit(uint64_t generation, HRESULT result) {
 }
 
 HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
-                           const PipeClient::KeyReply &reply,
+                           const PipeClient::KeyReply &snapshot,
                            uint64_t generation) {
     if (generation != generation_ || context != textEditSinkContext_) {
         return S_OK;
+    }
+    auto reply = snapshot;
+    // Preserve commits while preventing old schemes from recreating preedit.
+    if (reply.settingsRevision < state_.settingsRevision) {
+        reply.preedit.clear();
+        reply.preeditCursor = 0;
+        reply.candidates.clear();
     }
     std::wstring commit, preedit;
     ULONG cursor = 0;

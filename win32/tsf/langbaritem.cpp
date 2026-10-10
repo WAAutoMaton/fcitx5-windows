@@ -154,17 +154,60 @@ STDMETHODIMP LangBarItem::GetTooltipString(BSTR *pbstrToolTip) {
     return *pbstrToolTip ? S_OK : E_OUTOFMEMORY;
 }
 
-STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT, const RECT *) {
+STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT point, const RECT *) {
     if (click == TF_LBI_CLK_LEFT && dispatchWindow_) {
         return PostMessageW(dispatchWindow_, kToggleMessage, 0, 0) ? S_OK
                                                                    : E_FAIL;
     }
+    if (click == TF_LBI_CLK_RIGHT && dispatchWindow_) {
+        CComPtr<LangBarItem> lifetime(this);
+        const auto menu = CreatePopupMenu();
+        if (!menu) {
+            return E_OUTOFMEMORY;
+        }
+        const auto owner =
+            CreateWindowExW(WS_EX_TOOLWINDOW, L"STATIC", L"", WS_POPUP, point.x,
+                            point.y, 0, 0, nullptr, nullptr, nullptr, nullptr);
+        if (!owner || !AppendMenuW(menu, MF_STRING, kSettingsMenuId,
+                                   L"\u8f93\u5165\u6cd5\u8bbe\u7f6e")) {
+            if (owner) {
+                DestroyWindow(owner);
+            }
+            DestroyMenu(menu);
+            return E_FAIL;
+        }
+        SetForegroundWindow(owner);
+        const auto selected = TrackPopupMenuEx(
+            menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, point.x,
+            point.y, owner, nullptr);
+        PostMessageW(owner, WM_NULL, 0, 0);
+        DestroyMenu(menu);
+        DestroyWindow(owner);
+        if (selected) {
+            return OnMenuSelect(selected);
+        }
+    }
     return S_OK;
 }
 
-STDMETHODIMP LangBarItem::InitMenu(ITfMenu *) { return E_NOTIMPL; }
+STDMETHODIMP LangBarItem::InitMenu(ITfMenu *menu) {
+    if (!menu) {
+        return E_INVALIDARG;
+    }
+    constexpr wchar_t text[] = L"\u8f93\u5165\u6cd5\u8bbe\u7f6e";
+    return menu->AddMenuItem(kSettingsMenuId, 0, nullptr, nullptr, text,
+                             static_cast<ULONG>(std::size(text) - 1), nullptr);
+}
 
-STDMETHODIMP LangBarItem::OnMenuSelect(UINT) { return E_NOTIMPL; }
+STDMETHODIMP LangBarItem::OnMenuSelect(UINT id) {
+    if (id != kSettingsMenuId) {
+        return E_INVALIDARG;
+    }
+    return !dispatchWindow_ ||
+                   PostMessageW(dispatchWindow_, kSettingsMessage, 0, 0)
+               ? S_OK
+               : E_FAIL;
+}
 
 STDMETHODIMP LangBarItem::GetIcon(HICON *phIcon) {
     if (!phIcon) {

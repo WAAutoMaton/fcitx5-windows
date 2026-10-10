@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../win32/ipc/protocol.h"
+#include "windowssettings.h"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -31,6 +32,7 @@ class WindowsInputContext final : public InputContext {
     std::string preedit() const;
     uint32_t preeditCursor() const;
     ipc::KeyReply snapshot(bool consumed, bool enabled);
+    void resetPreedit();
 
   protected:
     void commitStringImpl(const std::string &text) override;
@@ -46,7 +48,8 @@ class WindowsInputContext final : public InputContext {
 
 class WindowsPipeServer {
   public:
-    WindowsPipeServer(Instance &instance, EventDispatcher &dispatcher);
+    WindowsPipeServer(Instance &instance, EventDispatcher &dispatcher,
+                      std::filesystem::path settingsFile = {});
     ~WindowsPipeServer();
 
     void start();
@@ -69,8 +72,11 @@ class WindowsPipeServer {
                   ipc::Frame response);
     bool readFrame(HANDLE pipe, ipc::Frame &frame);
     bool writeFrame(HANDLE pipe, const ipc::Frame &frame);
+    ipc::KeyReply snapshot(WindowsInputContext &context, bool consumed);
     Instance &instance_;
     EventDispatcher &dispatcher_;
+    WindowsSettings settings_;
+    uint64_t settingsEpoch_ = 1;
     std::atomic_bool stopping_ = false;
     std::thread thread_;
     HANDLE stopEvent_ = nullptr;

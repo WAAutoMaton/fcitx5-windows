@@ -129,6 +129,33 @@ bool PipeClient::setMode(uint64_t contextId, bool enabled, KeyReply &reply) {
            reply.enabled == enabled;
 }
 
+bool PipeClient::getSettings(ipc::SettingsReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::GetSettings, 0, {}, response) &&
+           response.type == ipc::MessageType::SettingsReply &&
+           ipc::decodeSettingsReply(response.payload, reply);
+}
+
+bool PipeClient::setSettings(const ipc::PinyinSettings &settings,
+                             ipc::SettingsReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::SetSettings, 0,
+                   ipc::encodeSettings(settings), response) &&
+           response.type == ipc::MessageType::SettingsReply &&
+           ipc::decodeSettingsReply(response.payload, reply);
+}
+
+bool PipeClient::openSettings(ipc::SettingsReply &reply) {
+    ULONG server = 0;
+    if (connected() && GetNamedPipeServerProcessId(pipe_, &server)) {
+        AllowSetForegroundWindow(server);
+    }
+    ipc::Frame response;
+    return request(ipc::MessageType::OpenSettings, 0, {}, response) &&
+           response.type == ipc::MessageType::SettingsReply &&
+           ipc::decodeSettingsReply(response.payload, reply);
+}
+
 bool PipeClient::request(ipc::MessageType type, uint64_t contextId,
                          const std::vector<uint8_t> &payload,
                          ipc::Frame &response) {
