@@ -1,8 +1,13 @@
 #ifndef Prefix
   #error Prefix is required
 #endif
-#ifndef Dependencies
-  #error Dependencies is required
+#ifndef BundleRuntimes
+  #define BundleRuntimes 1
+#endif
+#if Int(BundleRuntimes)
+  #ifndef Dependencies
+    #error Dependencies is required
+  #endif
 #endif
 #ifndef OutputDirectory
   #error OutputDirectory is required
@@ -50,9 +55,11 @@ SignedUninstaller=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "{#Prefix}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
+Source: "{#Prefix}\*"; DestDir: "{app}"; Excludes: "vc_redist.x64.exe,WindowsAppRuntimeInstall-x64.exe"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
+#if Int(BundleRuntimes)
 Source: "{#Dependencies}\vc_redist.x64.exe"; Flags: dontcopy
 Source: "{#Dependencies}\WindowsAppRuntimeInstall-x64.exe"; DestDir: "{app}\setup"; Flags: uninsrestartdelete
+#endif
 
 [Icons]
 Name: "{group}\Fcitx5 Settings"; Filename: "{app}\settings\Fcitx5Settings.exe"
@@ -151,6 +158,7 @@ begin
       exit;
     end;
   end;
+#if Int(BundleRuntimes)
   ExtractTemporaryFile('vc_redist.x64.exe');
   if not Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart',
       '', SW_HIDE, ewWaitUntilTerminated, Code) then Code := -1;
@@ -159,11 +167,14 @@ begin
     Result := Format('Visual C++ runtime installation failed (%d).', [Code]);
   end;
   if Code = 3010 then NeedsRestart := True;
+#endif
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+#if Int(BundleRuntimes)
 var
   Code: Integer;
+#endif
 begin
   if CurStep = ssPostInstall then begin
     try
@@ -171,11 +182,13 @@ begin
       Registered := True;
       RequireHelper('clear-maintenance', False);
       Maintenance := True;
+#if Int(BundleRuntimes)
       if not Exec(ExpandConstant('{app}\setup\WindowsAppRuntimeInstall-x64.exe'), '--quiet',
           '', SW_HIDE, ewWaitUntilTerminated, Code) then Code := -1;
       { A newer shared runtime is acceptable only when the user bootstrap probe succeeds. }
       if (Code <> 0) and (Code <> Integer($80073D06)) then
         RaiseException(Format('Windows App Runtime installation failed (%d).', [Code]));
+#endif
       if not MachineOnly then begin
         Configured := True;
         RequireHelper('configure-user', True);
@@ -214,7 +227,7 @@ begin
     exit;
   end;
   Helper := ExpandConstant('{tmp}\Fcitx5SetupHelper.exe');
-  Result := FileCopy(ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe'), Helper, True);
+  Result := CopyFile(ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe'), Helper, True);
   if not Result then
     MsgBox('Cannot prepare the Fcitx5 uninstall helper. Program files were not removed.', mbError, MB_OK);
 end;

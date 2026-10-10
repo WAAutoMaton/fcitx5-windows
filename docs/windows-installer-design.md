@@ -4,7 +4,7 @@
 
 ## 推荐决策
 
-第一阶段使用 **Inno Setup 7 的 x64 安装器，输出一个离线 EXE**，安装范围为 Windows 11 x64。将完整运行树安装到 Program Files，自动注册 TSF、启用安装发起用户的输入法、设置默认输入法并尝试当前桌面激活，后台启动 Core。用户只需运行安装器、确认安装及 UAC；不需要运行 PowerShell、打开 Windows 输入设置或手动启动服务。
+第一阶段使用 **Inno Setup 7 的 x64 安装器，同时输出含运行库的离线 EXE 和不含外部运行库的 EXE**，安装范围为 Windows 11 x64。将完整运行树安装到 Program Files，自动注册 TSF、启用安装发起用户的输入法、设置默认输入法并尝试当前桌面激活，后台启动 Core。含运行库版本的用户只需运行安装器、确认安装及 UAC；不需要运行 PowerShell、打开 Windows 输入设置或手动启动服务。不含运行库版本要求预先安装所需依赖。
 
 安装包选用 EXE 已满足“exe/msi”的交付目标。暂不同时维护两种安装引擎。如果明确需要 MSI 的企业分发、修复或组策略能力，改用 WiX + Burn：MSI 管理文件和机器注册，Burn EXE 管理先决条件与用户阶段，两者复用下文的原生辅助工具。不能把 EXE 更改扩展名当成 MSI，也不能将 MSI 的 SYSTEM 执行环境当成用户桌面。
 
@@ -65,6 +65,8 @@ TSF DLL 继续位于 `tsf`，Core 继续位于 `bin`，Settings 继续位于 `se
 发行附件同时提供与二进制对应的源码定位/归档：主仓库 commit、固定子模块、Windows 补丁和构建脚本，并整理实际捆绑依赖的许可证及所需源码交付方式。仅附主仓库 LICENSE 不能代替全部依赖的发行要求。
 
 保留目前用户选择的 **framework-dependent Settings**：离线包附带 Microsoft 官方 x64 VC++ Redistributable 和匹配构建最低版本的 Windows App Runtime 安装程序。版本、架构、SHA256 和上游签名进入依赖锁定文件。分别识别返回码，已装更新兼容运行时时跳过或验证满足要求，不降级，不强制关闭其他 WinUI 应用。
+
+`build-installer.ps1 -SkipRuntimes` 生成 `Fcitx5-<version>-x64-no-runtime-setup.exe`，不要求运行库安装程序存在，也不嵌入或执行它们。此版本保留完整 Core/TSF/Settings 运行树及其应用 DLL；使用者须预先安装 x64 VC++ Runtime 和当前用户的 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。用户阶段仍执行 Settings 的 `--runtime-check`，缺少依赖时安装不能成功完成用户初始化。默认不带该参数的包名及运行库安装行为保持现有约定。
 
 VC++ 依赖由管理员阶段安装；Windows App Runtime 必须验证安装发起用户实际具备所需 Framework/DDLM，必要时在该用户阶段运行官方安装程序的 `--quiet`。管理员代输凭据时，给管理员账户注册 runtime 不能替代原用户注册。用户阶段以 bootstrap 实际成功为验收，不仅检查机器文件存在。官方部署指南允许安装器串联运行时：[framework-dependent 部署](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/deploy-unpackaged-apps)。共享运行时在卸载 Fcitx5 时保留。
 
@@ -175,20 +177,20 @@ checkout 固定子模块
   -> 默认 CTest + test-pinyin + test-dictionaries
   -> 生成运行清单、依赖/许可清单和构建元数据
   -> 获取锁定的官方运行时先决条件
-  -> build-installer.ps1 调用固定 ISCC
+  -> build-installer.ps1 调用固定 ISCC，分别生成默认包和 -SkipRuntimes 包
   -> 包结构检查与隔离 runner 的真实安装/卸载 smoke test
-  -> upload-artifact：EXE、SHA256、manifest、日志
+  -> upload-artifact：两种 EXE、各自的 SHA256 和 <包名>.manifest.txt、日志
   -> master/tag 发布附件（签名包优先）
 ```
 
-构建阶段示例，不是已经可用的安装器脚本：
+构建阶段示例：
 
 ```powershell
 ./scripts/build-and-deploy.ps1 -Prefix ./dist/installer-stage -BuildRoot ./build/installer
 ./scripts/test-pinyin.ps1 -Prefix ./dist/installer-stage -TsfBuild ./build/installer/tsf
 ./scripts/test-dictionaries.ps1 -Prefix ./dist/installer-stage -TsfBuild ./build/installer/tsf
-# 以下入口待实现：
 ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer
+./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer -SkipRuntimes
 ```
 
 `build-installer.ps1` 只验证/打包给定暂存树，不注册 DLL、不启动服务、不安装运行时；支持 `-WhatIf`。自动安装测试放在另一个明确的 `test-installer.ps1`，只用于临时 runner/VM，拒绝已有冲突注册和服务。安装包 CI job 明确授权这些 runner 范围的注册/注销，开发机普通构建不隐式执行。
@@ -198,6 +200,8 @@ checkout 固定子模块
 签名顺序为项目 PE 文件及原生 helper、卸载器、最终安装 EXE；上游微软先决条件保留原始签名。只在可信分支或 tag 的 job 使用签名凭据，PR 不获得发布密钥；签名使用时间戳，校验签名后再计算最终包 SHA256。签名降低来源不明的提示，但不承诺 SmartScreen 必然放行。
 
 Nightly `release` job 的 `needs` 增加安装包 job，附件模式包含 `Fcitx5-*-setup.exe` 及 SHA256；每次 CI 的 artifact 与持续覆盖的 Nightly release 是两种渠道，PR 只上传 artifact，不发布。现有 `!release` 规则可继续只影响发布，不影响打包 artifact。
+
+当前 `package-installer-x64` 复用一次完整构建，依次打包 `Fcitx5-<run>-x64-setup.exe` 和 `Fcitx5-<run>-x64-no-runtime-setup.exe`，两者放入同一个 `Fcitx5-installer-x64` artifact，并同时加入 Nightly 附件。各包独立生成清单和校验值，避免第二次打包覆盖第一次的元数据。`scripts/test-build-installer.ps1` 使用模拟编译器验证两种模式、依赖缺失、元数据及无副作用预览，不执行系统安装。
 
 ## 验收矩阵与实施顺序
 
@@ -220,4 +224,4 @@ GitHub hosted runner 已带开发运行库，且通常不代表普通交互桌�
 
 实施预计触及 `win32/setup/`（新增 helper/launcher）、`win32/dll/register.*`、`win32/ipc/service.h` 及服务生命周期调用点、`installer/fcitx5.iss`、`cmake/installer-lock.json`、`scripts/build-installer.ps1`、`scripts/test-installer.ps1` 和 `.github/workflows/ci.yml`。系统变更的逻辑配套 mock 回归，真实 VM 测试覆盖注册、普通应用输入与重启；无需为本方案创建子模块提交。
 
-第一阶段实现已新增 `win32/setup/Fcitx5SetupHelper.exe`、Inno 脚本、固定依赖锁、打包脚本和 CI job，并增加安装维护状态及用户 profile 回归测试。本机未修改输入法设置、执行注册/注销或真实安装；Inno 编译、依赖安装、UAC、真实应用输入、卸载占用和重启清理仍需 CI/干净 VM 验证。
+第一阶段实现已新增 `win32/setup/Fcitx5SetupHelper.exe`、Inno 脚本、固定依赖锁、打包脚本和 CI job，并增加安装维护状态及用户 profile 回归测试。本机 Inno Setup 7.1.0 已用完整隔离暂存树实际编译两种包，无警告/错误，产物位于 `dist/installer-variants`，对应清单和 SHA256 核对通过。含运行库包约 172.69 MiB，不含运行库包约 48.87 MiB；实际预处理结果和压缩日志验证后者不含两种运行库的文件条目及安装步骤。编译日志与预处理结果位于 `build/installer-variants`。打包脚本和 CI 编译器检查支持 Program Files、当前用户 `%LOCALAPPDATA%/Programs/Inno Setup 7` 安装位置。本机未修改输入法设置、执行注册/注销或真实安装；依赖安装、UAC、真实应用输入、卸载占用和重启清理仍需 CI/干净 VM 验证。

@@ -81,7 +81,7 @@
 - 基础消费/放行、Ctrl+Space、按键释放和布局字符转换已接入；死键、AltGr、复杂非美式布局、密码/安全 context 和完整快捷键尚未验证。
 - 周边文本、转发按键、Core 格式化预编辑区间的完整映射和跨断线提交可靠性尚未实现；现有 TSF composition 已有基础下划线显示属性。
 - 候选鼠标交互、TSF UIElement/无障碍、普通通知区域托盘、原生剪贴板和全面 DPI 适配尚未实现或验证；已有 WinUI 拼音设置窗口，当前 200% 缩放已截图检查，跨屏 DPI/主题/文本缩放仍需全面验证。
-- 统一安装包及 TSF 的 ARM64/x86 构建与验证尚未实现；Core/TSF/Settings 的联合构建及隔离目录部署已由 `scripts/build-and-deploy.ps1` 实现。
+- 统一安装包第一阶段已接入，真实安装/卸载仍待验证；TSF 的 ARM64/x86 构建与验证尚未实现。Core/TSF/Settings 的联合构建及隔离目录部署已由 `scripts/build-and-deploy.ps1` 实现。
 - 默认配置关闭上游 X11、Wayland、DBus、server 和 keyboard engine 等组件；不要直接启用 Linux 前端来替代 Windows 实现。
 - 上游已有候选、配置、引擎管理和输入上下文等抽象，优先复用；插件能构建不代表其 Windows 系统后端已经实现。
 
@@ -188,6 +188,8 @@
 - 完成后简要报告修改文件、行为变化、执行的验证和仍未验证的内容；架构或实现进度改变时更新本文件。
 
 ## 当前验证记录
+
+- 安装包 CI 同时打包并发布含 VC++/Windows App Runtime 的 `Fcitx5-<run>-x64-setup.exe` 和不含它们的 `Fcitx5-<run>-x64-no-runtime-setup.exe`，共享完整暂存运行树，各自生成 manifest 和 SHA256。`scripts/build-installer.ps1 -SkipRuntimes` 不要求外部运行库安装程序存在；使用者须预先满足运行库要求，用户阶段仍检查 Settings runtime。`scripts/test-build-installer.ps1` 已通过模拟编译器回归，覆盖双版本开关、缺失依赖、独立清单/校验值、失败返回和无副作用预览；PowerShell 解析、发布附件模式及 `git diff --check` 已通过。本机当前用户目录的 Inno Setup 7.1.0 已实际编译两个版本，无警告/错误，产物位于 `dist/installer-variants`（含运行库约 172.69 MiB，不含约 48.87 MiB），依赖锁哈希及 EXE 校验值核对通过。实际 ISPP 及编译日志确认不含版无运行库文件条目或安装步骤，日志在 `build/installer-variants`；未运行安装器、注册/注销或修改输入法设置，双版本系统安装仍需 CI/干净 VM 验证。
 
 以下保留各功能落地时的验证结果；历史记录中的 8 项或更少测试是当时的集合。当前默认 CTest 为 10 项，`ENABLE_PINYIN_INTEGRATION_TESTS=ON` 另增加三个拼音 probes，共 13 项；词库和服务 probes 由各自脚本运行，不在该选项的 CTest 集合内。
 

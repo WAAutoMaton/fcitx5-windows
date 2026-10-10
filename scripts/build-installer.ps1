@@ -4,7 +4,8 @@ param(
     [string]$Dependencies = '',
     [string]$Output = '',
     [string]$PackageVersion = '0.1.0.0',
-    [string]$PackageName = ''
+    [string]$PackageName = '',
+    [switch]$SkipRuntimes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,25 +13,26 @@ $root = Split-Path $PSScriptRoot -Parent
 if (!$Prefix) { $Prefix = "$root/dist/installer-stage" }
 if (!$Dependencies) { $Dependencies = "$root/build/installer-deps" }
 if (!$Output) { $Output = "$root/dist/installer" }
-foreach ($path in @([IO.Path]::GetFullPath($Prefix), [IO.Path]::GetFullPath($Dependencies),
-        [IO.Path]::GetFullPath($Output))) {
+$Prefix = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Prefix)
+$Dependencies = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Dependencies)
+$Output = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Output)
+foreach ($path in @($Prefix, $Dependencies, $Output)) {
     if (!$path.StartsWith(([IO.Path]::GetFullPath($root) + [IO.Path]::DirectorySeparatorChar),
             [StringComparison]::OrdinalIgnoreCase)) {
         throw "Installer paths must be inside the repository: $path"
     }
 }
-$Prefix = [IO.Path]::GetFullPath($Prefix)
-$Dependencies = [IO.Path]::GetFullPath($Dependencies)
-$Output = [IO.Path]::GetFullPath($Output)
 foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll',
         'setup/Fcitx5SetupHelper.exe', 'settings/Fcitx5Settings.exe')) {
     if (!(Test-Path -LiteralPath (Join-Path $Prefix $file) -PathType Leaf)) {
         throw "Missing staged installer file: $file"
     }
 }
-foreach ($file in @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')) {
-    if (!(Test-Path -LiteralPath (Join-Path $Dependencies $file) -PathType Leaf)) {
-        throw "Missing installer dependency: $file"
+if (!$SkipRuntimes) {
+    foreach ($file in @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')) {
+        if (!(Test-Path -LiteralPath (Join-Path $Dependencies $file) -PathType Leaf)) {
+            throw "Missing installer dependency: $file"
+        }
     }
 }
 if (!$PSCmdlet.ShouldProcess($Output, 'Build Fcitx5 Inno Setup installer')) { return }
@@ -38,13 +40,17 @@ $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if (!$iscc) {
     $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7',
         'C:/Program Files/Inno Setup 7', 'C:/Program Files (x86)/Inno Setup 6',
-        'C:/Program Files/Inno Setup 6' -Filter ISCC.exe -File -ErrorAction SilentlyContinue |
+        'C:/Program Files/Inno Setup 6', "$env:LOCALAPPDATA/Programs/Inno Setup 7",
+        "$env:LOCALAPPDATA/Programs/Inno Setup 6" -Filter ISCC.exe -File -ErrorAction SilentlyContinue |
         Select-Object -First 1
 }
 if (!$iscc) { throw 'ISCC.exe was not found. Install the pinned Inno Setup compiler.' }
 $isccPath = if ($iscc -is [Array]) { $iscc[0].FullName } elseif ($iscc.PSObject.Properties['Source']) { $iscc.Source } else { $iscc.FullName }
-if (!$PackageName) { $PackageName = "Fcitx5-$PackageVersion-x64-setup" }
-$manifest = Join-Path $Output 'Fcitx5-installer-manifest.txt'
+if (!$PackageName) {
+    $PackageName = if ($SkipRuntimes) { "Fcitx5-$PackageVersion-x64-no-runtime-setup" } else { "Fcitx5-$PackageVersion-x64-setup" }
+}
+$bundleRuntimes = if ($SkipRuntimes) { 0 } else { 1 }
+$manifest = Join-Path $Output "$PackageName.manifest.txt"
 New-Item -ItemType Directory -Force $Output | Out-Null
 $license = Join-Path $Prefix 'licenses/Fcitx5-Windows-LICENSE.txt'
 New-Item -ItemType Directory -Force (Split-Path $license) | Out-Null
@@ -63,11 +69,12 @@ Set-Content -LiteralPath (Join-Path $Prefix 'setup/managed-install') -Value 'FCI
 @(
     "version=$PackageVersion"
     "package=$PackageName"
+    "bundle-runtimes=$bundleRuntimes"
     "commit=$((& git -C $root rev-parse HEAD).Trim())"
     "prefix=$Prefix"
     "inno=7.x"
 ) | Set-Content -LiteralPath $manifest -Encoding ascii
-& $isccPath "/DPrefix=$Prefix" "/DDependencies=$Dependencies" "/DOutputDirectory=$Output" "/DPackageVersion=$PackageVersion" "/DPackageName=$PackageName" (Join-Path $root 'installer/fcitx5.iss')
+& $isccPath "/DPrefix=$Prefix" "/DDependencies=$Dependencies" "/DBundleRuntimes=$bundleRuntimes" "/DOutputDirectory=$Output" "/DPackageVersion=$PackageVersion" "/DPackageName=$PackageName" (Join-Path $root 'installer/fcitx5.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)." }
 $setup = Join-Path $Output "$PackageName.exe"
 if (!(Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Installer was not produced: $setup" }

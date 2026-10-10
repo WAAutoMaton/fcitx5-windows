@@ -217,7 +217,7 @@ jobs:
       - name: Check Inno Setup compiler
         shell: pwsh
         run: |
-          $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7', 'C:/Program Files/Inno Setup 7' -Filter ISCC.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7', 'C:/Program Files/Inno Setup 7', "$env:LOCALAPPDATA/Programs/Inno Setup 7" -Filter ISCC.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
           if (!$iscc) { throw 'ISCC.exe was not installed.' }
           Write-Output "Using $($iscc.FullName)"
           Get-AuthenticodeSignature $iscc.FullName | Format-List Status,SignerCertificate
@@ -234,14 +234,24 @@ jobs:
       - name: Build complete runtime tree
         run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/installer-stage -BuildRoot ./build/installer -DataMode Prebuilt
 
-      - name: Build installer
-        run: ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-setup
+      - name: Test installer packaging script
+        run: ./scripts/test-build-installer.ps1
+
+      - name: Build installers with and without runtimes
+        run: |
+          ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-setup
+          ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-no-runtime-setup -SkipRuntimes
 
       - name: Verify installer metadata
         run: |
           Get-ChildItem dist/installer
-          if (!(Test-Path dist/installer/Fcitx5-installer-manifest.txt)) { throw 'Installer manifest missing.' }
-          if (!(Test-Path dist/installer/*.sha256)) { throw 'Installer checksum missing.' }
+          foreach ($package in @('Fcitx5-${{ github.run_number }}-x64-setup', 'Fcitx5-${{ github.run_number }}-x64-no-runtime-setup')) {
+            foreach ($suffix in @('.exe', '.exe.sha256', '.manifest.txt')) {
+              if (!(Test-Path -LiteralPath "dist/installer/$package$suffix" -PathType Leaf)) {
+                throw "Installer output missing: $package$suffix"
+              }
+            }
+          }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
@@ -274,3 +284,5 @@ jobs:
             Fcitx5-*.tar.bz2
             Fcitx5-*-x64-setup.exe
             Fcitx5-*-x64-setup.exe.sha256
+            Fcitx5-*-x64-no-runtime-setup.exe
+            Fcitx5-*-x64-no-runtime-setup.exe.sha256
