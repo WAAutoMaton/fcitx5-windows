@@ -2,6 +2,7 @@
 
 #include "atomicfile.h"
 #include "transport.h"
+#include <exception>
 #include <filesystem>
 #include <ntsecapi.h>
 #include <stdexcept>
