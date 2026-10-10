@@ -1,34 +1,153 @@
 diff --git a/im/pinyin/pinyin.cpp b/im/pinyin/pinyin.cpp
-index 7047c16..5c743cb 100644
+index 7047c16..4c8ea8d 100644
 --- a/im/pinyin/pinyin.cpp
 +++ b/im/pinyin/pinyin.cpp
-@@ -1035,7 +1035,7 @@ void PinyinEngine::loadSymbols(const UnixFD &file) {
+@@ -1035,12 +1035,16 @@ void PinyinEngine::loadSymbols(const UnixFD &file) {
      }
  }
  
 -void PinyinEngine::loadDict(const std::string &fullPath,
+-                            std::list<std::unique_ptr<TaskToken>> &taskTokens) {
 +void PinyinEngine::loadDict(const std::filesystem::path &fullPath,
-                             std::list<std::unique_ptr<TaskToken>> &taskTokens) {
++                            std::list<std::unique_ptr<TaskToken>> &taskTokens,
++                            bool extra) {
      if (fullPath.empty()) {
          return;
+     }
+     ime_->dict()->addEmptyDict();
++    if (extra) {
++        dictionaryStates_[fullPath] = "Loading";
++    }
+     PINYIN_DEBUG() << "Loading pinyin dict " << fullPath;
+     std::packaged_task<libime::PinyinDictionary::TrieType()> task([fullPath]() {
+         std::ifstream in(fullPath, std::ios::in | std::ios::binary);
+@@ -1050,13 +1054,19 @@ void PinyinEngine::loadDict(const std::string &fullPath,
+     });
+     taskTokens.push_back(worker_.addTask(
+         std::move(task),
+-        [this, index = ime_->dict()->dictSize() - 1, fullPath](
++        [this, index = ime_->dict()->dictSize() - 1, fullPath, extra](
+             std::shared_future<libime::PinyinDictionary::TrieType> &future) {
+             try {
+                 PINYIN_DEBUG()
+                     << "Load pinyin dict " << fullPath << " finished.";
+                 ime_->dict()->setTrie(index, future.get());
++                if (extra) {
++                    dictionaryStates_[fullPath] = "Loaded";
++                }
+             } catch (const std::exception &e) {
++                if (extra) {
++                    dictionaryStates_[fullPath] = "Failed";
++                }
+                 PINYIN_ERROR() << "Failed to load pinyin dict " << fullPath
+                                << ": " << e.what();
+             }
+@@ -1108,15 +1118,24 @@ void PinyinEngine::loadExtraDict() {
+                  libime::TrieDictionary::UserDict + NumBuiltInDict + 1)
+         << "Dict size: " << ime_->dict()->dictSize();
+     tasks_.clear();
++    dictionaryStates_.clear();
+     ime_->dict()->removeFrom(libime::TrieDictionary::UserDict + NumBuiltInDict +
+                              1);
+     for (auto &file : files) {
++        std::error_code error;
++        if (!std::filesystem::is_regular_file(file.second, error)) {
++            if (error) {
++                dictionaryStates_[file.second] = "Failed";
++            }
++            continue;
++        }
+         if (disableFilesSet.contains(file.first)) {
++            dictionaryStates_[file.second] = "Disabled";
+             PINYIN_DEBUG() << "Dictionary: " << file.first << " is disabled.";
+             continue;
+         }
+         PINYIN_DEBUG() << "Loading extra dictionary: " << file.first;
+-        loadDict(file.second, tasks_);
++        loadDict(file.second, tasks_, true);
+     }
+ }
+ 
+@@ -2401,6 +2420,22 @@ void PinyinEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {
+     }
+ }
+ 
++const Configuration *PinyinEngine::getSubConfig(const std::string &path) const {
++    if (path != "windows-dictionaries") {
++        return nullptr;
++    }
++    std::vector<std::string> paths, states;
++    for (const auto &[file, state] : dictionaryStates_) {
++        const auto text = file.u8string();
++        paths.emplace_back(reinterpret_cast<const char *>(text.data()),
++                           text.size());
++        states.push_back(state);
++    }
++    dictionaryConfig_.paths.setValue(std::move(paths));
++    dictionaryConfig_.states.setValue(std::move(states));
++    return &dictionaryConfig_;
++}
++
+ void PinyinEngine::setSubConfig(const std::string &path,
+                                 const RawConfig &config) {
+     FCITX_UNUSED(config);
 diff --git a/im/pinyin/pinyin.h b/im/pinyin/pinyin.h
-index 3023307..96c9c00 100644
+index 3023307..f15d273 100644
 --- a/im/pinyin/pinyin.h
 +++ b/im/pinyin/pinyin.h
-@@ -12,6 +12,7 @@
- #include "workerthread.h"
- #include <cstddef>
- #include <cstdint>
+@@ -37,12 +37,14 @@
+ #include <fcitx/inputmethodengine.h>
+ #include <fcitx/instance.h>
+ #include <fcitx/text.h>
 +#include <filesystem>
- #include <fcitx-config/configuration.h>
- #include <fcitx-config/enum.h>
- #include <fcitx-config/iniparser.h>
-@@ -497,7 +498,7 @@ private:
+ #include <future>
+ #include <libime/core/historybigram.h>
+ #include <libime/pinyin/pinyincontext.h>
+ #include <libime/pinyin/pinyinime.h>
+ #include <libime/pinyin/pinyinprediction.h>
+ #include <list>
++#include <map>
+ #include <memory>
+ #include <optional>
+ #include <regex>
+@@ -396,6 +398,11 @@ public:
+     uint64_t lastKeyPressedTime_ = 0;
+ };
+ 
++FCITX_CONFIGURATION(
++    WindowsDictionaryConfig,
++    Option<std::vector<std::string>> paths{this, "Paths", "", {}};
++    Option<std::vector<std::string>> states{this, "States", "", {}};);
++
+ class PinyinEngine final : public InputMethodEngineV3,
+                            public TrackableObject<PinyinEngine> {
+ public:
+@@ -419,6 +426,7 @@ public:
+                           InvokeActionEvent &event) override;
+ 
+     const Configuration *getConfig() const override;
++    const Configuration *getSubConfig(const std::string &path) const override;
+     const Configuration *
+     getConfigForInputMethod(const InputMethodEntry &entry) const override;
+ 
+@@ -497,8 +505,9 @@ private:
      void loadExtraDict();
      void loadCustomPhrase();
      void loadSymbols(const UnixFD &file);
 -    void loadDict(const std::string &fullPath,
+-                  std::list<std::unique_ptr<TaskToken>> &taskTokens);
 +    void loadDict(const std::filesystem::path &fullPath,
-                   std::list<std::unique_ptr<TaskToken>> &taskTokens);
++                  std::list<std::unique_ptr<TaskToken>> &taskTokens,
++                  bool extra = false);
      void saveCustomPhrase();
  
+     Instance *instance_;
+@@ -519,6 +528,8 @@ private:
+     WorkerThread worker_;
+     std::list<std::unique_ptr<TaskToken>> persistentTask_;
+     std::list<std::unique_ptr<TaskToken>> tasks_;
++    std::map<std::filesystem::path, std::string> dictionaryStates_;
++    mutable WindowsDictionaryConfig dictionaryConfig_;
+ 
+     FCITX_ADDON_DEPENDENCY_LOADER(quickphrase, instance_->addonManager());
+     FCITX_ADDON_DEPENDENCY_LOADER(fullwidth, instance_->addonManager());

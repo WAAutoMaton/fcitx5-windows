@@ -3,7 +3,10 @@
 #include <commctrl.h>
 #undef GetCurrentTime
 #include <chrono>
+#include <filesystem>
 #include <microsoft.ui.xaml.window.h>
+#include <shellapi.h>
+#include <shlobj.h>
 #include <winrt/Microsoft.UI.Windowing.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
@@ -16,6 +19,52 @@ using namespace winrt;
 using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
 namespace {
+HRESULT openDictionariesDirectory() {
+    const auto initialized = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (FAILED(initialized)) {
+        return initialized;
+    }
+    struct Lifetime {
+        ~Lifetime() { CoUninitialize(); }
+    } lifetime;
+    PWSTR roaming = nullptr;
+    const auto result =
+        SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming);
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> directory(
+        roaming, &CoTaskMemFree);
+    if (FAILED(result)) {
+        return result;
+    }
+    const auto path = std::filesystem::path(directory.get()) / L"Fcitx5" /
+                      L"pinyin" / L"dictionaries";
+    std::error_code error;
+    std::filesystem::create_directories(path, error);
+    if (error) {
+        return HRESULT_FROM_WIN32(error.value());
+    }
+    SHELLEXECUTEINFOW execute{sizeof(execute)};
+    execute.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    execute.lpVerb = L"open";
+    execute.lpFile = path.c_str();
+    execute.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&execute) ? S_OK
+                                     : HRESULT_FROM_WIN32(GetLastError());
+}
+
+const wchar_t *dictionaryState(ipc::DictionaryStatus status) {
+    switch (status) {
+    case ipc::DictionaryStatus::Loaded:
+        return L"\u5df2\u52a0\u8f7d";
+    case ipc::DictionaryStatus::Failed:
+        return L"\u52a0\u8f7d\u5931\u8d25";
+    case ipc::DictionaryStatus::Disabled:
+        return L"\u5df2\u505c\u7528";
+    default:
+        return L"\u52a0\u8f7d\u4e2d";
+    }
+}
+
 constexpr const wchar_t *profileNames[] = {
     L"\u81ea\u7136\u7801",
     L"\u5fae\u8f6f",
@@ -50,7 +99,7 @@ LRESULT CALLBACK sizing(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
     if (message == WM_GETMINMAXINFO) {
         const auto dpi = GetDpiForWindow(window);
         auto *bounds = reinterpret_cast<MINMAXINFO *>(lParam);
-        bounds->ptMinTrackSize = {MulDiv(400, dpi, 96), MulDiv(320, dpi, 96)};
+        bounds->ptMinTrackSize = {MulDiv(440, dpi, 96), MulDiv(360, dpi, 96)};
         return 0;
     }
     if (message == WM_NCDESTROY) {
@@ -79,18 +128,36 @@ bool SettingsWindow::open() {
     auto root = Markup::XamlReader::Load(LR"(
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Padding="24" RowSpacing="16">
-  <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Spacing="16">
-      <RadioButtons x:Name="Scheme" Header="&#x8f93;&#x5165;&#x65b9;&#x6848;" MaxColumns="2">
-        <RadioButton Content="&#x5168;&#x62fc;"/>
-        <RadioButton Content="&#x53cc;&#x62fc;"/>
-      </RadioButtons>
-      <ComboBox x:Name="Profile" Header="&#x53cc;&#x62fc;&#x952e;&#x4f4d;" HorizontalAlignment="Stretch"/>
-      <TextBlock x:Name="Status" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
-    </StackPanel>
-  </ScrollViewer>
-  <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+  <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <TabView x:Name="Tabs" IsAddTabButtonVisible="False" CanDragTabs="False" CanReorderTabs="False">
+    <TabViewItem Header="&#x62fc;&#x97f3;" IsClosable="False">
+      <ScrollViewer Margin="0,16,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="16">
+          <RadioButtons x:Name="Scheme" Header="&#x8f93;&#x5165;&#x65b9;&#x6848;" MaxColumns="2">
+            <RadioButton Content="&#x5168;&#x62fc;"/>
+            <RadioButton Content="&#x53cc;&#x62fc;"/>
+          </RadioButtons>
+          <ComboBox x:Name="Profile" Header="&#x53cc;&#x62fc;&#x952e;&#x4f4d;" HorizontalAlignment="Stretch"/>
+        </StackPanel>
+      </ScrollViewer>
+    </TabViewItem>
+    <TabViewItem Header="&#x8bcd;&#x5e93;" IsClosable="False">
+      <Grid Margin="0,16,0,0" RowSpacing="12">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Button x:Name="DictionaryFolder" AutomationProperties.AutomationId="DictionaryFolder">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <FontIcon Glyph="&#xE8B7;" FontSize="16"/>
+            <TextBlock Text="&#x6253;&#x5f00;&#x7b2c;&#x4e09;&#x65b9;&#x8bcd;&#x5e93;&#x6587;&#x4ef6;&#x5939;"/>
+          </StackPanel>
+        </Button>
+        <TextBlock x:Name="DictionaryDirectory" Grid.Row="1" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="12"/>
+        <TextBlock x:Name="DictionaryStatus" Grid.Row="2" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+        <ListView x:Name="Dictionaries" Grid.Row="3" SelectionMode="None" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="Dictionaries"/>
+      </Grid>
+    </TabViewItem>
+  </TabView>
+  <TextBlock x:Name="Status" Grid.Row="1" TextWrapping="Wrap" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+  <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
     <Button x:Name="Retry" Content="&#x91cd;&#x8bd5;" Visibility="Collapsed"/>
     <Button x:Name="Cancel" Content="&#x53d6;&#x6d88;"/>
     <Button x:Name="Confirm" Content="&#x786e;&#x5b9a;" Style="{StaticResource AccentButtonStyle}"/>
@@ -102,6 +169,19 @@ bool SettingsWindow::open() {
     status_ = root.FindName(L"Status").as<TextBlock>();
     confirm_ = root.FindName(L"Confirm").as<Button>();
     retry_ = root.FindName(L"Retry").as<Button>();
+    tabs_ = root.FindName(L"Tabs").as<TabView>();
+    dictionaries_ = root.FindName(L"Dictionaries").as<ListView>();
+    dictionaryDirectory_ =
+        root.FindName(L"DictionaryDirectory").as<TextBlock>();
+    dictionaryStatus_ = root.FindName(L"DictionaryStatus").as<TextBlock>();
+    dictionaryFolder_ = root.FindName(L"DictionaryFolder").as<Button>();
+    tabs_.SelectionChanged([this](auto &&, auto &&) {
+        if (tabs_.SelectedIndex() == 1) {
+            refreshDictionaries();
+        }
+    });
+    dictionaryFolder_.Click(
+        [this](auto &&, auto &&) { openDictionaryFolder(); });
     root.FindName(L"Cancel").as<Button>().Click(
         [this](auto &&, auto &&) { window_.Close(); });
     scheme_.SelectionChanged([this](auto &&, auto &&) {
@@ -123,7 +203,7 @@ bool SettingsWindow::open() {
     }
     SetWindowSubclass(handle_, sizing, 1, 0);
     const auto dpi = GetDpiForWindow(handle_);
-    window_.AppWindow().Resize({MulDiv(520, dpi, 96), MulDiv(360, dpi, 96)});
+    window_.AppWindow().Resize({MulDiv(560, dpi, 96), MulDiv(480, dpi, 96)});
     timer_ = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread()
                  .CreateTimer();
     timer_.Interval(std::chrono::milliseconds(200));
@@ -135,6 +215,12 @@ bool SettingsWindow::open() {
         if (WaitForSingleObject(activation_, 0) == WAIT_OBJECT_0) {
             ShowWindow(handle_, IsIconic(handle_) ? SW_RESTORE : SW_SHOW);
             window_.Activate();
+        }
+        if (++dictionaryTicks_ >= 10) {
+            dictionaryTicks_ = 0;
+            if (tabs_.SelectedIndex() == 1) {
+                refreshDictionaries();
+            }
         }
     });
     timer_.Start();
@@ -165,6 +251,7 @@ fire_and_forget SettingsWindow::transfer(bool save) {
         requested.profile = profiles_.at(profile_.SelectedIndex());
     }
     busy(true);
+    status_.Visibility(Visibility::Visible);
     status_.Text(save ? L"\u6b63\u5728\u4fdd\u5b58\u2026"
                       : L"\u6b63\u5728\u52a0\u8f7d\u2026");
     ipc::SettingsReply reply;
@@ -245,6 +332,93 @@ fire_and_forget SettingsWindow::transfer(bool save) {
         retry_.Visibility(loaded_ ? Visibility::Collapsed
                                   : Visibility::Visible);
     }
+    status_.Visibility(status_.Text().empty() ? Visibility::Collapsed
+                                              : Visibility::Visible);
     busy(false);
+}
+
+fire_and_forget SettingsWindow::refreshDictionaries() {
+    if (dictionaryRefresh_ || closed_) {
+        co_return;
+    }
+    const auto lifetime = shared_from_this();
+    const apartment_context ui;
+    dictionaryRefresh_ = true;
+    ipc::DictionariesReply reply;
+    bool connected = false;
+    co_await resume_background();
+    try {
+        PipeClient client;
+        connected = client.connect() && client.getDictionaries(reply);
+    } catch (...) {
+    }
+    co_await ui;
+    dictionaryRefresh_ = false;
+    if (closed_) {
+        co_return;
+    }
+    if (!connected) {
+        dictionaries_.Items().Clear();
+        dictionaryReply_ = {};
+        dictionaryStatus_.Text(L"\u65e0\u6cd5\u8fde\u63a5 Core\u3002");
+        dictionaryStatus_.Visibility(Visibility::Visible);
+        co_return;
+    }
+    dictionaryDirectory_.Text(to_hstring(reply.directory));
+    dictionaryStatus_.Text(
+        !reply.available ? L"\u62fc\u97f3\u8bcd\u5e93\u4e0d\u53ef\u7528\u3002"
+        : !reply.error.empty()
+            ? L"\u65e0\u6cd5\u8bfb\u53d6\u8bcd\u5e93\u76ee\u5f55\u3002"
+        : reply.dictionaries.empty()
+            ? L"\u6682\u65e0\u7b2c\u4e09\u65b9\u8bcd\u5e93"
+            : L"");
+    dictionaryStatus_.Visibility(dictionaryStatus_.Text().empty()
+                                     ? Visibility::Collapsed
+                                     : Visibility::Visible);
+    if (reply != dictionaryReply_) {
+        dictionaries_.Items().Clear();
+        for (const auto &dictionary : reply.dictionaries) {
+            Grid row;
+            ColumnDefinition nameColumn, stateColumn;
+            nameColumn.Width({1, GridUnitType::Star});
+            stateColumn.Width({1, GridUnitType::Auto});
+            row.ColumnDefinitions().Append(nameColumn);
+            row.ColumnDefinitions().Append(stateColumn);
+            row.ColumnSpacing(16);
+            row.Padding({0, 8, 0, 8});
+            TextBlock name, state;
+            name.Text(to_hstring(dictionary.name));
+            name.TextTrimming(TextTrimming::CharacterEllipsis);
+            state.Text(dictionaryState(dictionary.status));
+            Grid::SetColumn(state, 1);
+            row.Children().Append(name);
+            row.Children().Append(state);
+            ToolTipService::SetToolTip(row,
+                                       box_value(to_hstring(dictionary.path)));
+            dictionaries_.Items().Append(row);
+        }
+        dictionaryReply_ = std::move(reply);
+    }
+}
+
+fire_and_forget SettingsWindow::openDictionaryFolder() {
+    const auto lifetime = shared_from_this();
+    const apartment_context ui;
+    dictionaryFolder_.IsEnabled(false);
+    HRESULT result = E_FAIL;
+    co_await resume_background();
+    try {
+        result = openDictionariesDirectory();
+    } catch (...) {
+    }
+    co_await ui;
+    if (!closed_) {
+        dictionaryFolder_.IsEnabled(true);
+        if (FAILED(result)) {
+            dictionaryStatus_.Visibility(Visibility::Visible);
+            dictionaryStatus_.Text(L"\u65e0\u6cd5\u6253\u5f00\u8bcd\u5e93\u6587"
+                                   L"\u4ef6\u5939\u3002");
+        }
+    }
 }
 } // namespace fcitx

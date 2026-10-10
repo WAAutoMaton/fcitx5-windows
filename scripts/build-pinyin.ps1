@@ -3,6 +3,7 @@ param(
     [string]$MSYS2Root = 'C:/msys64',
     [string]$DependencyPrefix = '',
     [string]$Prefix = '',
+    [string]$BuildRoot = '',
     [ValidateSet('Source', 'Prebuilt')][string]$DataMode = 'Source',
     [string]$DataArchive = '',
     [int]$Jobs = 6
@@ -11,6 +12,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (!$Prefix) { $Prefix = "$root/dist/pinyin" }
+if (!$BuildRoot) { $BuildRoot = "$root/build" }
+$BuildRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BuildRoot).Replace('\', '/')
+if (!$BuildRoot.StartsWith(([IO.Path]::GetFullPath($root).Replace('\', '/') + '/'), [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The build root must be inside this repository.'
+}
 $Prefix = [IO.Path]::GetFullPath($Prefix).Replace('\', '/')
 if (!$Prefix.StartsWith(([IO.Path]::GetFullPath($root).Replace('\', '/') + '/'), [StringComparison]::OrdinalIgnoreCase)) {
     throw 'The installation prefix must be inside this repository.'
@@ -29,8 +35,21 @@ function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
     if ($status -ne 0) { throw "$Executable failed ($status): $($Arguments -join ' ')" }
 }
 
-function Get-VerifiedArchive([string]$Url, [string]$Destination, [string]$Hash) {
-    if ((Test-Path $Destination) -and (Get-FileHash $Destination -Algorithm SHA256).Hash -eq $Hash) { return }
+function Get-VerifiedArchive([string]$Url, [string]$Destination, [string]$Hash,
+                             [string[]]$LocalArchives = @()) {
+    if ((Test-Path -LiteralPath $Destination -PathType Leaf) -and
+        (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash -eq $Hash) {
+        Write-Host "Using verified archive cache: $Destination"
+        return
+    }
+    foreach ($archive in $LocalArchives) {
+        if ((Test-Path -LiteralPath $archive -PathType Leaf) -and
+            (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -eq $Hash) {
+            Copy-Item -LiteralPath $archive -Destination $Destination -Force
+            Write-Host "Reused verified local archive: $archive"
+            return
+        }
+    }
     Invoke-Checked 'curl.exe' @('-fL', '--retry', '3', '--connect-timeout', '20', '--max-time', '1200', '-o', "$Destination.download", $Url)
     if ((Get-FileHash "$Destination.download" -Algorithm SHA256).Hash -ne $Hash) {
         throw "SHA256 mismatch: $Url"
@@ -49,10 +68,10 @@ try {
     $common = @('-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_INSTALL_PREFIX=$Prefix",
         "-DCMAKE_C_COMPILER=$sysroot/bin/clang.exe", "-DCMAKE_CXX_COMPILER=$sysroot/bin/clang++.exe",
         "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe")
-    Invoke-Checked 'cmake' (@('-S', $root, '-B', "$root/build/pinyin-core", '-DARCH=AMD64',
+    Invoke-Checked 'cmake' (@('-S', $root, '-B', "$BuildRoot/pinyin-core", '-DARCH=AMD64',
         '-DENABLE_WINDOWS_ASCII_FALLBACK=OFF', '-DENABLE_KEYBOARD=OFF') + $common)
-    Invoke-Checked 'cmake' @('--build', "$root/build/pinyin-core", '-j', "$Jobs")
-    Invoke-Checked 'cmake' @('--install', "$root/build/pinyin-core")
+    Invoke-Checked 'cmake' @('--build', "$BuildRoot/pinyin-core", '-j', "$Jobs")
+    Invoke-Checked 'cmake' @('--install', "$BuildRoot/pinyin-core")
 
     if ($DataMode -eq 'Source') {
         foreach ($data in $lock.sourceData) {
@@ -63,22 +82,32 @@ try {
         "-DWINDOWS_DEPENDENCY_PREFIX=$DependencyPrefix", '-DCMAKE_CXX_FLAGS=-fexperimental-library',
         '-DENABLE_TEST=OFF')
     $enableData = if ($DataMode -eq 'Source') { 'ON' } else { 'OFF' }
-    Invoke-Checked 'cmake' (@('-S', "$root/libime", '-B', "$root/build/pinyin-libime",
+    Invoke-Checked 'cmake' (@('-S', "$root/libime", '-B', "$BuildRoot/pinyin-libime",
         "-DENABLE_DATA=$enableData", '-DENABLE_TOOLS=ON') + $common + $dependencyOptions)
-    Invoke-Checked 'cmake' @('--build', "$root/build/pinyin-libime", '-j', "$Jobs")
-    Invoke-Checked 'cmake' @('--install', "$root/build/pinyin-libime")
+    Invoke-Checked 'cmake' @('--build', "$BuildRoot/pinyin-libime", '-j', "$Jobs")
+    Invoke-Checked 'cmake' @('--install', "$BuildRoot/pinyin-libime")
 
     if ($DataMode -eq 'Prebuilt') {
         $cache = "$root/build/pinyin-data"
         New-Item -ItemType Directory -Force $cache | Out-Null
-        if (!$DataArchive) {
-            $DataArchive = "$cache/$($lock.prebuiltData.file)"
-            Get-VerifiedArchive $lock.prebuiltData.url $DataArchive $lock.prebuiltData.sha256
+        $cachedArchive = "$cache/$($lock.prebuiltData.file)"
+        $localArchives = @()
+        if ($DataArchive) {
+            $DataArchive = (Resolve-Path -LiteralPath $DataArchive).Path
+            if ((Get-FileHash -LiteralPath $DataArchive -Algorithm SHA256).Hash -ne $lock.prebuiltData.sha256) {
+                throw 'Unexpected prebuilt data archive hash.'
+            }
+            $localArchives = @($DataArchive)
+        } else {
+            foreach ($directory in @("$root/build/deps", $cache)) {
+                if (Test-Path -LiteralPath $directory -PathType Container) {
+                    $localArchives += Get-ChildItem -LiteralPath $directory -Filter 'libime*.pkg.tar.zst' -File |
+                        Select-Object -ExpandProperty FullName
+                }
+            }
         }
-        $DataArchive = (Resolve-Path $DataArchive).Path
-        if ((Get-FileHash $DataArchive -Algorithm SHA256).Hash -ne $lock.prebuiltData.sha256) {
-            throw 'Unexpected prebuilt data archive hash.'
-        }
+        Get-VerifiedArchive $lock.prebuiltData.url $cachedArchive $lock.prebuiltData.sha256 $localArchives
+        $DataArchive = (Resolve-Path -LiteralPath $cachedArchive).Path
         Push-Location $cache
         try {
             Invoke-Checked 'cmake' @('-E', 'tar', 'xf', $DataArchive, 'usr/share/libime', 'usr/lib/libime')
@@ -86,11 +115,11 @@ try {
         Invoke-Checked 'cmake' @('-E', 'copy_directory', "$cache/usr/share/libime", "$Prefix/share/libime")
         Invoke-Checked 'cmake' @('-E', 'copy_directory', "$cache/usr/lib/libime", "$Prefix/lib/libime")
     }
-    Invoke-Checked 'cmake' (@('-S', "$root/chinese-addons", '-B', "$root/build/pinyin-addons",
+    Invoke-Checked 'cmake' (@('-S', "$root/chinese-addons", '-B', "$BuildRoot/pinyin-addons",
         '-DENABLE_GUI=OFF', '-DENABLE_OPENCC=OFF', '-DENABLE_CLOUDPINYIN=OFF',
         '-DENABLE_DATA=ON', '-DENABLE_TOOLS=OFF') + $common + $dependencyOptions)
-    Invoke-Checked 'cmake' @('--build', "$root/build/pinyin-addons", '-j', "$Jobs")
-    Invoke-Checked 'cmake' @('--install', "$root/build/pinyin-addons")
+    Invoke-Checked 'cmake' @('--build', "$BuildRoot/pinyin-addons", '-j', "$Jobs")
+    Invoke-Checked 'cmake' @('--install', "$BuildRoot/pinyin-addons")
 
     $pending = [Collections.Generic.Queue[string]]::new()
     $visited = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)

@@ -136,6 +136,13 @@ bool PipeClient::getSettings(ipc::SettingsReply &reply) {
            ipc::decodeSettingsReply(response.payload, reply);
 }
 
+bool PipeClient::getDictionaries(ipc::DictionariesReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::GetDictionaries, 0, {}, response) &&
+           response.type == ipc::MessageType::DictionariesReply &&
+           ipc::decodeDictionariesReply(response.payload, reply);
+}
+
 bool PipeClient::setSettings(const ipc::PinyinSettings &settings,
                              ipc::SettingsReply &reply) {
     ipc::Frame response;

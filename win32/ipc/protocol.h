@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 4;
+constexpr uint16_t kVersion = 5;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -34,6 +34,8 @@ enum class MessageType : uint16_t {
     GetSettings = 17,
     SetSettings = 18,
     SettingsReply = 19,
+    GetDictionaries = 20,
+    DictionariesReply = 21,
 };
 
 enum class PinyinScheme : uint8_t { Full = 0, Double = 1 };
@@ -87,8 +89,28 @@ constexpr std::string_view profileConfigValue(ShuangpinProfile profile) {
 
 constexpr bool globalSettingsRequest(MessageType type) {
     return type == MessageType::OpenSettings ||
-           type == MessageType::GetSettings || type == MessageType::SetSettings;
+           type == MessageType::GetSettings ||
+           type == MessageType::SetSettings ||
+           type == MessageType::GetDictionaries;
 }
+
+constexpr uint32_t kMaxDictionaries = 4096;
+enum class DictionaryStatus : uint8_t { Loading, Loaded, Failed, Disabled };
+
+struct DictionaryInfo {
+    std::string name;
+    std::string path;
+    DictionaryStatus status = DictionaryStatus::Loading;
+    bool operator==(const DictionaryInfo &) const = default;
+};
+
+struct DictionariesReply {
+    bool available = false;
+    std::string directory;
+    std::string error;
+    std::vector<DictionaryInfo> dictionaries;
+    bool operator==(const DictionariesReply &) const = default;
+};
 
 constexpr uint32_t kMaxCandidates = 32;
 
@@ -277,6 +299,52 @@ inline bool decodeSettingsReply(const std::vector<uint8_t> &payload,
     result.pinyinAvailable = pinyin;
     result.shuangpinAvailable = shuangpin;
     reply = result;
+    return true;
+}
+
+inline std::vector<uint8_t>
+encodeDictionariesReply(const DictionariesReply &reply) {
+    Writer writer;
+    writer.u8(reply.available);
+    writer.string(reply.directory);
+    writer.string(reply.error);
+    writer.u32(static_cast<uint32_t>(reply.dictionaries.size()));
+    for (const auto &dictionary : reply.dictionaries) {
+        writer.string(dictionary.name);
+        writer.string(dictionary.path);
+        writer.u8(static_cast<uint8_t>(dictionary.status));
+    }
+    return writer.take();
+}
+
+inline bool decodeDictionariesReply(const std::vector<uint8_t> &payload,
+                                    DictionariesReply &reply) {
+    Reader reader(payload.data(), payload.size());
+    DictionariesReply result;
+    uint8_t available = 0;
+    uint32_t count = 0;
+    if (!reader.u8(available) || available > 1 ||
+        !reader.string(result.directory) || !reader.string(result.error) ||
+        !reader.u32(count) || count > kMaxDictionaries ||
+        count > reader.remaining() / 9) {
+        return false;
+    }
+    result.available = available;
+    for (uint32_t i = 0; i < count; ++i) {
+        DictionaryInfo dictionary;
+        uint8_t status = 0;
+        if (!reader.string(dictionary.name) ||
+            !reader.string(dictionary.path) || !reader.u8(status) ||
+            status > static_cast<uint8_t>(DictionaryStatus::Disabled)) {
+            return false;
+        }
+        dictionary.status = static_cast<DictionaryStatus>(status);
+        result.dictionaries.push_back(std::move(dictionary));
+    }
+    if (reader.remaining()) {
+        return false;
+    }
+    reply = std::move(result);
     return true;
 }
 

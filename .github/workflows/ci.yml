@@ -159,6 +159,9 @@ jobs:
       - name: Verify real Pinyin and unregistered TSF text contexts
         run: ./scripts/test-pinyin.ps1
 
+      - name: Verify third-party dictionary loading
+        run: ./scripts/test-dictionaries.ps1
+
       - name: Upload diagnostic logs
         if: failure()
         uses: actions/upload-artifact@v7

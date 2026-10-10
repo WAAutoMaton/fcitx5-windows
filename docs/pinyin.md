@@ -96,7 +96,8 @@ conflicting changes. It does not reset submodules or create commits.
 - `libime-windows.patch`: imported executable paths include `.exe`; model path
   lists use `;` on Windows, preserving drive letters.
 - `chinese-addons-windows.patch`: dictionary loading accepts filesystem paths,
-  allowing Windows' wide native paths to reach `std::ifstream`.
+  allowing Windows' wide native paths to reach `std::ifstream`; the addon also
+  exposes extra dictionary loading states through a read-only subconfiguration.
 
 The submodule working trees are intentionally patched. Record Windows changes
 in the main-repository patch files; do not create local submodule commits or
@@ -105,6 +106,12 @@ explicitly requires an upgrade, and keep the lock file and submodule pointers
 consistent if versions are intentionally changed.
 
 ## Build and Deploy Core
+
+For a single command that also builds/deploys TSF and Settings, use
+`./scripts/build-and-deploy.ps1`. It defaults to `Prebuilt`, stages the complete
+runtime under `build/all/prefix`, runs default TSF CTest, then copies to
+`dist/pinyin`. It initializes the VS x64 environment itself. See the
+[README options and update procedure](../README.md#one-command-build-and-deploy).
 
 Prerequisites: CMake 3.27+, MSYS2 clang64 Clang/Ninja/pkgconf/ECM/dlfcn/libuv/
 gettext, zstd, and Boost headers/iostreams. No script installs or upgrades system
@@ -137,13 +144,22 @@ generation has not been validated end to end locally.
 | `-MSYS2Root` | MSYS2 location, default `C:/msys64`; the script uses its clang64 toolchain |
 | `-DependencyPrefix` | Extra dependency prefix; Boost/iostreams and zstd must use the same target/runtime |
 | `-Prefix` | Install location, default `dist/pinyin`; must remain inside this repository |
+| `-BuildRoot` | Build directory parent, default `build`; the unified script uses `build/all` |
 | `-DataArchive` | Local archive for `Prebuilt` mode, verified against the locked SHA256; avoids the data download, not all environment prerequisites |
 | `-Jobs` | Build parallelism, default 6 |
 
 The build directories are `build/pinyin-core`, `build/pinyin-libime` and
 `build/pinyin-addons`, with prebuilt data cached in `build/pinyin-data`.
-Changing `-Prefix` changes deployment, not these build directory names. A plain
+`-BuildRoot` changes the parent of those three build directories; prebuilt data
+remains cached in `build/pinyin-data`. Changing `-Prefix` alone changes
+deployment, not these build directory names. A plain
 root CMake build alone does not produce a complete Pinyin installation.
+
+Before downloading precompiled data, the script checks the standard cached
+archive and local `libime*.pkg.tar.zst` files in `build/deps` and
+`build/pinyin-data`. A matching SHA256 is required, regardless of filename.
+`-DataArchive` is validated explicitly and populates the same standard cache.
+Subsequent builds share this data cache even when their `-BuildRoot` differs.
 
 The default prefix is `dist/pinyin`. The script recursively resolves PE imports
 and copies the necessary MSYS2 runtime DLLs into `bin`, without copying Windows
@@ -239,18 +255,18 @@ these helpers stops Core/Settings as services; use the input indicator menu firs
 
 ## Protocol and Behavior
 
-Protocol v4 uses a pipe name scoped to the user's SID and Windows session. Its
+Protocol v5 uses a pipe name scoped to the user's SID and Windows session. Its
 ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
 overlapped I/O with a 500 ms wait limit per read/write operation; this is not a
 single 500 ms deadline for the entire request. Disconnected clients' contexts
 are destroyed. The pipe name retains the historical `fcitx5-windows-v2-` prefix;
-compatibility is checked using the framing/handshake version, which is v4.
+compatibility is checked using the framing/handshake version, which is v5.
 
 `SetMode` sets an explicit Pinyin/direct-input mode rather than replaying a
 toggle keystroke. Repeated requests are idempotent; changing modes cancels the
 current preedit. Core and TSF must both be rebuilt and deployed after this
-protocol upgrade; older versions do not connect to v4.
+protocol upgrade; older versions do not connect to v5.
 
 Each key response contains consumption, mode, commit, preedit, UTF-8 byte cursor,
 revision, settings epoch and the current candidate page. Reset cancels Core composition. PollState
@@ -343,7 +359,7 @@ thread. A manual stop is recorded in a logon-specific `.state` file under
 `%LOCALAPPDATA%/fcitx5`, surviving unloading all TSF DLLs without applying to the
 next login. A shared 10-second retry interval prevents launch storms on failure.
 There is no forced termination by process name. A hung process yields a timeout
-instead of being killed. These lifecycle changes preserve IPC protocol v4;
+instead of being killed. The current IPC protocol is v5;
 deploy updated Core, TSF and Settings together for the new control behavior.
 
 Run only one Core process per user/session. A second Core process detects the
@@ -364,6 +380,59 @@ three components.
 The UI supports full/double pinyin, eight built-in profiles, save/cancel,
 single-instance activation, system theme resources and PerMonitorV2 DPI.
 An existing custom profile is preserved but cannot be created/imported here.
+
+### Third-Party Dictionaries
+
+The `词库` tab lists the extra dictionaries actually discovered by the Pinyin
+engine, with loading, loaded, failed or disabled status. It queries Core using
+the context-independent `GetDictionaries` request; the UI does not infer load
+success from filenames. The list refreshes every two seconds while the tab is
+visible. It currently has no import, delete or enable/disable controls.
+
+`打开第三方词库文件夹` creates and opens
+`%APPDATA%/Fcitx5/pinyin/dictionaries` using the Windows Roaming AppData known
+folder. This action also works when Core cannot be reached. Drop compatible
+Fcitx5/libime binary `.dict` files directly in this folder. Other input methods'
+text dictionaries and binary formats are not interchangeable just because they
+use the same extension. To compile a UTF-8 libime text dictionary:
+
+```powershell
+& .\dist\pinyin\bin\libime_pinyindict.exe words.txt poetry.dict
+```
+
+For example, a line in `words.txt` is `夜来风雨声 ye'lai'feng'yu'sheng 0`.
+The resulting dictionary is shared by full pinyin and all Shuangpin profiles.
+An extra dictionary participates in normal libime scoring; loading a word does
+not impose a fixed candidate rank.
+
+Core creates this folder on startup. It scans its immediate regular `.dict`
+and `.disable` files once per second, comparing names, sizes and modification
+times. Two identical scans trigger the upstream `dictmanager` reload on the
+Core event loop. Parsing runs on the existing Pinyin worker; completion and
+status updates return to the Core event loop. Addition, replacement, rename and
+deletion take effect without restarting Core and preserve pending composition.
+Subdirectories are not scanned. As with the upstream manager, `name.dict.disable`
+disables `name.dict`. Failed files are reported and do not prevent valid files
+from loading. A file modified again is retried after it becomes stable.
+
+The small addon status-query extension is recorded in
+`patches/chinese-addons-windows.patch`; submodule revisions are unchanged. Core,
+TSF and Settings must be rebuilt and deployed together for protocol v5.
+
+With Core and Settings stopped, run:
+
+```powershell
+./scripts/test-dictionaries.ps1 -Prefix "$PWD/dist/pinyin" -TsfBuild "$PWD/win32/build/pinyin-tsf"
+```
+
+The test creates uniquely named temporary dictionaries and restores input
+settings. It verifies startup loading, live changes, Unicode paths, bad files,
+disable markers, full/Xiaohe/Ziranma candidates and pending composition. It
+starts and stops only its own Core and does not register the TIP. The UI test
+also checks the dictionary tab, actual loaded/failed states and the Explorer
+folder button, and captures `dictionaries.png`.
+
+### Input Settings
 
 `GetSettings`, `SetSettings`, and `OpenSettings` are connection-independent
 requests with context ID zero. Core alone writes the authority file

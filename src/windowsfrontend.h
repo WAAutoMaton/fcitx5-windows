@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../win32/ipc/protocol.h"
+#include "windowsdictionaries.h"
 #include "windowssettings.h"
 #include <atomic>
 #include <condition_variable>
@@ -76,6 +77,7 @@ class WindowsPipeServer {
     Instance &instance_;
     EventDispatcher &dispatcher_;
     WindowsSettings settings_;
+    WindowsDictionaries dictionaries_;
     uint64_t settingsEpoch_ = 1;
     std::atomic_bool stopping_ = false;
     std::thread thread_;

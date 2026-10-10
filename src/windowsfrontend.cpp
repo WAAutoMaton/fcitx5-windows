@@ -243,7 +243,7 @@ WindowsPipeServer::WindowsPipeServer(Instance &instance,
                                      EventDispatcher &dispatcher,
                                      std::filesystem::path settingsFile)
     : instance_(instance), dispatcher_(dispatcher),
-      settings_(instance, std::move(settingsFile)),
+      settings_(instance, std::move(settingsFile)), dictionaries_(instance),
       settingsEpoch_(settings_.revision()) {}
 
 ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
@@ -438,6 +438,11 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     }
 
     switch (request.type) {
+    case MessageType::GetDictionaries:
+        response.type = MessageType::DictionariesReply;
+        response.payload =
+            ipc::encodeDictionariesReply(dictionaries_.snapshot());
+        break;
     case MessageType::OpenSettings:
     case MessageType::GetSettings:
     case MessageType::SetSettings: {

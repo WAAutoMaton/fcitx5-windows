@@ -31,6 +31,7 @@ class PipeClient {
     bool reset(uint64_t contextId, KeyReply &reply);
     bool setMode(uint64_t contextId, bool enabled, KeyReply &reply);
     bool getSettings(ipc::SettingsReply &reply);
+    bool getDictionaries(ipc::DictionariesReply &reply);
     bool setSettings(const ipc::PinyinSettings &settings,
                      ipc::SettingsReply &reply);
     bool openSettings(ipc::SettingsReply &reply);

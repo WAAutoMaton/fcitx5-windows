@@ -92,5 +92,37 @@ int main() {
     assert(profileConfigValue(ShuangpinProfile::GB) == "GB Standard");
     assert(globalSettingsRequest(MessageType::GetSettings) &&
            !globalSettingsRequest(MessageType::SetMode));
+    assert(globalSettingsRequest(MessageType::GetDictionaries));
+    DictionariesReply dictionaries;
+    dictionaries.available = true;
+    dictionaries.directory = "C:/Users/test/pinyin/dictionaries";
+    dictionaries.dictionaries = {
+        {"poetry.dict", "C:/poetry.dict", DictionaryStatus::Loaded},
+        {"broken.dict", "C:/broken.dict", DictionaryStatus::Failed},
+        {"pending.dict", "C:/pending.dict", DictionaryStatus::Loading},
+        {"disabled.dict", "C:/disabled.dict", DictionaryStatus::Disabled}};
+    DictionariesReply restoredDictionaries;
+    const auto dictionaryPayload = encodeDictionariesReply(dictionaries);
+    assert(decodeDictionariesReply(dictionaryPayload, restoredDictionaries) &&
+           restoredDictionaries == dictionaries);
+    for (size_t length = 0; length < dictionaryPayload.size(); ++length) {
+        const auto saved = restoredDictionaries;
+        assert(!decodeDictionariesReply(
+            {dictionaryPayload.begin(), dictionaryPayload.begin() + length},
+            restoredDictionaries));
+        assert(restoredDictionaries == saved);
+    }
+    auto badDictionary = dictionaryPayload;
+    badDictionary.push_back(0);
+    assert(!decodeDictionariesReply(badDictionary, restoredDictionaries));
+    badDictionary = dictionaryPayload;
+    badDictionary[0] = 2;
+    assert(!decodeDictionariesReply(badDictionary, restoredDictionaries));
+    badDictionary = dictionaryPayload;
+    badDictionary.back() = 4;
+    assert(!decodeDictionariesReply(badDictionary, restoredDictionaries));
+    dictionaries.dictionaries.resize(kMaxDictionaries + 1);
+    assert(!decodeDictionariesReply(encodeDictionariesReply(dictionaries),
+                                    restoredDictionaries));
     return 0;
 }

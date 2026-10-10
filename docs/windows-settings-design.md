@@ -1,6 +1,6 @@
 # Windows 输入法设置实现方案
 
-日期：2026-10-10。菜单、协议 v4、Core 方案切换和独立 WinUI 窗口已实现；本文保留设计依据及仍需实测的范围。
+日期：2026-10-10。菜单、Core 方案切换和独立 WinUI 窗口已实现；第三方词库功能已将协议从 v4 升级为 v5，新增只读词库 tab。本文保留设置设计依据及仍需实测的范围；当前词库目录、刷新和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。
 
 ## 推荐方案
 
@@ -102,13 +102,14 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 
 ## IPC 与配置所有权
 
-升级协议至 v4，同步构建 Core、TSF DLL 和设置程序。新增以下 context-independent 消息，强制 `contextId=0`，单独验证请求长度、枚举和请求关联。旧的 context 请求仍保留连接归属校验。
+设置功能最初升级协议至 v4；当前 v5 另增加 `GetDictionaries`。同步构建 Core、TSF DLL 和设置程序。以下 context-independent 消息强制 `contextId=0`，单独验证请求长度、枚举和请求关联。旧的 context 请求仍保留连接归属校验。
 
 | 请求 | 内容 / 回复 |
 | --- | --- |
 | `OpenSettings` | 无可执行路径参数；返回启动/激活结果 |
 | `GetSettings` | 返回 scheme、profile、settingsRevision 和可用方案/键位 |
 | `SetSettings` | 提交 scheme、profile、expectedRevision；返回已应用的配置与新 revision |
+| `GetDictionaries` | 返回第三方词库目录、实际发现的扩展词库路径和加载状态 |
 
 scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串标识，不依赖 ComboBox 索引。映射到 `Xiaohe`、`Ziranma`、`MS`、`Ziguang`、`ABC`、`Zhongwenzhixing`、`PinyinJiajia`、`GB`，服务器严格校验。
 

@@ -20,7 +20,7 @@ Pipe scoped to the current user's SID and Windows session. No Core C++ objects
 or runtime ABI cross the pipe. Pipe requests are dispatched to Core's event
 loop; TSF applies replies through edit sessions on its owning thread.
 
-Protocol v4 returns key consumption, Chinese commits, preedit, cursor and
+Protocol v5 returns key consumption, Chinese commits, preedit, cursor and
 candidate pages, and provides explicit mode switching and state polling.
 TSF polls every 100 ms for delayed output and retries disconnected connections
 every two seconds. Failed requests are not replayed; IPC or document-edit
@@ -58,7 +58,12 @@ Windows Store compatibility are not claimed as supported.
 Right-clicking the input mode item provides `输入法设置` (settings),
 `重启服务` (restart services) and `关闭服务` (stop services).
 The independent WinUI 3 settings app selects full/double pinyin and built-in
-Shuangpin profiles; changes are saved and applied by Core. It uses x64 Windows
+Shuangpin profiles; changes are saved and applied by Core. Its `词库` tab displays
+third-party dictionary loading states and opens
+`%APPDATA%/Fcitx5/pinyin/dictionaries`. Compatible Fcitx5/libime binary `.dict`
+files in that directory are loaded automatically and shared by full/double
+pinyin; additions, replacements and deletions are detected while Core runs.
+It uses x64 Windows
 App SDK 1.8 framework-dependent deployment. Build it with
 `scripts/build-settings.ps1 -Prefix "$PWD/dist/pinyin"` and install the matching
 runtime separately. Actual window save/cancel, restart and single-instance
@@ -72,6 +77,84 @@ Core and TSF require CMake 3.27+ and Ninja. Core additionally needs MSYS2
 Clang/pkgconf/ECM/dlfcn/libuv/gettext, Boost/iostreams and zstd. TSF needs the
 Windows SDK, ATL, LLVM Clang/llvm-rc and ImageMagick (`magick`).
 Settings uses Visual Studio MSBuild, MSVC and NuGet with Windows SDK 10.0.22000.0+.
+
+### One-Command Build and Deploy
+
+From a normal Windows PowerShell terminal, run:
+
+```powershell
+./scripts/build-and-deploy.ps1
+```
+
+This initializes the pinned submodules, applies the Windows patches, builds
+AMD64 Release Core/libime/chinese-addons, TSF and WinUI Settings, runs the eight
+default TSF CTest tests, and deploys all three components to `dist/pinyin`.
+It defaults to the SHA256-pinned precompiled dictionary/model data. Core uses
+MSYS2 clang64; the script initializes the Visual Studio x64 environment for
+TSF and explicitly uses the standalone LLVM compiler and `llvm-rc`.
+
+Builds and temporary deployment files are under `build/all`; the runtime tree
+is copied to the target only after all builds and checks succeed. Repeating the
+command performs an incremental build. Paths are resolved from the script for
+defaults and from the current directory for explicit relative arguments.
+
+Precompiled data is shared across build directories in `build/pinyin-data`.
+Before downloading, the script also checks existing `libime*.pkg.tar.zst`
+archives in `build/deps` and `build/pinyin-data`, including the earlier
+`build/deps/libime-data.pkg.tar.zst`. Only an archive matching the locked SHA256
+is reused. A valid archive supplied with `-DataArchive` also populates this
+shared cache, so later runs do not need that argument. Existing extracted or
+deployed files alone do not establish the data version.
+
+The prerequisites above must already be installed. The script does not install
+tools or system runtimes, register/unregister TSF, stop applications, or start
+services. Before updating an existing deployment, use `关闭服务` and close
+applications loading its DLL. Locked or read-only deployment files cause an
+error; another isolated prefix can be built while the current deployment runs:
+
+```powershell
+./scripts/build-and-deploy.ps1 -Prefix ./dist/next
+./scripts/build-and-deploy.ps1 -WhatIf
+```
+
+`-WhatIf` previews the operation without running builds, initializing submodules
+or copying files. File deployment is not an atomic directory switch: a process
+opening a target file during the final copy can still interrupt deployment.
+
+| Option | Default / Behavior |
+| --- | --- |
+| `-Prefix` | `dist/pinyin`; target runtime tree, must be inside the repository |
+| `-BuildRoot` | `build/all`; separate build/staging directory inside the repository |
+| `-MSYS2Root` | `C:/msys64` |
+| `-LLVMRoot` | `C:/Program Files/LLVM`; standalone LLVM with `clang`, `clang++`, `llvm-rc` |
+| `-DependencyPrefix` | Optional matching clang64 Boost/zstd prefix; uses `build/deps/clang64` if present |
+| `-DataMode` | `Prebuilt`; `Source` generates data locally and takes more time/memory |
+| `-DataArchive` | Optional local prebuilt archive, checked against the locked SHA256 |
+| `-Jobs` | `6`; parallel jobs for CMake builds |
+| `-SkipTests` | Skip default CTest tests |
+
+The script's path/preview/locked-file regression checks can be run with
+`./scripts/test-build-and-deploy.ps1`; these checks do not start a build or
+change services/registration.
+
+The settings app still requires the matching x64 Windows App SDK 1.8
+Framework/DDLM and Visual C++ runtime. Register the deployed DLL separately as
+described in [Run](#run). Keep Core, TSF and Settings together, especially after
+an IPC protocol upgrade.
+
+For real Pinyin/TSF or third-party dictionary integration checks, stop existing
+Core/Settings first and use the new build directory:
+
+```powershell
+./scripts/test-pinyin.ps1 -TsfBuild ./build/all/tsf
+./scripts/test-dictionaries.ps1 -TsfBuild ./build/all/tsf
+```
+
+Use `-Prefix` on these test scripts if the deployment is not `dist/pinyin`.
+The one-command script runs default CTest only; it does not run the interactive
+WinUI checks or the Core integration probes automatically.
+
+### Individual Builds
 
 From the repository root, build and deploy Core to `dist/pinyin`:
 
