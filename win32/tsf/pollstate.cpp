@@ -1,3 +1,4 @@
+#include "../ipc/installation.h"
 #include "tsf.h"
 
 namespace fcitx {
@@ -68,6 +69,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
 
 void Tsf::pollState() {
     pollServiceTask();
+    if (!win32::ipc::currentInstallationAllowsStart()) {
+        pipe_.disconnect();
+        clearRemoteContext();
+        candidates_.hide();
+        return;
+    }
     if (serviceHostClosing_ ||
         serviceCommand_ == LangBarItem::kRestartMessage ||
         serviceCommand_ == LangBarItem::kStopMessage) {

@@ -1,0 +1,24 @@
+{
+  "inno": {
+    "version": "7.1.0",
+    "file": "innosetup-7.1.0-x64.exe",
+    "url": "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe",
+    "sha256": "0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f",
+    "publisher": "Pyrsys B.V."
+  },
+  "vcRuntime": {
+    "version": "14.44.35211.0",
+    "file": "vc_redist.x64.exe",
+    "url": "https://download.visualstudio.microsoft.com/download/pr/bd1c8d9d-ba95-4eee-bc6e-df1fcc876373/CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B/VC_redist.x64.exe",
+    "sha256": "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b",
+    "publisher": "Microsoft Corporation"
+  },
+  "windowsAppRuntime": {
+    "version": "1.8.260921001",
+    "minimumPackageVersion": "8000.994.2142.0",
+    "file": "WindowsAppRuntimeInstall-x64.exe",
+    "url": "https://download.microsoft.com/download/8eb5473d-5663-4337-a1ca-aa5030b9b194/WindowsAppRuntimeInstall-x64.exe",
+    "sha256": "7c092e85fc1e3e7cb2bd7d549aaab03caf924131f15d9b20b1855457a98205aa",
+    "publisher": "Microsoft Corporation"
+  }
+}

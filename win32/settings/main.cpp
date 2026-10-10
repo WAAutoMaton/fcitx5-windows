@@ -74,8 +74,19 @@ static int runSettings() {
     return result;
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int) {
     try {
+        if (std::wstring_view(arguments) == L"--runtime-check") {
+            const PACKAGE_VERSION minimum{WINDOWSAPPSDK_RUNTIME_VERSION_UINT64};
+            const auto result = MddBootstrapInitialize2(
+                WINDOWSAPPSDK_RELEASE_MAJORMINOR,
+                WINDOWSAPPSDK_RELEASE_VERSION_TAG_W, minimum,
+                MddBootstrapInitializeOptions_None);
+            if (SUCCEEDED(result)) {
+                MddBootstrapShutdown();
+            }
+            return static_cast<int>(result);
+        }
         return runSettings();
     } catch (const std::exception &) {
         MessageBoxW(nullptr, L"Cannot initialize the Fcitx5 settings service.",

@@ -111,6 +111,9 @@ void start(const ::fs::path &settingsFile,
 
 int main(int argc, char **argv) {
     try {
+        if (!fcitx::win32::ipc::currentInstallationAllowsStart()) {
+            return 0;
+        }
         if (argc == 2 && (std::string_view(argv[1]) == "--stop-services" ||
                           std::string_view(argv[1]) == "--restart-services")) {
             std::wstring path(32768, L'\0');

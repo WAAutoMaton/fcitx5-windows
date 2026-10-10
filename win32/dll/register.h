@@ -2,15 +2,17 @@
 
 #include <Windows.h>
 #include <msctf.h>
+#include <string>
 
 namespace fcitx {
 extern HINSTANCE dllInstance;
 
 BOOL RegisterServer();
-void UnregisterServer();
+HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath);
+HRESULT UnregisterServer();
 BOOL RegisterProfiles();
 BOOL RegisterCategories();
 HRESULT RegisterProfile(ITfInputProcessorProfileMgr *manager, HINSTANCE module);
 HRESULT RegisterCategories(ITfCategoryMgr *manager);
-void UnregisterCategoriesAndProfiles();
+HRESULT UnregisterCategoriesAndProfiles();
 } // namespace fcitx

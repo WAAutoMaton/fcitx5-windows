@@ -17,6 +17,7 @@ set(CMAKE_CXX_STANDARD 20)
 add_subdirectory(assets)
 add_subdirectory(tsf)
 add_subdirectory(dll)
+add_subdirectory(setup)
 
 enable_testing()
 add_subdirectory(tests)

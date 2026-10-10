@@ -1,3 +1,4 @@
+#include "../ipc/installation.h"
 #include "keypolicy.h"
 #include "tsf.h"
 
@@ -105,8 +106,9 @@ void Tsf::uninitKeyEventSink() {
 
 BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
                      bool release, uint32_t modifiers) {
-    if (context == nullptr || context != textEditSinkContext_ ||
-        remoteContextId_ == 0 || !pipe_.connected() || !foreground_) {
+    if (!win32::ipc::currentInstallationAllowsStart() || context == nullptr ||
+        context != textEditSinkContext_ || remoteContextId_ == 0 ||
+        !pipe_.connected() || !foreground_) {
         return FALSE;
     }
     PipeClient::KeyReply reply;

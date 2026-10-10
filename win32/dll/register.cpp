@@ -17,35 +17,68 @@ HKEY_CLASSES_ROOT\CLSID\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}: Fcitx5
     ThreadingModel: Apartment
 */
 BOOL RegisterServer() {
-    DWORD dw;
-    HKEY hKey = nullptr;
-    HKEY hSubKey = nullptr;
-    WCHAR dllPath[MAX_PATH];
-    auto achIMEKey = "CLSID\\" + guidToString(FCITX_CLSID);
-    BOOL ret = RegCreateKeyExA(HKEY_CLASSES_ROOT, achIMEKey.c_str(), 0, nullptr,
-                               REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                               &hKey, &dw);
-    ret |=
-        RegSetValueExA(hKey, nullptr, 0, REG_SZ,
-                       reinterpret_cast<const BYTE *>(FCITX5), sizeof FCITX5);
-    ret |= RegCreateKeyExA(hKey, "InprocServer32", 0, nullptr,
-                           REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                           &hSubKey, &dw);
-    auto hr = GetModuleFileNameW(dllInstance, dllPath, MAX_PATH);
-    ret |= RegSetValueExW(hSubKey, nullptr, 0, REG_SZ,
-                          reinterpret_cast<const BYTE *>(dllPath),
-                          hr * sizeof(WCHAR));
-    ret |= RegSetValueExA(hSubKey, THREADING_MODEL, 0, REG_SZ,
-                          reinterpret_cast<const BYTE *>(APARTMENT),
-                          sizeof APARTMENT);
-    RegCloseKey(hSubKey);
-    RegCloseKey(hKey);
-    return ret == ERROR_SUCCESS;
+    wchar_t dllPath[32768]{};
+    const auto size =
+        GetModuleFileNameW(dllInstance, dllPath, ARRAYSIZE(dllPath));
+    if (!size || size >= ARRAYSIZE(dllPath)) {
+        return FALSE;
+    }
+    HKEY classes = nullptr;
+    const auto opened =
+        RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Classes", 0, nullptr, 0,
+                        KEY_READ | KEY_WRITE, nullptr, &classes, nullptr);
+    if (opened != ERROR_SUCCESS) {
+        return FALSE;
+    }
+    const auto result = RegisterServerAt(classes, dllPath);
+    RegCloseKey(classes);
+    return SUCCEEDED(result);
 }
 
-void UnregisterServer() {
-    auto achIMEKey = "CLSID\\" + guidToString(FCITX_CLSID);
-    RegDeleteTreeA(HKEY_CLASSES_ROOT, achIMEKey.c_str());
+HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath) {
+    if (!root || dllPath.empty() || dllPath.find(L'\0') != std::wstring::npos) {
+        return E_INVALIDARG;
+    }
+    const auto key =
+        L"CLSID\\" + stringToWString(guidToString(FCITX_CLSID), CP_UTF8);
+    HKEY clsid = nullptr;
+    auto result =
+        RegCreateKeyExW(root, key.c_str(), 0, nullptr, 0, KEY_READ | KEY_WRITE,
+                        nullptr, &clsid, nullptr);
+    if (result != ERROR_SUCCESS) {
+        return HRESULT_FROM_WIN32(result);
+    }
+    constexpr wchar_t name[] = L"Fcitx5";
+    result = RegSetValueExW(clsid, nullptr, 0, REG_SZ,
+                            reinterpret_cast<const BYTE *>(name), sizeof(name));
+    HKEY server = nullptr;
+    if (result == ERROR_SUCCESS) {
+        result = RegCreateKeyExW(clsid, L"InprocServer32", 0, nullptr, 0,
+                                 KEY_WRITE, nullptr, &server, nullptr);
+    }
+    if (result == ERROR_SUCCESS) {
+        result = RegSetValueExW(
+            server, nullptr, 0, REG_SZ,
+            reinterpret_cast<const BYTE *>(dllPath.c_str()),
+            static_cast<DWORD>((dllPath.size() + 1) * sizeof(wchar_t)));
+    }
+    constexpr wchar_t threading[] = L"Apartment";
+    if (result == ERROR_SUCCESS) {
+        result = RegSetValueExW(server, L"ThreadingModel", 0, REG_SZ,
+                                reinterpret_cast<const BYTE *>(threading),
+                                sizeof(threading));
+    }
+    if (server) {
+        RegCloseKey(server);
+    }
+    RegCloseKey(clsid);
+    return HRESULT_FROM_WIN32(result);
+}
+
+HRESULT UnregisterServer() {
+    const auto key = "SOFTWARE\\Classes\\CLSID\\" + guidToString(FCITX_CLSID);
+    const auto result = RegDeleteTreeA(HKEY_LOCAL_MACHINE, key.c_str());
+    return result == ERROR_FILE_NOT_FOUND ? S_OK : HRESULT_FROM_WIN32(result);
 }
 
 /*
@@ -129,8 +162,35 @@ HRESULT RegisterCategories(ITfCategoryMgr *manager) {
     return S_OK;
 }
 
-void UnregisterCategoriesAndProfiles() {
-    auto key = "SOFTWARE\\Microsoft\\CTF\\TIP\\" + guidToString(FCITX_CLSID);
-    RegDeleteTreeA(HKEY_LOCAL_MACHINE, key.c_str());
+HRESULT UnregisterCategoriesAndProfiles() {
+    const auto key =
+        "SOFTWARE\\Microsoft\\CTF\\TIP\\" + guidToString(FCITX_CLSID);
+    HKEY existing = nullptr;
+    const auto opened =
+        RegOpenKeyExA(HKEY_LOCAL_MACHINE, key.c_str(), 0, KEY_READ, &existing);
+    if (opened == ERROR_FILE_NOT_FOUND) {
+        return S_OK;
+    }
+    if (opened != ERROR_SUCCESS) {
+        return HRESULT_FROM_WIN32(opened);
+    }
+    RegCloseKey(existing);
+    CComPtr<ITfCategoryMgr> categories;
+    auto result = categories.CoCreateInstance(CLSID_TF_CategoryMgr);
+    if (FAILED(result)) {
+        return result;
+    }
+    for (const auto &guid : Categories) {
+        result = categories->UnregisterCategory(FCITX_CLSID, guid, FCITX_CLSID);
+        if (FAILED(result)) {
+            return result;
+        }
+    }
+    CComPtr<ITfInputProcessorProfiles> profiles;
+    result = profiles.CoCreateInstance(CLSID_TF_InputProcessorProfiles);
+    if (FAILED(result)) {
+        return result;
+    }
+    return profiles->Unregister(FCITX_CLSID);
 }
 } // namespace fcitx

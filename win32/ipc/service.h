@@ -1,6 +1,7 @@
 #pragma once
 
 #include "atomicfile.h"
+#include "installation.h"
 #include "transport.h"
 #include <exception>
 #include <filesystem>
@@ -123,7 +124,8 @@ inline ServiceState readServiceState(const std::wstring &identity) {
 
 inline bool serviceAutoStartAllowed() {
     try {
-        return !readServiceState(serviceIdentity()).disabled;
+        return currentInstallationAllowsStart() &&
+               !readServiceState(serviceIdentity()).disabled;
     } catch (...) {
         return false;
     }
@@ -190,7 +192,8 @@ class ServiceProcess {
         return true;
     }
     bool stopping() const {
-        return stop_ && WaitForSingleObject(stop_, 0) == WAIT_OBJECT_0;
+        return !currentInstallationAllowsStart() ||
+               (stop_ && WaitForSingleObject(stop_, 0) == WAIT_OBJECT_0);
     }
     // Called before the owner mutex is released, after all process work ends.
     void closeStopEvent() {
@@ -271,6 +274,10 @@ class ServiceController {
         }
     }
     bool ensureCore(bool explicitStart = false) {
+        if (!InstallationGate(core_.parent_path().parent_path())
+                 .allowsStart()) {
+            return false;
+        }
         auto state = readServiceState(identity_);
         if (state.disabled) {
             return false;

@@ -92,9 +92,9 @@ __declspec(dllexport) STDAPI DllCanUnloadNow() {
 }
 
 __declspec(dllexport) STDAPI DllUnregisterServer() {
-    fcitx::UnregisterCategoriesAndProfiles();
-    fcitx::UnregisterServer();
-    return S_OK;
+    const auto profile = fcitx::UnregisterCategoriesAndProfiles();
+    const auto server = fcitx::UnregisterServer();
+    return FAILED(profile) ? profile : server;
 }
 
 __declspec(dllexport) STDAPI DllRegisterServer() {

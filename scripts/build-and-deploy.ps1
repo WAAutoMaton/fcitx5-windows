@@ -166,7 +166,8 @@ try {
 
     Write-Host '[4/5] Validate staged outputs and run default CTest tests.'
     foreach ($file in @('bin/Fcitx5.exe', 'lib/fcitx5/libpinyin.dll', 'share/libime/sc.dict',
-            'lib/libime/zh_CN.lm', 'tsf/fcitx5-x86_64.dll', 'settings/Fcitx5Settings.exe')) {
+            'lib/libime/zh_CN.lm', 'tsf/fcitx5-x86_64.dll',
+            'setup/Fcitx5SetupHelper.exe', 'settings/Fcitx5Settings.exe')) {
         if (!(Test-Path -LiteralPath "$staging/$file" -PathType Leaf)) {
             throw "Missing staged output: $file"
         }
@@ -180,7 +181,7 @@ try {
     Write-Host '[5/5] Deploy the complete runtime tree.'
     Assert-DeploymentWritable $Prefix
     New-Item -ItemType Directory -Force $Prefix | Out-Null
-    foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'settings')) {
+    foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'setup', 'settings')) {
         Copy-Item -LiteralPath "$staging/$directory" -Destination $Prefix -Recurse -Force
     }
     Write-Output "Deployment ready: $Prefix"
