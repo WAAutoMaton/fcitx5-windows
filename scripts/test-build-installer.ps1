@@ -8,7 +8,8 @@ $temporary = Join-Path $root "build/installer-script-test $([guid]::NewGuid().To
 $prefix = Join-Path $temporary 'stage'
 $dependencies = Join-Path $temporary 'dependencies'
 $output = Join-Path $temporary 'output'
-$testState = @{ CompilerCalls = @(); CompilerExitCode = 0 }
+$testState = @{ CompilerCalls = @(); CompilerExitCode = 0; CompilerVersion = '7.1.0'; ExplicitVersion = '7.1.0'; Lookups = @() }
+$explicitIscc = Join-Path $temporary 'Inno Setup 7/ISCC.exe'
 
 function Assert-Failure([scriptblock]$Action, [string]$Message) {
     $failure = $null
@@ -21,11 +22,26 @@ function Assert-Failure([scriptblock]$Action, [string]$Message) {
 # Exercise packaging without executing a compiler or any installer.
 function Get-Command {
     param($Name, $ErrorAction)
+    $testState.Lookups += $Name
+    if ($Name -eq $explicitIscc) { return [pscustomobject]@{ Source = 'Invoke-ExplicitTestIscc' } }
     if ($Name -eq 'ISCC.exe') { return [pscustomobject]@{ Source = 'Invoke-TestIscc' } }
     Microsoft.PowerShell.Core\Get-Command @PSBoundParameters
 }
 
+function Invoke-ExplicitTestIscc {
+    if ($args -contains '--version') {
+        Set-Variable -Name LASTEXITCODE -Value 0 -Scope 1
+        return $testState.ExplicitVersion
+    }
+    Invoke-TestIscc @args
+    Set-Variable -Name LASTEXITCODE -Value $testState.CompilerExitCode -Scope 1
+}
+
 function Invoke-TestIscc {
+    if ($args -contains '--version') {
+        Set-Variable -Name LASTEXITCODE -Value 0 -Scope 1
+        return $testState.CompilerVersion
+    }
     $testState.CompilerCalls += ,@($args)
     $defines = @{}
     foreach ($argument in $args) {
@@ -51,11 +67,24 @@ try {
     Push-Location $temporary
     try {
         & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -WhatIf
-        if ((Test-Path $output) -or (Test-Path "$prefix/setup/managed-install") -or $testState.CompilerCalls.Count) {
+        if ((Test-Path $output) -or (Test-Path "$prefix/setup/managed-install") -or $testState.CompilerCalls.Count -or $testState.Lookups.Count) {
             throw 'WhatIf wrote packaging files or invoked the compiler.'
         }
         Assert-Failure { & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -WhatIf } 'Missing installer dependency: vc_redist.x64.exe'
-        & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -PackageVersion '0.1.2.0' -SkipRuntimes | Out-Null
+        $testState.CompilerVersion = '6.7.1'
+        Assert-Failure { & $entry -Prefix $prefix -Output $output -SkipRuntimes } 'Inno Setup 7 is required'
+        if ((Test-Path $output) -or (Test-Path "$prefix/setup/managed-install") -or $testState.CompilerCalls.Count) {
+            throw 'Unsupported compiler wrote packaging files or compiled the installer.'
+        }
+        $testState.Lookups = @()
+        & $entry -IsccPath $explicitIscc -Prefix $prefix -Dependencies $dependencies -Output $output -PackageVersion '0.1.2.0' -SkipRuntimes | Out-Null
+        if ($testState.Lookups.Count -ne 1 -or $testState.Lookups[0] -ne $explicitIscc) {
+            throw 'Explicit compiler path was not used exclusively.'
+        }
+        $testState.ExplicitVersion = '6.7.1'
+        Assert-Failure { & $entry -IsccPath $explicitIscc -Prefix $prefix -Output $output -SkipRuntimes } 'Inno Setup 7 is required'
+        $testState.ExplicitVersion = '7.1.0'
+        $testState.CompilerVersion = '7.1.0'
         $lite = 'Fcitx5-0.1.2.0-x64-no-runtime-setup'
         if ($testState.CompilerCalls.Count -ne 1 -or $testState.CompilerCalls[0] -notcontains '/DBundleRuntimes=0') {
             throw 'No-runtime package did not disable runtime bundling.'
@@ -73,7 +102,7 @@ try {
         foreach ($package in @($lite, $bundled)) {
             $runtimeFlag = if ($package -eq $lite) { 0 } else { 1 }
             $manifest = Get-Content -LiteralPath "$output/$package.manifest.txt"
-            if ($manifest -notcontains "package=$package" -or $manifest -notcontains "bundle-runtimes=$runtimeFlag") {
+            if ($manifest -notcontains "package=$package" -or $manifest -notcontains "bundle-runtimes=$runtimeFlag" -or $manifest -notcontains 'inno=7.1.0') {
                 throw "Incorrect or overwritten manifest for $package."
             }
             $hash = (Get-FileHash -LiteralPath "$output/$package.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -85,7 +114,7 @@ try {
         if (!(Test-Path -LiteralPath "$output/custom-no-runtime.manifest.txt")) { throw 'Custom package name was ignored.' }
         $testState.CompilerExitCode = 9
         Assert-Failure { & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -SkipRuntimes } 'ISCC failed (9)'
-        Write-Output 'PASS: runtime variants, missing dependencies, distinct manifests/checksums, custom names, compiler failure, arbitrary-CWD/space/quote paths and WhatIf.'
+        Write-Output 'PASS: explicit compiler path, Inno Setup 6 rejection, actual compiler version, runtime variants, missing dependencies, distinct manifests/checksums, custom names, compiler failure, arbitrary-CWD/space/quote paths and WhatIf.'
     } finally { Pop-Location }
 } finally {
     $resolved = [IO.Path]::GetFullPath($temporary)

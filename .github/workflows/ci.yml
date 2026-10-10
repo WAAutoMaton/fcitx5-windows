@@ -219,8 +219,12 @@ jobs:
         run: |
           $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7', 'C:/Program Files/Inno Setup 7', "$env:LOCALAPPDATA/Programs/Inno Setup 7" -Filter ISCC.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
           if (!$iscc) { throw 'ISCC.exe was not installed.' }
+          $version = (& $iscc.FullName --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^7\.\d+\.\d+(?:\..*)?(?:-.*)?$') { throw "Inno Setup 7 is required, got: $version" }
           Write-Output "Using $($iscc.FullName)"
+          Write-Output "Inno Setup version: $version"
           Get-AuthenticodeSignature $iscc.FullName | Format-List Status,SignerCertificate
+          "FCITX5_ISCC_PATH=$($iscc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Download locked runtime dependencies
         shell: pwsh
@@ -242,8 +246,8 @@ jobs:
 
       - name: Build installers with and without runtimes
         run: |
-          ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-setup
-          ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-no-runtime-setup -SkipRuntimes
+          ./scripts/build-installer.ps1 -IsccPath $env:FCITX5_ISCC_PATH -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-setup
+          ./scripts/build-installer.ps1 -IsccPath $env:FCITX5_ISCC_PATH -Prefix ./dist/installer-stage -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-no-runtime-setup -SkipRuntimes
 
       - name: Verify installer metadata
         run: |

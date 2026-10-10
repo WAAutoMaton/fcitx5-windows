@@ -5,6 +5,7 @@ param(
     [string]$Output = '',
     [string]$PackageVersion = '0.1.0.0',
     [string]$PackageName = '',
+    [string]$IsccPath = '',
     [switch]$SkipRuntimes
 )
 
@@ -36,16 +37,19 @@ if (!$SkipRuntimes) {
     }
 }
 if (!$PSCmdlet.ShouldProcess($Output, 'Build Fcitx5 Inno Setup installer')) { return }
-$iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+$iscc = if ($IsccPath) { Get-Command $IsccPath -ErrorAction Stop } else { Get-Command ISCC.exe -ErrorAction SilentlyContinue }
 if (!$iscc) {
     $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7',
-        'C:/Program Files/Inno Setup 7', 'C:/Program Files (x86)/Inno Setup 6',
-        'C:/Program Files/Inno Setup 6', "$env:LOCALAPPDATA/Programs/Inno Setup 7",
-        "$env:LOCALAPPDATA/Programs/Inno Setup 6" -Filter ISCC.exe -File -ErrorAction SilentlyContinue |
+        'C:/Program Files/Inno Setup 7', "$env:LOCALAPPDATA/Programs/Inno Setup 7" -Filter ISCC.exe -File -ErrorAction SilentlyContinue |
         Select-Object -First 1
 }
 if (!$iscc) { throw 'ISCC.exe was not found. Install the pinned Inno Setup compiler.' }
 $isccPath = if ($iscc -is [Array]) { $iscc[0].FullName } elseif ($iscc.PSObject.Properties['Source']) { $iscc.Source } else { $iscc.FullName }
+$compilerVersion = (& $isccPath --version | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $compilerVersion -notmatch '^7\.\d+\.\d+(?:\..*)?(?:-.*)?$') {
+    throw "Inno Setup 7 is required. Compiler: $isccPath; version output: $compilerVersion"
+}
+Write-Verbose "Using Inno Setup $compilerVersion at $isccPath"
 if (!$PackageName) {
     $PackageName = if ($SkipRuntimes) { "Fcitx5-$PackageVersion-x64-no-runtime-setup" } else { "Fcitx5-$PackageVersion-x64-setup" }
 }
@@ -72,7 +76,7 @@ Set-Content -LiteralPath (Join-Path $Prefix 'setup/managed-install') -Value 'FCI
     "bundle-runtimes=$bundleRuntimes"
     "commit=$((& git -C $root rev-parse HEAD).Trim())"
     "prefix=$Prefix"
-    "inno=7.x"
+    "inno=$compilerVersion"
 ) | Set-Content -LiteralPath $manifest -Encoding ascii
 & $isccPath "/DPrefix=$Prefix" "/DDependencies=$Dependencies" "/DBundleRuntimes=$bundleRuntimes" "/DOutputDirectory=$Output" "/DPackageVersion=$PackageVersion" "/DPackageName=$PackageName" (Join-Path $root 'installer/fcitx5.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)." }

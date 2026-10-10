@@ -224,4 +224,6 @@ GitHub hosted runner 已带开发运行库，且通常不代表普通交互桌�
 
 实施预计触及 `win32/setup/`（新增 helper/launcher）、`win32/dll/register.*`、`win32/ipc/service.h` 及服务生命周期调用点、`installer/fcitx5.iss`、`cmake/installer-lock.json`、`scripts/build-installer.ps1`、`scripts/test-installer.ps1` 和 `.github/workflows/ci.yml`。系统变更的逻辑配套 mock 回归，真实 VM 测试覆盖注册、普通应用输入与重启；无需为本方案创建子模块提交。
 
+CI 检查 Inno Setup 7 的实际版本并将完整编译器路径经 `GITHUB_ENV` 传给两个安装包构建的 `-IsccPath`，避免 PATH 中已有 Inno Setup 6 时选择错误版本。打包脚本在写入产物前校验编译器主版本为 7，并将实际版本写入 manifest；可在本地通过 `-IsccPath` 显式指定编译器。相关模拟回归已通过，本机使用显式 7.1.0 路径实际编译两种包成功，产物和日志位于 `build/ci-inno7-validation`；GitHub runner 上的完整 CI 尚待重跑确认。
+
 第一阶段实现已新增 `win32/setup/Fcitx5SetupHelper.exe`、Inno 脚本、固定依赖锁、打包脚本和 CI job，并增加安装维护状态及用户 profile 回归测试。本机 Inno Setup 7.1.0 已用完整隔离暂存树实际编译两种包，无警告/错误，产物位于 `dist/installer-variants`，对应清单和 SHA256 核对通过。含运行库包约 172.69 MiB，不含运行库包约 48.87 MiB；实际预处理结果和压缩日志验证后者不含两种运行库的文件条目及安装步骤。编译日志与预处理结果位于 `build/installer-variants`。打包脚本和 CI 编译器检查支持 Program Files、当前用户 `%LOCALAPPDATA%/Programs/Inno Setup 7` 安装位置。本机未修改输入法设置、执行注册/注销或真实安装；依赖安装、UAC、真实应用输入、卸载占用和重启清理仍需 CI/干净 VM 验证。

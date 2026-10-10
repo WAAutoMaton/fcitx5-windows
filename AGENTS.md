@@ -189,6 +189,8 @@
 
 ## 当前验证记录
 
+- 安装包 CI 将检查通过的 Inno Setup 7 完整路径经 `GITHUB_ENV` 传给两个打包调用的 `-IsccPath`；打包脚本校验主版本为 7，不再搜索版本 6 安装目录，manifest 记录实际版本。`scripts/test-build-installer.ps1` 已覆盖 PATH 中为 6 时显式选择 7、默认及显式选择 6 的拒绝和实际版本记录；脚本及修改后的 CI PowerShell 语法检查、`git diff --check` 通过。本机使用显式 7.1.0 路径和 `build/all/prefix` 实际编译两种包，产物及日志位于 `build/ci-inno7-validation`；未执行安装器、注册/注销或修改输入法设置，GitHub runner 上的完整 CI 尚待重跑确认。
+
 - 安装包 CI 同时打包并发布含 VC++/Windows App Runtime 的 `Fcitx5-<run>-x64-setup.exe` 和不含它们的 `Fcitx5-<run>-x64-no-runtime-setup.exe`，共享完整暂存运行树，各自生成 manifest 和 SHA256。`scripts/build-installer.ps1 -SkipRuntimes` 不要求外部运行库安装程序存在；使用者须预先满足运行库要求，用户阶段仍检查 Settings runtime。`scripts/test-build-installer.ps1` 已通过模拟编译器回归，覆盖双版本开关、缺失依赖、独立清单/校验值、失败返回和无副作用预览；PowerShell 解析、发布附件模式及 `git diff --check` 已通过。本机当前用户目录的 Inno Setup 7.1.0 已实际编译两个版本，无警告/错误，产物位于 `dist/installer-variants`（含运行库约 172.69 MiB，不含约 48.87 MiB），依赖锁哈希及 EXE 校验值核对通过。实际 ISPP 及编译日志确认不含版无运行库文件条目或安装步骤，日志在 `build/installer-variants`；未运行安装器、注册/注销或修改输入法设置，双版本系统安装仍需 CI/干净 VM 验证。
 
 以下保留各功能落地时的验证结果；历史记录中的 8 项或更少测试是当时的集合。当前默认 CTest 为 10 项，`ENABLE_PINYIN_INTEGRATION_TESTS=ON` 另增加三个拼音 probes，共 13 项；词库和服务 probes 由各自脚本运行，不在该选项的 CTest 集合内。
