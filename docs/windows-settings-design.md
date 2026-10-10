@@ -4,7 +4,7 @@
 
 ## 推荐方案
 
-使用现有语言栏输入模式项提供右键菜单，菜单仅包含“输入法设置”。设置界面使用独立的 `Fcitx5Settings.exe`，采用 WinUI 3、C++/WinRT 和 XAML；通过现有用户/session 级 Named Pipe 与 Core 通信。第一阶段仅支持 Windows 11 和当前已经验证的 AMD64 部署。
+使用现有语言栏输入模式项提供右键菜单，包含“输入法设置”“重启服务”“关闭服务”。设置界面使用独立的 `Fcitx5Settings.exe`，采用 WinUI 3、C++/WinRT 和 XAML；通过现有用户/session 级 Named Pipe 与 Core 通信。第一阶段仅支持 Windows 11 和当前已经验证的 AMD64 部署。
 
 设置包含全拼/双拼和内置双拼键位。Core 是配置的唯一写入者和运行时状态的管理者，设置程序只保存尚未确认的界面草稿。用户点击确定，Core 确认保存并应用成功后关闭窗口。
 
@@ -60,12 +60,14 @@ flowchart LR
 - 不修改 Core 的进程级 DLL 搜索环境。设置程序拥有自己的运行库部署目录，两端只传递协议数据，不跨进程传递引擎对象或分配器。
 - 设置程序使用用户/session 级 named mutex 和 event 保证单实例；重复点击激活已有窗口，不依赖 AppLifecycle 的额外服务包。
 - 打开设置不自动改变中英文开关。窗口是普通可激活的顶层窗口，不把用户正在编辑的应用作为模态 owner。
-- Core 未运行、协议不匹配、设置程序缺失或启动失败时显示明确错误；第一阶段保留现有 Core 手动启动方式。
+- TSF 激活时在工作线程后台启动安装树的 Core，Settings 按需启动。协议不匹配、设置程序缺失或启动失败时显示错误。DLL 应部署在安装树的 `tsf` 目录，固定定位相邻 `bin/Fcitx5.exe`。
+- 重启服务正常停止并重启/启动 Core，原本打开的 Settings 在 Core 就绪后重新打开；关闭服务正常停止两者，并把当前登录会话的自动启动暂停状态保存到 `%LOCALAPPDATA%/fcitx5`。当前用户/session/logon LUID 级互斥防止重复启动，失败时共享 10 秒重试间隔。
+- Core 在主事件循环处理退出信号，Settings 在 UI 线程关闭。TSF 所在进程本身是 Settings 时，以独立的 `Fcitx5 --restart-services/--stop-services` 短暂控制进程等待其退出，避免宿主退出等待自身。正常关闭超时返回错误，不强制杀进程。
 - `OpenSettings` 回复只确认启动/激活请求结果，不等待 WinUI 初始化和用户操作。慢启动不得阻塞 Core 事件循环。
 
 ## 右键菜单
 
-菜单使用原生 `HMENU` / `TrackPopupMenuEx`，由 TSF 所在线程显示，内容为一条“输入法设置”。左键继续切换中英文模式，右键不触发模式切换。
+菜单使用原生 `HMENU` / `TrackPopupMenuEx`，由 TSF 所在线程显示，内容为“输入法设置”“重启服务”“关闭服务”。左键继续切换中英文模式，右键不触发模式切换。
 
 `LangBarItem::OnClick(TF_LBI_CLK_RIGHT, ...)` 接入右键弹出路径；`InitMenu(ITfMenu*)` 与 `OnMenuSelect()` 也提供相同菜单项和统一命令处理。命令选中后先发送消息给现有 dispatch window，再由 TSF 调用 `OpenSettings`，避免在菜单循环中执行 IPC。
 
@@ -174,7 +176,8 @@ probes 的适配器回调不能代替实际 OS 菜单派发和真实应用验证
 
 ## 本次验证
 
-- AMD64 Core、TSF Release、WinUI Release 构建通过，7 项默认 CTest 通过。
+- AMD64 Core、TSF Release、WinUI Release 构建通过，8 项默认 CTest 通过。
 - `ipc_probe`、`settings_probe` 和扩展后的 `tsf_probe` 通过，真实全拼/小鹤/自然码中文提交、英文保持、存储失败保留解码上下文和迟到编辑取消均验证。
 - 按用户明确授权安装当前用户的 x64 DDLM `8000.994.2142.0` 后，`scripts/test-settings-ui.ps1` 验证实际窗口、确定/取消、自然码/小鹤、重启恢复和单实例，截图在 `build/settings-ui-test`。窗口当前 200% 缩放正常；跨屏、文本缩放、高对比度和其他主题仍未全面验证。
 - 未执行输入法注册/注销，真实任务栏指示器右键菜单派发尚未实测。
+- 服务控制新增验证：`win32/build/service-tsf`、`dist/pinyin/tsf` 的实际 DLL 自动启动 Core、模拟菜单停止/重启、重新激活时保持暂停、按需启动 WinUI、重开原设置窗口、Settings 宿主委托退出和迟到 Settings 启动拒绝均通过。原有三个拼音 probes 和实际 WinUI 保存/取消、重启恢复、单实例重新通过，截图位于 `build/service-settings-ui-test`。

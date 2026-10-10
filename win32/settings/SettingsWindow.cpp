@@ -64,51 +64,16 @@ SettingsWindow::~SettingsWindow() {
     if (activation_) {
         CloseHandle(activation_);
     }
-    if (instance_) {
-        CloseHandle(instance_);
-    }
 }
 
 bool SettingsWindow::open() {
-    auto name = ipc::pipeName();
-    if (name.empty()) {
-        throw hresult_error(E_FAIL, L"Cannot locate the user/session");
-    }
-    for (auto &letter : name) {
-        if (letter == L'\\') {
-            letter = L'_';
-        }
-    }
-    name = L"Local\\Fcitx5Settings-" + name;
-    instance_ = CreateMutexW(nullptr, FALSE, name.c_str());
-    const auto existing = GetLastError() == ERROR_ALREADY_EXISTS;
-    if (!instance_) {
-        throw_last_error();
-    }
+    const auto name = ipc::settingsActivationBase();
     activation_ =
         CreateEventW(nullptr, FALSE, FALSE, (name + L"-activate").c_str());
     if (!activation_) {
         throw_last_error();
     }
     activationProperty_ = name + L"-window";
-    if (existing) {
-        EnumWindows(
-            [](HWND window, LPARAM argument) -> BOOL {
-                const auto *property =
-                    reinterpret_cast<const wchar_t *>(argument);
-                if (GetPropW(window, property)) {
-                    DWORD process = 0;
-                    GetWindowThreadProcessId(window, &process);
-                    AllowSetForegroundWindow(process);
-                    return FALSE;
-                }
-                return TRUE;
-            },
-            reinterpret_cast<LPARAM>(activationProperty_.c_str()));
-        SetEvent(activation_);
-        return false;
-    }
-
     window_ = Window();
     window_.Title(L"\u8f93\u5165\u6cd5\u8bbe\u7f6e");
     auto root = Markup::XamlReader::Load(LR"(
@@ -163,6 +128,10 @@ bool SettingsWindow::open() {
                  .CreateTimer();
     timer_.Interval(std::chrono::milliseconds(200));
     timer_.Tick([this](auto &&, auto &&) {
+        if (settingsServiceStopping()) {
+            window_.Close();
+            return;
+        }
         if (WaitForSingleObject(activation_, 0) == WAIT_OBJECT_0) {
             ShowWindow(handle_, IsIconic(handle_) ? SW_RESTORE : SW_SHOW);
             window_.Activate();

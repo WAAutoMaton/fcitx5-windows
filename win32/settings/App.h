@@ -1,5 +1,6 @@
 #pragma once
 
+#undef GetCurrentTime
 #include "App.g.h"
 #include "SettingsWindow.h"
 #include <winrt/Microsoft.UI.Xaml.Markup.h>

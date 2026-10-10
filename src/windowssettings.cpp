@@ -1,5 +1,6 @@
 #include "windowssettings.h"
 #include "../win32/ipc/atomicfile.h"
+#include "../win32/ipc/service.h"
 #include <charconv>
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/iniparser.h>
@@ -195,6 +196,9 @@ WindowsSettings::apply(const ipc::PinyinSettings &requested) {
 }
 
 ipc::SettingsError WindowsSettings::openWindow() const {
+    if (!ipc::serviceAutoStartAllowed()) {
+        return ipc::SettingsError::LaunchFailed;
+    }
     std::wstring executable(32768, L'\0');
     const auto size = GetModuleFileNameW(nullptr, executable.data(),
                                          static_cast<DWORD>(executable.size()));

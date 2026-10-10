@@ -182,9 +182,9 @@ For CTest alone, without starting Core:
 ctest --test-dir win32/build/pinyin-tsf --output-on-failure
 ```
 
-The default seven tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
-`test_transport`, `test_langbar` and `test_register`. Root/upstream tests are
-disabled by the default build configuration; these seven tests are not the full
+The default eight tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
+`test_transport`, `test_service`, `test_langbar` and `test_register`. Root/upstream tests are
+disabled by the default build configuration; these eight tests are not the full
 upstream test suite.
 
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
@@ -216,7 +216,7 @@ upstream test suite.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers all three probes with CTest;
 a deployed Core must already be running, bringing the total to ten. Release
-builds and the default seven tests passed for this change; earlier Debug and
+builds and the default eight tests passed for this change; earlier Debug and
 clean Release verification covered the previous six-test set. Real Pinyin and
 settings probes passed with the deployed Core.
 
@@ -230,8 +230,12 @@ If a registered DLL is locked during a rebuild, close applications using it or
 build TSF in a new directory and pass that directory with `-TsfBuild`. Repeating
 unregistration alone does not unload it from running applications. See the
 [README release helper instructions](../README.md#run) before using
-`release-tsf.ps1`: `-Force` terminates detected DLL-owner processes and can affect
-editors, browsers or Explorer.
+`release-tsf.ps1`: it defaults to `dist/pinyin/tsf/fcitx5-x86_64.dll`, supports
+`-Prefix`/`-DllPath`, and `-Force` terminates owners with verified exact DLL paths;
+these can include editors, browsers or Explorer. Preview with `-Force -WhatIf`
+without elevation. Install/uninstall helpers share the same path options and
+default, and request elevation only for real registration operations. None of
+these helpers stops Core/Settings as services; use the input indicator menu first.
 
 ## Protocol and Behavior
 
@@ -272,8 +276,8 @@ not persist separate unfinished preedits for multiple input fields.
 
 ## Windows Settings
 
-Right-clicking the language-bar input mode item opens a native menu with an
-input-method settings command. It asks Core to launch the independent WinUI 3
+Right-clicking the language-bar input mode item opens a native menu with
+`输入法设置`, `重启服务` and `关闭服务`. The settings command asks Core to launch the independent WinUI 3
 `settings/Fcitx5Settings.exe`. The Core connection and the settings launch are
 separate steps: a running Core can accept IPC while the settings window is
 missing or unable to initialize. The real OS right-click dispatch still
@@ -293,8 +297,22 @@ SDK 1.8 deployment. Install the matching x64 Framework and DDLM packages
 (minimum `8000.994.2142.0`) and the Visual C++ runtime for the current user.
 Build/test scripts do not install these packages.
 
-Start Core once before opening settings. The input indicator's `输入法设置`
-command sends `OpenSettings` through the Core pipe; it does not start Core and
+Deploy the DLL beside Core using the isolated deployment script:
+
+```powershell
+./scripts/deploy-tsf.ps1 -Prefix "$PWD/dist/pinyin" -TsfBuild "$PWD/win32/build/pinyin-tsf"
+```
+
+The resulting layout is `bin/Fcitx5.exe`, `tsf/fcitx5-x86_64.dll` and
+`settings/Fcitx5Settings.exe`. TSF uses its own DLL location to find the fixed
+adjacent Core path, without searching PATH or modifying the host's DLL search
+environment. A DLL loaded directly from the development build directory does
+not have this deployment layout. Register the deployed DLL explicitly when
+ready to test system dispatch; deployment scripts do not change registration.
+
+TSF activation automatically starts Core in the background on a worker thread.
+Settings starts only when requested. The input indicator's `输入法设置`
+command starts Core if necessary and sends `OpenSettings` through its pipe;
 it does not require registering the settings executable. After registering the
 TSF DLL and restarting the application that hosts it, select Fcitx5 with
 `Win+Space`, right-click the Fcitx5 input-mode item and choose `输入法设置`.
@@ -305,8 +323,25 @@ $settings = (Resolve-Path ".\dist\pinyin\settings\Fcitx5Settings.exe").Path
 Start-Process -FilePath $settings -WorkingDirectory (Split-Path $settings)
 ```
 
-Run only one Core process per user/session. A second Core process cannot claim
-the existing named pipe and exits. To distinguish connection and deployment
+`重启服务` gracefully stops and restarts Core, or starts it when absent. If
+Settings was open, it closes and reopens after Core is ready; otherwise it
+stays closed. `关闭服务` gracefully stops both processes and inhibits automatic
+startup for this login until `重启服务` is selected. Uncommitted composition is
+cancelled. The TSF DLL stays loaded and the language-bar menu remains available.
+If TSF is hosted by Settings itself, a short-lived Core control process handles
+the operation so it can wait for the old Settings process to exit.
+
+Service controls use current-user ACLs and SID/session/logon LUID/time names. Core
+checks its stop event in the main event loop; Settings checks it in the UI
+thread. A manual stop is recorded in a logon-specific `.state` file under
+`%LOCALAPPDATA%/fcitx5`, surviving unloading all TSF DLLs without applying to the
+next login. A shared 10-second retry interval prevents launch storms on failure.
+There is no forced termination by process name. A hung process yields a timeout
+instead of being killed. These lifecycle changes preserve IPC protocol v4;
+deploy updated Core, TSF and Settings together for the new control behavior.
+
+Run only one Core process per user/session. A second Core process detects the
+owned instance mutex and exits without initializing an engine. To distinguish connection and deployment
 failures, run the probes from the repository root:
 
 ```powershell
@@ -348,6 +383,26 @@ separate settings file and captures screenshots. Run on an interactive desktop
 with the required runtime. It does not register or unregister the TIP. Real
 full/Xiaohe/Ziranma conversion is covered by `settings_probe` and `tsf_probe`.
 See [the design](windows-settings-design.md) for deployment and validation details.
+
+Validate automatic startup and service controls with no existing Core/Settings:
+
+```powershell
+./scripts/test-service.ps1 -Prefix "$PWD/dist/pinyin" -TsfBuild "$PWD/win32/build/pinyin-tsf"
+./scripts/test-service.ps1 -Prefix "$PWD/dist/pinyin" -TsfBuild "$PWD/win32/build/pinyin-tsf" -WithSettings
+```
+
+`service_probe` loads the deployed DLL, uses a real TSF thread manager with the
+existing key/language-bar adapters, and explicitly invokes menu callbacks.
+It restores the original service-control state and does not change IM
+registration. The settings variant requires the installed WinUI runtime and
+also models a Settings process hosting TSF. It is separate from default CTest
+because it requires a complete deployment and starts real service processes.
+
+The service-control change passed AMD64 Core, TSF Release and WinUI Release
+builds, all eight default CTests, the service probe with actual WinUI, and all
+three existing Pinyin probes. The WinUI save/cancel, restart and single-instance
+test passed again with screenshots in `build/service-settings-ui-test`.
+Registered-TIP OS menu dispatch remains unverified.
 
 ## Remaining Validation and Limits
 

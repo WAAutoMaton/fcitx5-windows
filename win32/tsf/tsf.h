@@ -6,6 +6,7 @@
 #include <atlcomcli.h>
 #include <bitset>
 #include <deque>
+#include <future>
 #include <msctf.h>
 #include <string>
 
@@ -89,6 +90,8 @@ class Tsf : public ITfTextInputProcessorEx,
     void finishEdit(uint64_t generation, HRESULT result);
     void cancelComposition();
     void pollState();
+    void requestService(UINT command);
+    void pollServiceTask();
     bool initMessageWindow();
     static LRESULT CALLBACK messageWindowProc(HWND window, UINT message,
                                               WPARAM wParam, LPARAM lParam);
@@ -119,6 +122,15 @@ class Tsf : public ITfTextInputProcessorEx,
     HWND messageWindow_ = nullptr;
     ULONGLONG nextReconnect_ = 0;
     bool foreground_ = true;
+    static constexpr UINT kEnsureServiceMessage = WM_APP + 7;
+    struct ServiceResult {
+        DWORD error;
+        bool closingHost = false;
+    };
+    std::future<ServiceResult> serviceTask_;
+    UINT serviceCommand_ = 0;
+    UINT pendingServiceCommand_ = 0;
+    bool serviceHostClosing_ = false;
     TfGuidAtom attributeAtom_ = TF_INVALID_GUIDATOM;
     bool keyEventSinkAdvised_ = false;
     bool modeSwitchPreserved_ = false;

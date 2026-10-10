@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../ipc/service.h"
 #include "../tsf/pipeclient.h"
 #undef GetCurrentTime
 #include <memory>
@@ -9,6 +10,7 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 
 namespace fcitx {
+bool settingsServiceStopping();
 class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
   public:
     ~SettingsWindow();
@@ -29,7 +31,6 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     bool loaded_ = false;
     bool closed_ = false;
     bool doubleAvailable_ = false;
-    HANDLE instance_ = nullptr;
     HANDLE activation_ = nullptr;
     HWND handle_ = nullptr;
     std::wstring activationProperty_;

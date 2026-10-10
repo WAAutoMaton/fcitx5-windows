@@ -1,3 +1,4 @@
+#include "../win32/ipc/service.h"
 #include "windowsfrontend.h"
 #include "windowskeyboard.h"
 #include <fcitx-utils/environ.h>
@@ -43,7 +44,8 @@ void setupEnv() {
     setenv("LIBIME_MODEL_DIRS", (rootPath / "lib" / "libime").string());
 }
 
-void start(const ::fs::path &settingsFile) {
+void start(const ::fs::path &settingsFile,
+           win32::ipc::ServiceProcess &service) {
     Log::setLogRule("*=3,notimedate");
     setupEnv();
     instance = std::make_unique<Instance>(0, nullptr);
@@ -84,7 +86,22 @@ void start(const ::fs::path &settingsFile) {
     pipeServer = std::make_unique<fcitx::win32::WindowsPipeServer>(
         *instance, *dispatcher, settingsFile);
     pipeServer->start();
+    auto shutdown = instance->eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 100000, 0,
+        [&service](EventSourceTime *source, uint64_t) {
+            if (service.stopping()) {
+                instance->eventLoop().exit();
+            } else {
+                source->setNextInterval(100000);
+                source->setOneShot();
+            }
+            return true;
+        });
+    if (!shutdown) {
+        throw std::runtime_error("Cannot watch Core shutdown requests");
+    }
     instance->eventLoop().exec();
+    shutdown.reset();
     pipeServer->stop();
     pipeServer.reset();
     dispatcher.reset();
@@ -94,6 +111,40 @@ void start(const ::fs::path &settingsFile) {
 
 int main(int argc, char **argv) {
     try {
+        if (argc == 2 && (std::string_view(argv[1]) == "--stop-services" ||
+                          std::string_view(argv[1]) == "--restart-services")) {
+            std::wstring path(32768, L'\0');
+            const auto size = GetModuleFileNameW(
+                nullptr, path.data(), static_cast<DWORD>(path.size()));
+            if (!size || size >= path.size()) {
+                fcitx::win32::ipc::serviceError();
+            }
+            path.resize(size);
+            const fs::path core(path);
+            fcitx::win32::ipc::ServiceController controller(core);
+            if (std::string_view(argv[1]) == "--stop-services") {
+                controller.stop();
+            } else if (controller.restart()) {
+                bool ready = false;
+                for (unsigned attempt = 0; attempt < 50; ++attempt) {
+                    if (WaitNamedPipeW(fcitx::win32::ipc::pipeName().c_str(),
+                                       50)) {
+                        ready = true;
+                        break;
+                    }
+                    Sleep(100);
+                }
+                if (!ready) {
+                    fcitx::win32::ipc::serviceError(
+                        ERROR_SERVICE_REQUEST_TIMEOUT);
+                }
+                fcitx::win32::ipc::launchServiceExecutable(
+                    core.parent_path().parent_path() / "settings" /
+                        "Fcitx5Settings.exe",
+                    false);
+            }
+            return 0;
+        }
         fs::path settingsFile;
         if (argc == 3 &&
             std::string_view(argv[1]) == "--windows-settings-file") {
@@ -101,12 +152,22 @@ int main(int argc, char **argv) {
                 std::u8string(reinterpret_cast<const char8_t *>(argv[2]))));
         } else if (argc != 1) {
             throw std::runtime_error(
-                "Usage: Fcitx5 [--windows-settings-file PATH]");
+                "Usage: Fcitx5 [--windows-settings-file PATH | "
+                "--stop-services | --restart-services]");
         }
-        fcitx::start(settingsFile);
+        fcitx::win32::ipc::ServiceProcess service(L"Core");
+        if (!service.acquire()) {
+            return 0;
+        }
+        fcitx::start(settingsFile, service);
         return 0;
     } catch (const std::exception &error) {
         FCITX_ERROR() << error.what();
+        if (argc == 2 && (std::string_view(argv[1]) == "--stop-services" ||
+                          std::string_view(argv[1]) == "--restart-services")) {
+            MessageBoxW(nullptr, L"Cannot stop or restart Fcitx5 services.",
+                        L"Fcitx5", MB_OK | MB_ICONERROR);
+        }
         return 1;
     }
 }

@@ -7,7 +7,12 @@ extern void DllRelease();
 namespace fcitx {
 Tsf::Tsf() { DllAddRef(); }
 
-Tsf::~Tsf() { DllRelease(); }
+Tsf::~Tsf() {
+    if (serviceTask_.valid()) {
+        serviceTask_.wait();
+    }
+    DllRelease();
+}
 
 // Windows also queries ITfDisplayAttributeCollectionProvider
 // {3977526D-1A0A-435A-8D06-ECC9516B484F} which is internal and we simply

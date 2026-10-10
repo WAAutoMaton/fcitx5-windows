@@ -3,7 +3,7 @@ add_executable(Fcitx5
     windowsfrontend.cpp
     windowssettings.cpp
 )
-target_link_libraries(Fcitx5 Fcitx5::Core advapi32)
+target_link_libraries(Fcitx5 Fcitx5::Core advapi32 secur32)
 
 if (ENABLE_WINDOWS_ASCII_FALLBACK)
     target_compile_definitions(Fcitx5 PRIVATE FCITX5_WINDOWS_ASCII_FALLBACK)

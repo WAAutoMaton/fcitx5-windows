@@ -13,6 +13,18 @@ namespace {
 constexpr wchar_t kDescription[] = L"Fcitx5 input mode";
 constexpr wchar_t kTooltipChinese[] = L"Fcitx5 Pinyin - Chinese input";
 constexpr wchar_t kTooltipEnglish[] = L"Fcitx5 Pinyin - English input";
+struct MenuCommand {
+    UINT id;
+    UINT message;
+    const wchar_t *text;
+};
+constexpr MenuCommand kCommands[] = {
+    {LangBarItem::kSettingsMenuId, LangBarItem::kSettingsMessage,
+     L"\u8f93\u5165\u6cd5\u8bbe\u7f6e"},
+    {LangBarItem::kRestartMenuId, LangBarItem::kRestartMessage,
+     L"\u91cd\u542f\u670d\u52a1"},
+    {LangBarItem::kStopMenuId, LangBarItem::kStopMessage,
+     L"\u5173\u95ed\u670d\u52a1"}};
 
 HICON makeTextIcon(const wchar_t *text) {
     const auto baseSize = GetSystemMetrics(SM_CXSMICON);
@@ -170,8 +182,12 @@ STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT point, const RECT *) {
         const auto owner =
             CreateWindowExW(WS_EX_TOOLWINDOW, L"STATIC", L"", WS_POPUP, point.x,
                             point.y, 0, 0, nullptr, nullptr, nullptr, nullptr);
-        if (!owner || !AppendMenuW(menu, MF_STRING, kSettingsMenuId,
-                                   L"\u8f93\u5165\u6cd5\u8bbe\u7f6e")) {
+        bool populated = owner != nullptr;
+        for (const auto &command : kCommands) {
+            populated = populated &&
+                        AppendMenuW(menu, MF_STRING, command.id, command.text);
+        }
+        if (!populated) {
             if (owner) {
                 DestroyWindow(owner);
             }
@@ -196,19 +212,27 @@ STDMETHODIMP LangBarItem::InitMenu(ITfMenu *menu) {
     if (!menu) {
         return E_INVALIDARG;
     }
-    constexpr wchar_t text[] = L"\u8f93\u5165\u6cd5\u8bbe\u7f6e";
-    return menu->AddMenuItem(kSettingsMenuId, 0, nullptr, nullptr, text,
-                             static_cast<ULONG>(std::size(text) - 1), nullptr);
+    for (const auto &command : kCommands) {
+        const auto result = menu->AddMenuItem(
+            command.id, 0, nullptr, nullptr, command.text,
+            static_cast<ULONG>(wcslen(command.text)), nullptr);
+        if (FAILED(result)) {
+            return result;
+        }
+    }
+    return S_OK;
 }
 
 STDMETHODIMP LangBarItem::OnMenuSelect(UINT id) {
-    if (id != kSettingsMenuId) {
-        return E_INVALIDARG;
+    for (const auto &command : kCommands) {
+        if (id == command.id) {
+            return !dispatchWindow_ ||
+                           PostMessageW(dispatchWindow_, command.message, 0, 0)
+                       ? S_OK
+                       : E_FAIL;
+        }
     }
-    return !dispatchWindow_ ||
-                   PostMessageW(dispatchWindow_, kSettingsMessage, 0, 0)
-               ? S_OK
-               : E_FAIL;
+    return E_INVALIDARG;
 }
 
 STDMETHODIMP LangBarItem::GetIcon(HICON *phIcon) {

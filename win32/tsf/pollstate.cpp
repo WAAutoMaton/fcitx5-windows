@@ -53,20 +53,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
-    if (self && message == LangBarItem::kSettingsMessage) {
+    if (self && (message == LangBarItem::kSettingsMessage ||
+                 message == LangBarItem::kRestartMessage ||
+                 message == LangBarItem::kStopMessage ||
+                 message == kEnsureServiceMessage)) {
         self->AddRef();
-        PipeClient connection;
-        ipc::SettingsReply reply;
-        if (!connection.connect() || !connection.openSettings(reply) ||
-            reply.error != ipc::SettingsError::None) {
-            MessageBoxW(nullptr,
-                        L"\u65e0\u6cd5\u6253\u5f00\u8f93\u5165\u6cd5\u8bbe"
-                        L"\u7f6e\u3002\n"
-                        L"\u8bf7\u786e\u8ba4 Core "
-                        L"\u5df2\u542f\u52a8\uff0c\u4e14\u8bbe\u7f6e\u7a0b"
-                        L"\u5e8f\u5df2\u90e8\u7f72\u3002",
-                        L"Fcitx5", MB_OK | MB_ICONERROR);
-        }
+        self->requestService(message);
         self->Release();
         return 0;
     }
@@ -74,6 +66,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
 }
 
 void Tsf::pollState() {
+    pollServiceTask();
+    if (serviceHostClosing_ ||
+        serviceCommand_ == LangBarItem::kRestartMessage ||
+        serviceCommand_ == LangBarItem::kStopMessage) {
+        return;
+    }
     if (!textEditSinkContext_ || !foreground_) {
         return;
     }
@@ -83,6 +81,7 @@ void Tsf::pollState() {
         }
         nextReconnect_ = GetTickCount64() + 2000;
         if (!pipe_.connect()) {
+            requestService(kEnsureServiceMessage);
             return;
         }
     }

@@ -50,6 +50,12 @@ STDAPI Tsf::Activate(ITfThreadMgr *pThreadMgr, TfClientId tfClientId) {
 }
 
 STDAPI Tsf::Deactivate() {
+    if (serviceTask_.valid()) {
+        serviceTask_.get();
+    }
+    serviceCommand_ = 0;
+    pendingServiceCommand_ = 0;
+    serviceHostClosing_ = false;
     uninitLangBarItem();
     if (messageWindow_) {
         const auto module = reinterpret_cast<HINSTANCE>(
@@ -113,6 +119,7 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD) {
         goto ActivateExError;
     }
 
+    PostMessageW(messageWindow_, kEnsureServiceMessage, 0, 0);
     return S_OK;
 
 ActivateExError:

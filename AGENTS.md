@@ -31,18 +31,20 @@
 
 ## 当前架构与实现边界
 
-### 两套独立构建工程
+### 三套独立构建工程
 
 - 根工程构建上游库及 `src/main.cpp`，没有调用 `add_subdirectory(win32)`。
 - `win32` 工程构建 `tsf` 静态库和 `fcitx5-x86_64` DLL；DLL 目前只链接 `tsf`，没有链接 Fcitx5 Core。
 - 根工程使用 MSYS2 / Clang Windows GNU 工具链；TSF 工程依赖 Windows SDK 和 ATL。不要将两者的编译器、头文件、运行库环境混为一谈。
-- Core 是独立宿主进程，TSF DLL 加载到应用进程，两者通过用户级 Named Pipe 通信，不传递 C++ 对象、分配器或引擎 ABI；当前没有 Core 自动启动或统一安装器。
+- `win32/settings` 使用独立 MSBuild 工程构建 WinUI 设置程序。
+- Core 是独立宿主进程，TSF DLL 加载到应用进程，两者通过用户级 Named Pipe 通信，不传递 C++ 对象、分配器或引擎 ABI。TSF 激活后在工作线程自动后台启动 Core；Settings 按需启动。当前没有统一安装器。
 
 ### IPC、线程与状态设计
 
 - `win32/ipc/protocol.h` 定义协议 v4 framing；服务在 `src/windowsfrontend.cpp`，客户端在 `win32/tsf/pipeclient.cpp`。新增 context-independent 的 OpenSettings/GetSettings/SetSettings；按键回复增加设置运行时代次。升级协议必须同时更新 Core、TSF DLL 和设置程序。
 - 管道按 SID/Windows session 命名，设置当前用户 ACL、拒绝远程访问、支持多连接，并校验 context 的连接归属。服务端回收断开的 contexts；客户端采用可取消 overlapped I/O，每次读写等待上限为 500 ms。
 - 服务线程通过 `EventDispatcher` 将请求投递到 Core 主事件循环；TSF 在自身线程通过隐藏消息窗口每 100 ms 轮询延迟变化，断开后在有焦点 context 时每两秒尝试重连。当前没有服务端异步推送，超时请求不重放。
+- `win32/ipc/service.h` 提供当前用户、session 和登录身份（LUID、登录时间）级服务互斥和正常退出事件；Core 在主事件循环检查退出，Settings 在 UI 线程关闭窗口。启动失败共享 10 秒重试间隔，手动关闭状态保存于当前登录的 `%LOCALAPPDATA%/fcitx5/*.state`，所有 DLL 卸载后仍有效，重启服务解除。不得按进程名强制终止用户应用。
 - TSF 订阅线程管理器的 `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`，系统开关、Ctrl+Space 和语言栏点击复用同一模式状态及 Core SetMode。新的焦点 context 和重连继承该状态；预编辑按焦点创建/销毁，不保存多个输入框的未提交文本。
 - 按键测试回调无 IPC 或编辑副作用。实际按键消费依据 Core 回复；编辑请求持有原始 context、代次和不可变快照，串行处理并拒绝迟到请求写入新 context。IPC 超时或文档写入失败仍可能丢失输入，不提供跨进程故障的 exactly-once 保证。
 
@@ -60,7 +62,8 @@
 - 语言栏对象停用后隐藏并解除窗口绑定；对象独立持有 DLL 引用，迟到点击不影响新激活实例。用户已在重新注册后确认输入指示器功能正常，多显示器 DPI、主题及 Explorer 重启行为仍未验证。
 - `test_dll` 仍仅测试辅助函数；`test_langbar` 覆盖语言栏 COM 接口、通知、图标像素和生命周期。`ipc_probe` 验证真实拼音，`tsf_probe` 加载实际 DLL 并使用真实 TSF context 和内存 text store，但以测试适配器代替未注册 TIP 的按键订阅和语言栏管理器，并显式模拟按键/焦点/语言栏点击回调。
 - `test_register` 加载实际 DLL 检查内嵌品牌图标和 Shell 图标提取，使用模拟 COM 管理器验证 profile 字符长度、DLL 路径、类别和失败返回；不执行系统注册或修改输入法设置。
-- 语言栏右键通过原生 popup menu 提供“输入法设置”，选中后经消息窗口请求 Core 启动独立 WinUI 3/C++/WinRT 设置程序。真实已注册指示器右键派发尚未验证；左键仍切换中英文。
+- 语言栏右键通过原生 popup menu 提供“输入法设置”“重启服务”“关闭服务”。重启会重启/启动 Core，只有原本打开的 Settings 才重新打开；关闭会停止两者并暂停自动拉起。TSF 在 Settings 自身进程内时，由短暂运行的 `Fcitx5 --restart-services/--stop-services` 控制进程等待宿主退出，避免等待自身。真实已注册指示器右键派发尚未验证；左键仍切换中英文。
+- `scripts/deploy-tsf.ps1 -Prefix -TsfBuild` 将 DLL 复制到隔离安装树的 `tsf`，自动启动固定定位相邻 `bin/Fcitx5.exe`；Settings 位于 `settings/Fcitx5Settings.exe`。脚本不注册或注销，旧构建目录 DLL 不能自动推断 Core 安装路径。
 - `win32/settings` 是第三套独立 MSBuild 工程，使用框架依赖的 Windows App SDK 1.8；要求当前用户有 x64 Framework/DDLM >= 8000.994.2142.0 和 Visual C++ 运行库。`scripts/build-settings.ps1 -Prefix` 部署到隔离安装树的 `settings`，不安装系统运行时。
 - 设置窗口提供全拼/双拼及八种内置键位；Core 在主事件循环切换 `pinyin`/`shuangpin` entry 和真实 `ShuangpinProfile`，保存用户 `conf/windows.conf` 并在重启恢复。存储失败先返回，不清空解码上下文；成功切换取消预编辑，英文 context 保持关闭。设置运行时代次拒绝旧预编辑但保留已经接收的提交。
 
@@ -165,8 +168,9 @@
 - TSF 编辑应在合适的编辑会话中进行，确保异步操作持有正确的 context，避免依赖已经变化的焦点状态。
 - 核心事件循环与 Windows/TSF 调用之间需要明确线程边界；不要从任意回调线程直接操作核心状态。
 - 涉及 DLL 内嵌核心或独立进程 IPC 的任务，先说明所选方案及线程、生命周期、ABI/运行库和部署影响，不假设两套工程可以直接拼接。
-- `install.ps1` / `uninstall.ps1` 会请求管理员权限并修改注册状态，而且路径依赖在 `win32` 下运行。未经用户明确要求，不执行注册、注销或修改系统输入法设置。
-- `win32/scripts/release-tsf.ps1` 默认注销 `win32/build/pinyin-tsf/dll/fcitx5-x86_64.dll`；`-SkipUnregister` 跳过注销，`-Force` 会终止检测到占用 DLL 的进程，可能包括编辑器、浏览器和 Explorer。Handle/`tasklist /m` 检测按 DLL 文件名匹配，可能覆盖其他构建目录的同名 DLL；不能作为普通测试或解锁步骤自动执行，注销和终止应用均需用户明确授权。
+- `install.ps1` / `uninstall.ps1` 默认操作仓库 `dist/pinyin/tsf/fcitx5-x86_64.dll`，不依赖当前工作目录；支持 `-Prefix` 或 `-DllPath` 以及 `-WhatIf`。实际注册/注销按需请求管理员权限并等待结果，不停止服务或删除文件。未经用户明确要求，不执行注册、注销或修改系统输入法设置。
+- `win32/scripts/release-tsf.ps1` 默认注销同一部署 DLL，支持 `-Prefix`/`-DllPath`；`-SkipUnregister` 跳过注销，`-Force` 会终止核实加载精确 DLL 路径的进程，可能包括编辑器、浏览器和 Explorer。Handle/`tasklist /m` 候选必须经实际模块路径核对，无法核对的进程不终止。`-WhatIf` 不要求提权，不调用 Handle、不接受 EULA、不重启 ctfmon。不能作为普通测试或解锁步骤自动执行，注销和终止应用均需用户明确授权；服务停止请使用指示器菜单。
+- `win32/tests/test_scripts.ps1` 独立验证注册/释放脚本的路径、参数引号、退出码、`-WhatIf` 和精确 DLL 路径筛选；系统变更命令和进程发现全部使用模拟，要求默认部署 DLL 存在，不属于 CTest。可在不修改系统注册、不终止应用的情况下运行。
 - 注册元数据更新需要重新注册；注销不会让已有应用立即卸载 DLL。遇到 DLL 被占用，优先采用隔离构建目录，不自动终止宿主进程或重启 Explorer。
 - 不自动修改注册表、复制文件到系统目录、执行安装包，或将这些操作作为普通测试步骤。
 - 不创建提交或新分支，除非用户明确要求。
@@ -174,10 +178,13 @@
 
 ## 当前验证记录
 
-- AMD64 Core、libime、chinese-addons 已构建；使用 SHA256 固定预编译数据的拼音部署链路已验证。本次 Core、TSF Release 和 WinUI Release 构建、7 项默认 CTest 均已通过；先前 TSF Debug/干净 Release 记录仍有效。默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`；direct-input 引擎只放行按键，不自行提交 ASCII。
+- AMD64 Core、libime、chinese-addons 已构建；使用 SHA256 固定预编译数据的拼音部署链路已验证。本次 Core、TSF Release 和 WinUI Release 构建、8 项默认 CTest 均已通过；先前 TSF Debug/干净 Release 记录仍有效。默认 `ENABLE_KEYBOARD=OFF`、`ENABLE_WINDOWS_ASCII_FALLBACK=OFF`；direct-input 引擎只放行按键，不自行提交 ASCII。
 - `ipc_probe` 验证真实拼音，`tsf_probe` 验证实际 DLL 和真实 TSF context 的文本插入，包括 `nihao` 中文选词/提交、异步取消、焦点及迟到请求隔离、compartment 和语言栏生命周期。probe 的按键订阅、语言栏管理和点击/快捷键回调使用测试适配器，不能据此宣称真实 OS 派发已验证。只注册精确 Ctrl+Space preserved key，不注册普通 Space。
 - 用户实测确认重新注册后的“中/A”输入指示器功能正常；测试应用和完整 Windows 版本矩阵未记录。普通应用输入、候选窗口视觉效果、主题、Explorer 重启、多显示器 DPI 和 ARM64 拼音/TSF 仍未完成全面验证。
 - `scripts/test-pinyin.ps1` 默认使用 `dist/pinyin` 和 `win32/build/pinyin-tsf`，可通过 `-Prefix` / `-TsfBuild` 指定隔离路径；已有 Core 运行时拒绝执行。脚本使用独立 Windows 设置文件启动 Core、运行三个 probes 和 CTest，再停止自身启动的进程，日志在 `build/pinyin-test`；不执行注册、注销或修改系统输入法设置。
-- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将 ipc_probe、tsf_probe、settings_probe 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 7 项，不等同于真实应用输入或上游全套测试。
+- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将 ipc_probe、tsf_probe、settings_probe 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 8 项（新增 `test_service`），不等同于真实应用输入或上游全套测试。
+- `scripts/test-service.ps1 -Prefix -TsfBuild [-WithSettings]` 加载部署树中的实际 DLL，以测试适配器激活 TSF 并模拟菜单命令，验证真实 Core 自动启动、关闭、重启、暂停自动启动及 DLL 生命周期；`-WithSettings` 额外验证实际 WinUI 窗口重新打开和 Settings 宿主的委托退出。拒绝已有 Core/Settings，结束恢复原有服务控制状态，不执行系统注册或修改输入法设置。
+- 本次使用 `win32/build/service-tsf` 和 `dist/pinyin/tsf` 通过上述服务控制 probe（含实际 WinUI、Settings 宿主委托及手动停止后的迟到启动拒绝），并重新通过 `scripts/test-pinyin.ps1` 的三个 probes 和 8 项 CTest。`scripts/test-settings-ui.ps1` 重新通过保存/取消、双拼键位、重启恢复和单实例，截图位于 `build/service-settings-ui-test`。未执行注册/注销，真实 OS 右键派发仍未验证。
+- 注册/释放脚本更新通过 `win32/tests/test_scripts.ps1` 的模拟回归及三个管理脚本的真实 `-WhatIf` 预览，覆盖任意工作目录、含空格/单引号路径、失败退出码、参数错误、精确路径筛选和 ctfmon 预览无副作用；未执行真实注册/注销、UAC 提权或终止应用。
 - 本次 `settings_probe` 验证全拼/小鹤/自然码候选与提交、英文保持、冲突/幂等/非法值、国标配置映射；只读存储失败保持真实解码预编辑。`tsf_probe` 额外覆盖小鹤/自然码文档写入及设置变化时旧异步预编辑取消。
 - 经用户明确授权安装当前用户 DDLM 后，`scripts/test-settings-ui.ps1` 验证实际 WinUI 框架依赖窗口的加载、确定/取消、键位选择、重启恢复、单实例，截图在 `build/settings-ui-test`。未执行输入法注册/注销；真实右键派发、跨屏 DPI 和完整主题验证仍未完成。
