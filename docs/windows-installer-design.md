@@ -88,7 +88,7 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 ## 卸载与 DLL 占用
 
-开始菜单和 Windows 应用卸载项指向 `Fcitx5SetupHelper.exe uninstall`。普通权限入口处理当前用户输入偏好及服务后再提权；仅在当前默认仍为 Fcitx5 时恢复原项或选择有效替代项。管理员阶段校验安装归属、写维护状态、查询占用、注销，然后运行 Inno 原生卸载器。
+开始菜单和 Windows 应用卸载项指向 `Fcitx5SetupHelper.exe uninstall`。普通权限入口处理当前用户输入偏好及服务后再提权；仅在当前默认仍为 Fcitx5 时恢复原项或选择有效替代项。管理员阶段校验安装归属、写维护状态、查询占用、注销，然后运行 Inno 原生卸载器；原生卸载成功或返回 `3010` 后，helper 还会删除安装后动态创建的 `setup/install-state`。
 
 传给 Inno 的参数为 `/NORESTART /HELPER=1`；静默时另加 `/VERYSILENT /SUPPRESSMSGBOXES`。`/HELPER=1` 避免原生卸载器重复维护/注销。文件条目使用 `uninsrestartdelete`，被占用时可能延迟到重启删除。launcher 在占用且原生卸载成功时返回 `ERROR_SUCCESS_REBOOT_REQUIRED`（`3010`），保留该返回码且不弹失败提示。不会调用 `RmShutdown`、结束 Explorer/ctfmon 或按进程名杀用户应用。
 

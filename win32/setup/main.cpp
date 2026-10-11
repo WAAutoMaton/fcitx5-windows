@@ -339,6 +339,16 @@ DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
     if (result == 0 && lock) {
         result = ERROR_SUCCESS_REBOOT_REQUIRED;
     }
+    if (result == ERROR_SUCCESS || result == ERROR_SUCCESS_REBOOT_REQUIRED) {
+        std::error_code error;
+        fs::remove(root / "setup" / "install-state", error);
+        if (error) {
+            fcitx::setup::logMessage(
+                "Cannot remove installer state after uninstall: " +
+                error.message());
+            result = ERROR_WRITE_FAULT;
+        }
+    }
     return result;
 }
 

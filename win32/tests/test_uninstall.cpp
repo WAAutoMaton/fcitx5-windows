@@ -212,7 +212,14 @@ int main() {
             commandLine += L" --elevated";
         if (silent)
             commandLine += L" --silent";
-        return static_cast<DWORD>(wWinMain(nullptr, nullptr, nullptr, 0));
+        std::ofstream(root / "setup" / "install-state") << "maintenance\n";
+        const auto outcome =
+            static_cast<DWORD>(wWinMain(nullptr, nullptr, nullptr, 0));
+        if (outcome == ERROR_SUCCESS || outcome == ERROR_SUCCESS_REBOOT_REQUIRED)
+            assert(!fs::exists(root / "setup" / "install-state"));
+        else
+            assert(fs::exists(root / "setup" / "install-state"));
+        return outcome;
     };
     for (const bool elevated : {false, true}) {
         for (const bool silent : {false, true}) {
