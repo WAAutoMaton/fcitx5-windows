@@ -30,6 +30,7 @@ class TextStore : public ITextStoreACP {
     bool emptyRectangle = false;
     LONG anchorX = 10;
     HWND window() const { return window_; }
+    const TS_SELECTION_ACP &selection() const { return selection_; }
     HRESULT notifyLayout() {
         return sink_ ? sink_->OnLayoutChange(TS_LC_CHANGE, 1) : E_FAIL;
     }

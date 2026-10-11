@@ -198,6 +198,52 @@ void tests() {
     pump();
     assert(window.visible());
 
+    // Move through UTF-8 preedit without rewriting the document. The host gets
+    // a collapsed, active selection at the corresponding UTF-16 position.
+    const auto start = store->selection().acpStart - 1;
+    auto cursorReply = snapshot(2, "\xe4\xbd\xa0\xf0\x9f\x98\x80hao", "cursor");
+    const auto checkCaret = [&](LONG offset) {
+        const auto &selection = store->selection();
+        assert(selection.acpStart == start + offset);
+        assert(selection.acpEnd == selection.acpStart);
+        assert(selection.style.ase == TS_AE_END);
+        assert(!selection.style.fInterimChar);
+    };
+    assert(Access::submit(*tsf, cursorReply));
+    checkCaret(6);
+    const auto cursorWrites = store->writes;
+    for (const auto [bytes, units] :
+         {std::pair{7u, 3L}, {3u, 1L}, {0u, 0L}, {10u, 6L}}) {
+        ++cursorReply.revision;
+        cursorReply.preeditCursor = bytes;
+        assert(Access::submit(*tsf, cursorReply));
+        checkCaret(units);
+        assert(store->writes == cursorWrites);
+    }
+    ++cursorReply.revision;
+    assert(Access::submit(*tsf, cursorReply));
+    assert(store->writes == cursorWrites);
+    // Backspace at an interior position still updates the text and caret.
+    cursorReply =
+        snapshot(cursorReply.revision + 1, "\xe4\xbd\xa0hao", "delete");
+    cursorReply.preeditCursor = 3;
+    assert(Access::submit(*tsf, cursorReply));
+    checkCaret(1);
+    assert(store->writes == cursorWrites + 1);
+    store->denySynchronous = true;
+    ++cursorReply.revision;
+    cursorReply.preeditCursor = 6;
+    assert(Access::submit(*tsf, cursorReply));
+    pump();
+    checkCaret(4);
+    assert(store->writes == cursorWrites + 1);
+    store->denySynchronous = false;
+    cursorReply = snapshot(cursorReply.revision + 1, "", nullptr);
+    cursorReply.commit = "\xe4\xbd\xa0";
+    assert(Access::submit(*tsf, cursorReply));
+    checkCaret(1);
+    assert(!window.visible());
+
     Access::detach(*tsf);
     layout.Release();
     tsf->Deactivate();

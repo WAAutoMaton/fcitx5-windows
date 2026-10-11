@@ -424,15 +424,16 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
         if (FAILED(range->Collapse(cookie, TF_ANCHOR_END))) {
             return E_FAIL;
         }
-        TF_SELECTION selection{range, {TF_AE_NONE, FALSE}};
+        TF_SELECTION selection{range, {TF_AE_END, FALSE}};
         if (FAILED(context->SetSelection(cookie, 1, &selection))) {
             return E_FAIL;
         }
         displayedPreedit_.clear();
         displayedCursor_ = 0;
     }
-    const bool changed = displayedPreedit_ != reply.preedit ||
-                         displayedCursor_ != reply.preeditCursor;
+    bool textChanged = displayedPreedit_ != reply.preedit;
+    bool selectionChanged =
+        textChanged || displayedCursor_ != reply.preeditCursor;
     if (preedit.empty() && composition_) {
         hideCandidates();
         CComPtr<ITfComposition> composition = composition_;
@@ -447,6 +448,7 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
         }
     } else if (!preedit.empty()) {
         if (!composition_) {
+            textChanged = selectionChanged = true;
             CComPtr<ITfInsertAtSelection> insertion;
             CComPtr<ITfContextComposition> compositions;
             range.Release();
@@ -465,7 +467,7 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
         if (FAILED(composition_->GetRange(&range)) || !range) {
             return E_FAIL;
         }
-        if (changed) {
+        if (textChanged) {
             if (FAILED(range->SetText(cookie, 0, preedit.c_str(),
                                       static_cast<LONG>(preedit.size())))) {
                 return E_FAIL;
@@ -479,6 +481,10 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
                     attribute->SetValue(cookie, range, &value);
                 }
             }
+        }
+        if (selectionChanged) {
+            // Cursor movement must not replace text or reset its display
+            // attributes.
             CComPtr<ITfRange> caret;
             LONG moved = 0;
             if (FAILED(range->Clone(&caret)) ||
@@ -489,7 +495,7 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
                 FAILED(caret->Collapse(cookie, TF_ANCHOR_START))) {
                 return E_FAIL;
             }
-            TF_SELECTION selection{caret, {TF_AE_NONE, FALSE}};
+            TF_SELECTION selection{caret, {TF_AE_END, FALSE}};
             if (FAILED(context->SetSelection(cookie, 1, &selection))) {
                 return E_FAIL;
             }
