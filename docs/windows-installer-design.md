@@ -138,6 +138,8 @@ Inno 脚本的关键配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x6
 
 卸载同时管理“输入法不再可用”和“文件已经删除”两个状态，只有后者完成才报告完整清理。
 
+原生 launcher 在文件占用且卸载器成功退出时返回 `ERROR_SUCCESS_REBOOT_REQUIRED`（`3010`），并在普通权限与提权 helper 间保留该返回码；它表示成功但等待重启清理，不显示卸载失败弹窗。传给 Inno 的参数为 `/NORESTART /HELPER=1`，静默卸载另加 `/VERYSILENT /SUPPRESSMSGBOXES`。`/HELPER=1` 与 `{param:HELPER|0}` 的值判断一致，由 launcher 完成维护、占用检查和注销，原生卸载器跳过重复准备。提权调用使用有明确生命周期的 helper 路径。`test_uninstall` 直接运行生产入口和 launcher，以模拟系统调用覆盖正常/占用、原生 `3010`、真实失败、取消、静默及提权结果传递；不执行系统卸载或注册变更，实际重启清理仍需验证。
+
 1. 查询占用并取得安装互斥，开始机器级维护状态。输入法仍可能加载在浏览器、编辑器、Explorer、其他用户的应用中，查询失败不能被视为没有占用。
 2. 用户代理在当前桌面切换到有效的其他输入法。仅在当前默认仍为 Fcitx5 时恢复安装前默认；它已不存在时选择现存的有效输入项。用户后来另选默认时保持其选择。用 `InstallLayoutOrTip(..., ILOT_UNINSTALL)` 移除本用户启用，正常停止自己的 Core/Settings。
 3. 管理员阶段注销本安装拥有的 profile、categories 和 COM，调用 TSF 的注销接口并检查结果，而不是只依赖现有无条件成功的 `DllUnregisterServer()`。DLL 缺失时也应支持基于既有 CLSID 的有限修复清理。参见 [ITfInputProcessorProfiles::Unregister](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfinputprocessorprofiles-unregister) 和 [ITfCategoryMgr::UnregisterCategory](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcategorymgr-unregistercategory)。

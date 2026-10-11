@@ -287,7 +287,8 @@ DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
         SHELLEXECUTEINFOW execute{sizeof(execute)};
         execute.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
         execute.lpVerb = L"runas";
-        execute.lpFile = (root / "setup" / "Fcitx5SetupHelper.exe").c_str();
+        const auto helper = root / "setup" / "Fcitx5SetupHelper.exe";
+        execute.lpFile = helper.c_str();
         execute.lpParameters = arguments.c_str();
         execute.nShow = SW_SHOWNORMAL;
         if (!ShellExecuteExW(&execute)) {
@@ -332,8 +333,8 @@ DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
         return ERROR_INVALID_DATA;
     }
     const auto uninstallerArgs =
-        (silent ? L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /HELPER"
-                : L"/NORESTART /HELPER");
+        (silent ? L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /HELPER=1"
+                : L"/NORESTART /HELPER=1");
     result = runProcess(native, uninstallerArgs);
     if (result == 0 && lock) {
         result = ERROR_SUCCESS_REBOOT_REQUIRED;
@@ -444,7 +445,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
     logResult(command, result);
     if (result && command == L"uninstall" && !silent &&
-        result != ERROR_CANCELLED) {
+        result != ERROR_CANCELLED && result != ERROR_SUCCESS_REBOOT_REQUIRED) {
         const auto message = L"Cannot uninstall Fcitx5. Windows error: " +
                              std::to_wstring(result);
         MessageBoxW(nullptr, message.c_str(), L"Fcitx5", MB_OK | MB_ICONERROR);
