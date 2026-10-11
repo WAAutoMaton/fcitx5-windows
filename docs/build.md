@@ -94,6 +94,13 @@ can start in parallel as soon as that job finishes. Packaging can succeed even
 if tests fail, but Nightly publication remains blocked. The standalone Debug
 TSF build is no longer part of this workflow.
 
+Nightly publication uses GitHub CLI with job-scoped `contents: write` permission.
+Release jobs run one at a time, replace the previous `latest` prerelease and its
+assets, and move the tag to the workflow commit. Both developer archives and
+both installers with their SHA256 files are published with generated release
+notes. Missing asset patterns stop publication before the previous release is
+changed.
+
 The portable test bundle includes test executables, probes, the actual TSF DLL
 and generated icon. A relative-path JSON manifest comes from
 `ctest --show-only=json-v1`; the test runner restores CTest registration with its

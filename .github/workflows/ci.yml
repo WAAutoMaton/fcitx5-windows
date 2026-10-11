@@ -318,6 +318,11 @@ jobs:
     needs: [build-core-arm64, build-x64, test-x64, package-installer-x64]
     if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: nightly-release
+      cancel-in-progress: false
     steps:
       - name: Download ARM64 Core developer artifact
         uses: actions/download-artifact@v8
@@ -335,15 +340,34 @@ jobs:
           name: Fcitx5-installer-x64
 
       - name: Create Nightly release
-        uses: 'marvinpinto/action-automatic-releases@latest'
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          automatic_release_tag: latest
-          prerelease: true
-          title: "Nightly Build"
-          files: |
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s failglob
+          files=(
             Fcitx5-*.tar.bz2
             Fcitx5-*-x64-setup.exe
             Fcitx5-*-x64-setup.exe.sha256
             Fcitx5-*-x64-no-runtime-setup.exe
             Fcitx5-*-x64-no-runtime-setup.exe.sha256
+          )
+
+          release_id=$(gh api "repos/$GH_REPO/releases" --paginate \
+            --jq '.[] | select(.tag_name == "latest") | .id')
+          tag_ref=$(gh api "repos/$GH_REPO/git/matching-refs/tags/latest" \
+            --jq '.[] | select(.ref == "refs/tags/latest") | .ref')
+          if [[ -n "$release_id" ]]; then
+            gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
+          fi
+          if [[ -n "$tag_ref" ]]; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/latest" \
+              -f sha="$GITHUB_SHA" -F force=true
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f ref=refs/tags/latest -f sha="$GITHUB_SHA"
+          fi
+          gh release create latest "${files[@]}" --verify-tag \
+            --title 'Nightly Build' --prerelease --generate-notes

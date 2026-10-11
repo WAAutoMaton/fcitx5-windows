@@ -190,6 +190,8 @@
 
 ## 当前验证记录
 
+- Nightly 发布已用 GitHub CLI 替换归档的 `marvinpinto/action-automatic-releases@latest`，移除该 action 引入的旧 Node.js 和 `set-output` 警告来源。release job 显式使用 `contents: write` 并串行执行，替换旧 `latest` 预发布及附件、将标签更新到 workflow commit，生成发布说明；附件模式缺失时在远端修改前退出。YAML/job 依赖和 Bash 语法检查、模拟首次/覆盖发布、仅有标签/仅有 release、查询/删除/标签更新/上传失败及附件缺失共九种路径通过，验证文件在 `build/ci-release-warning-validation`。未操作真实远端标签或 Release；GitHub runner 的发布及警告消除仍待下次 CI 确认。
+
 - “关于”菜单及原生窗口已通过 `win32/build/about-tsf` AMD64 TSF Release 构建和 11 项默认 CTest。`test_langbar` 验证五项菜单和停用后的迟到点击；`test_about` 验证内容、单实例重复打开、无模态 owner、DPI awareness 恢复、控件边界、Tab/Escape/关闭及销毁后重开。模拟 GitHub Actions 编号的构建/窗口测试和回到本地占位说明已通过，200% 原生窗口截图位于 `build/about-preview`。未替换默认部署 DLL、注册/注销或启动/停止 Core/Settings；真实系统右键派发、浏览器打开和物理跨屏/主题仍需验证。
 
 - 安装 helper 的 `%LOCALAPPDATA%/fcitx5/installer-helper.log` 已增加本地时间、PID/TID、命令开始和安装根，以及 Settings runtime-check、用户 profile 启用/默认设置、COM 创建、`ChangeCurrentLanguage` 和 `ActivateProfile` 原始 HRESULT、语言切换前后当前语言及启用状态、Core 重启/就绪步骤。日志失败不改变安装返回码并恢复 `GetLastError()`，保留现有安装/回滚行为。`build/all/tsf` 的 Release helper 和 `test_setup` 构建、该测试、修改文件格式检查及 `git diff --check` 通过；只读 `preflight-machine` 确认实际日志格式。未执行真实安装、注册/注销、用户配置或服务重启，CI 安装包需重新构建后复现以定位本机 `configure-user` 的 `0x80004005`。
