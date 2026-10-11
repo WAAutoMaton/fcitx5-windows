@@ -78,6 +78,8 @@ void Tsf::clearRemoteContext() {
     displayedCursor_ = 0;
     state_ = {};
     handledKeys_.reset();
+    modeSwitchKeyDown_ = false;
+    modeSwitchPending_ = false;
     hideCandidates();
     candidatePositionRequested_ = false;
     if (remoteContextId_ != 0) {

@@ -116,13 +116,20 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
         modifiers = currentModifiers(lParam);
     }
     if (!release && isModeSwitchKey(static_cast<uint32_t>(wParam), modifiers)) {
-        if (!(modifiers & kModifierRepeat)) {
+        if (!(modifiers & kModifierRepeat) &&
+            (!modeSwitchKeyDown_ || modeSwitchPending_)) {
+            modeSwitchPending_ = false;
             if (!cycleMode(true)) {
+                modeSwitchKeyDown_ = false;
                 return FALSE;
             }
+            modeSwitchKeyDown_ = true;
         }
         handledKeys_.set(VK_SPACE);
         return TRUE;
+    }
+    if (release && wParam == VK_SPACE) {
+        modeSwitchKeyDown_ = false;
     }
     if (!release &&
         !routesKey(static_cast<uint32_t>(wParam), modifiers, keyboardOpen_,

@@ -65,6 +65,15 @@ class KeyboardState {
         state[side] = 0x80;
         require(SetKeyboardState(state), "test modifier setup failed");
     }
+    void controlSpace() {
+        BYTE state[256]{};
+        state[VK_CONTROL] = state[VK_LCONTROL] = state[VK_SPACE] = 0x80;
+        require(SetKeyboardState(state), "test shortcut setup failed");
+    }
+    void clear() {
+        BYTE state[256]{};
+        require(SetKeyboardState(state), "test keyboard reset failed");
+    }
 
   private:
     BYTE saved_[256]{};
@@ -72,8 +81,199 @@ class KeyboardState {
 
 } // namespace
 
+namespace {
+void cycleProbe(HMODULE module) {
+    fcitx::PipeClient client;
+    fcitx::ipc::InputMethodsReply catalog;
+    require(client.connect() && client.getInputMethods(catalog),
+            "cycle catalog unavailable");
+    std::vector<fcitx::ipc::InputMethodInfo> methods;
+    for (const auto &id : catalog.selection.enabled) {
+        const auto found =
+            std::find_if(catalog.methods.begin(), catalog.methods.end(),
+                         [&](const auto &method) { return method.id == id; });
+        if (found != catalog.methods.end() && found->available) {
+            methods.push_back(*found);
+        }
+    }
+    require(!methods.empty(), "no available cycle methods");
+    using GetFactory = HRESULT(WINAPI *)(REFCLSID, REFIID, void **);
+    const auto getFactory = reinterpret_cast<GetFactory>(
+        GetProcAddress(module, "DllGetClassObject"));
+    require(getFactory != nullptr, "cycle factory export missing");
+    CComPtr<IClassFactory> factory;
+    CComPtr<ITfTextInputProcessorEx> service;
+    CComPtr<ITfKeyEventSink> keys;
+    require(SUCCEEDED(getFactory(fcitx::FCITX_CLSID, IID_PPV_ARGS(&factory))) &&
+                SUCCEEDED(
+                    factory->CreateInstance(nullptr, IID_PPV_ARGS(&service))) &&
+                SUCCEEDED(service.QueryInterface(&keys)),
+            "cycle TIP creation failed");
+    CComPtr<ITfThreadMgrEx> manager;
+    require(SUCCEEDED(manager.CoCreateInstance(CLSID_TF_ThreadMgr)),
+            "cycle thread manager missing");
+    TfClientId clientId = TF_CLIENTID_NULL;
+    require(SUCCEEDED(manager->ActivateEx(&clientId, TF_TMAE_NOACTIVATETIP)),
+            "cycle thread activation failed");
+    CComPtr<ThreadMgrAdapter> adapter;
+    adapter.Attach(new ThreadMgrAdapter(manager));
+    CComPtr<TextStore> store;
+    store.Attach(new TextStore);
+    CComPtr<ITfDocumentMgr> document;
+    CComPtr<ITfContext> context;
+    TfEditCookie cookie = 0;
+    require(SUCCEEDED(manager->CreateDocumentMgr(&document)) &&
+                SUCCEEDED(document->CreateContext(clientId, 0, store, &context,
+                                                  &cookie)) &&
+                SUCCEEDED(document->Push(context)) &&
+                SUCCEEDED(manager->SetFocus(document)),
+            "cycle context setup failed");
+    CComPtr<ITfCompartmentMgr> compartments;
+    CComPtr<ITfCompartment> keyboard;
+    require(SUCCEEDED(manager.QueryInterface(&compartments)) &&
+                SUCCEEDED(compartments->GetCompartment(
+                    GUID_COMPARTMENT_KEYBOARD_OPENCLOSE, &keyboard)),
+            "cycle keyboard compartment missing");
+    CComVariant open(static_cast<LONG>(1));
+    require(SUCCEEDED(keyboard->SetValue(clientId, &open)) &&
+                SUCCEEDED(service->ActivateEx(adapter, clientId, 0)),
+            "cycle TIP activation failed");
+    CComPtr<ITfLangBarItemButton> button;
+    require(SUCCEEDED(adapter->langBarItem.QueryInterface(&button)),
+            "cycle indicator missing");
+    pump(200);
+    auto currentIndex = [&]() {
+        CComBSTR name;
+        require(SUCCEEDED(button->GetTooltipString(&name)) && name,
+                "cycle indicator name missing");
+        const auto found = std::find_if(
+            methods.begin(), methods.end(), [&](const auto &method) {
+                return fcitx::stringToWString(method.name, CP_UTF8) ==
+                       std::wstring(name);
+            });
+        require(found != methods.end(), "cycle indicator method not enabled");
+        return static_cast<size_t>(found - methods.begin());
+    };
+    auto index = currentIndex();
+    int currentRoute = 0;
+    const auto check = [&](size_t expected) {
+        require(currentIndex() == expected,
+                ("TSF shortcut skipped " + methods[expected].id + " on route " +
+                 std::to_string(currentRoute))
+                    .c_str());
+        CComVariant value;
+        require(SUCCEEDED(keyboard->GetValue(&value)) && value.vt == VT_I4,
+                "cycle compartment value missing");
+        require((value.lVal != 0) == !methods[expected].keyboard,
+                ("cycle compartment disagrees with " + methods[expected].id +
+                 ": " + std::to_string(value.lVal))
+                    .c_str());
+        require(store->text.empty(), "cycle unexpectedly edited the document");
+    };
+    KeyboardState keyboardState;
+    for (const int route : {0, 2, 1, 3, 4, 5}) {
+        currentRoute = route;
+        for (size_t step = 0; step < methods.size() * 2; ++step) {
+            BOOL handled = FALSE;
+            const auto preserved = [&]() {
+                require(SUCCEEDED(keys->OnPreservedKey(
+                            context, adapter->preservedGuid, &handled)) &&
+                            handled,
+                        "cycle preserved callback failed");
+            };
+            const auto systemHotkey = [&]() {
+                CComVariant value;
+                require(SUCCEEDED(keyboard->GetValue(&value)),
+                        "cycle mode query failed");
+                CComVariant toggled(static_cast<LONG>(value.lVal == 0));
+                require(SUCCEEDED(keyboard->SetValue(clientId, &toggled)),
+                        "system shortcut notification failed");
+            };
+            keyboardState.controlSpace();
+            if (route == 0 || route == 3) {
+                if (route == 3) {
+                    systemHotkey();
+                }
+                require(SUCCEEDED(keys->OnTestKeyDown(context, VK_SPACE, 0,
+                                                      &handled)) &&
+                            handled &&
+                            SUCCEEDED(keys->OnKeyDown(context, VK_SPACE, 0,
+                                                      &handled)) &&
+                            handled &&
+                            SUCCEEDED(keys->OnKeyDown(
+                                context, VK_SPACE, static_cast<LPARAM>(1) << 30,
+                                &handled)) &&
+                            handled,
+                        "cycle ordinary/repeat callback failed");
+            }
+            if (route == 1 || route == 3 || route == 4) {
+                preserved();
+                if (route == 4) {
+                    systemHotkey();
+                }
+                preserved();
+            }
+            if (route == 2) {
+                systemHotkey();
+                pump(200);
+                systemHotkey();
+                pump(200);
+            }
+            if (route == 5) {
+                keyboardState.clear();
+                require(
+                    SUCCEEDED(button->OnClick(TF_LBI_CLK_LEFT, {}, nullptr)),
+                    "cycle indicator click failed");
+            }
+            pump(200);
+            index = (index + 1) % methods.size();
+            check(index);
+            if (route != 2 && route != 5) {
+                require(
+                    SUCCEEDED(keys->OnKeyUp(context, VK_SPACE, 0, &handled)) &&
+                        handled,
+                    "cycle key release failed");
+            }
+            keyboardState.clear();
+            pump(200);
+            check(index);
+        }
+    }
+    // Explicit system mode changes without Ctrl+Space remain binary controls.
+    const auto english =
+        std::find_if(methods.begin(), methods.end(),
+                     [](const auto &method) { return method.keyboard; });
+    const auto chinese =
+        std::find_if(methods.begin(), methods.end(),
+                     [](const auto &method) { return !method.keyboard; });
+    if (english != methods.end() && chinese != methods.end()) {
+        CComVariant closed(static_cast<LONG>(0));
+        require(SUCCEEDED(keyboard->SetValue(clientId, &closed)),
+                "explicit keyboard close failed");
+        pump(200);
+        check(static_cast<size_t>(english - methods.begin()));
+        require(SUCCEEDED(keyboard->SetValue(clientId, &open)),
+                "explicit keyboard open failed");
+        pump(200);
+        check(static_cast<size_t>(chinese - methods.begin()));
+    }
+    require(SUCCEEDED(service->Deactivate()), "cycle deactivation failed");
+    manager->SetFocus(nullptr);
+    document->Pop(TF_POPF_ALL);
+    pump();
+    require(SUCCEEDED(manager->Deactivate()),
+            "cycle thread deactivation failed");
+    std::cout
+        << "PASS: " << methods.size()
+        << " methods, ordinary/preserved/compartment Ctrl+Space routes, "
+           "duplicate/repeat/release suppression and indicator cycles "
+           "(simulated callbacks, no registration or configuration changes)\n";
+}
+} // namespace
+
 int wmain(int count, wchar_t **arguments) {
-    if (count != 2)
+    if (count != 2 &&
+        !(count == 3 && std::wstring(arguments[2]) == L"--cycles"))
         return 2;
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)),
             "COM initialization failed");
@@ -82,6 +282,12 @@ int wmain(int count, wchar_t **arguments) {
         return 3;
     int exit = 1;
     try {
+        if (count == 3) {
+            cycleProbe(module);
+            FreeLibrary(module);
+            CoUninitialize();
+            return 0;
+        }
         using GetFactory = HRESULT(WINAPI *)(REFCLSID, REFIID, void **);
         using CanUnload = HRESULT(WINAPI *)();
         auto getFactory = reinterpret_cast<GetFactory>(
@@ -251,6 +457,9 @@ int wmain(int count, wchar_t **arguments) {
                                                &handled)) &&
                     handled,
                 "preserved Chinese mode switch failed");
+        require(SUCCEEDED(keys->OnKeyUp(context, VK_SPACE, 0, &handled)) &&
+                    handled,
+                "preserved Chinese switch release failed");
         pump();
         {
             KeyboardState keyboardState;

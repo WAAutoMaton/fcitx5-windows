@@ -50,6 +50,8 @@ try {
     Start-TestCore
     & "$TsfBuild/tests/inputmethods_probe.exe" --persistence-read
     if ($LASTEXITCODE) { throw 'Persistence check failed.' }
+    & "$TsfBuild/tests/tsf_probe.exe" "$TsfBuild/dll/fcitx5-x86_64.dll" --cycles
+    if ($LASTEXITCODE) { throw 'Multi-method TSF shortcut regression failed.' }
     Write-Output "Logs: $log"
 } finally {
     Stop-TestCore

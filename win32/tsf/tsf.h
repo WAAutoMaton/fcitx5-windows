@@ -158,6 +158,9 @@ class Tsf : public ITfTextInputProcessorEx,
     TfGuidAtom attributeAtom_ = TF_INVALID_GUIDATOM;
     bool keyEventSinkAdvised_ = false;
     bool modeSwitchPreserved_ = false;
+    bool modeSwitchKeyDown_ = false;
+    bool modeSwitchPending_ = false;
+    static constexpr UINT kModeSwitchMessage = WM_APP + 9;
     CComPtr<ITfCompartment> keyboardCompartment_;
     DWORD keyboardCompartmentCookie_ = TF_INVALID_COOKIE;
     bool keyboardOpen_ = true;

@@ -16,6 +16,12 @@ inline bool isModeSwitchKey(uint32_t key, uint32_t modifiers) {
                          kModifierSuper)) == kModifierControl;
 }
 
+inline bool modeSwitchPressed() {
+    const auto down = [](int key) { return (GetKeyState(key) & 0x8000) != 0; };
+    return down(VK_SPACE) && down(VK_CONTROL) && !down(VK_SHIFT) &&
+           !down(VK_MENU) && !down(VK_LWIN) && !down(VK_RWIN);
+}
+
 inline bool routesKey(uint32_t key, uint32_t modifiers, bool enabled,
                       bool composing, bool codeInput = false) {
     if (isModeSwitchKey(key, modifiers)) {

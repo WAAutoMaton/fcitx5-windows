@@ -296,7 +296,20 @@ compatibility is checked using the framing/handshake version, which is v6.
 `SetMode` chooses a selected keyboard/non-keyboard entry for the Windows
 open/close compartment. Ctrl+Space and indicator clicks use `CycleInputMethod`
 to cycle through the user's ordered list. Repeated mode requests are idempotent;
-changing input methods cancels preedit. Core, TSF and Settings must be rebuilt
+changing input methods cancels preedit. Windows can deliver Ctrl+Space as a
+keyboard open/close compartment notification instead of a key-sink callback.
+TSF routes that notification through the same cycle operation and coalesces
+duplicate callbacks until Space is released. Explicit compartment changes
+without Ctrl+Space still use `SetMode`.
+
+`tsf_probe <DLL> --cycles` checks the currently enabled list without changing
+configuration. It simulates ordinary/preserved key callbacks, system-hotkey
+compartment notifications in both callback orders, repeats and releases, and
+indicator clicks using a real TSF context and keyboard compartment. It requires
+a running Core; it does not verify real OS keyboard dispatch. The input-method
+regression script runs it with the persisted three-method list.
+
+Core, TSF and Settings must be rebuilt
 and deployed together; older versions do not connect to v6.
 
 Each key response contains consumption, mode, commit, preedit, UTF-8 byte cursor,

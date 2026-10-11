@@ -1,4 +1,5 @@
 #include "../ipc/installation.h"
+#include "keypolicy.h"
 #include "tsf.h"
 
 namespace fcitx {
@@ -48,6 +49,18 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
+    if (self && message == kModeSwitchMessage) {
+        self->AddRef();
+        if (self->modeSwitchPending_) {
+            self->modeSwitchPending_ = false;
+            self->cycleMode(false);
+        } else {
+            // Compartment writes from inside OnChange can be rejected.
+            self->setKeyboardOpen(self->keyboardOpen_);
+        }
+        self->Release();
+        return 0;
+    }
     if (self && message == Tsf::kRefreshCandidateMessage) {
         self->AddRef();
         self->candidateRefreshPosted_ = false;
@@ -81,6 +94,9 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
 }
 
 void Tsf::pollState() {
+    if (!(GetKeyState(VK_SPACE) & 0x8000) && !modeSwitchPending_) {
+        modeSwitchKeyDown_ = false;
+    }
     pollServiceTask();
     if (!win32::ipc::currentInstallationAllowsStart()) {
         pipe_.disconnect();

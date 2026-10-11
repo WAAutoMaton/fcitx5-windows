@@ -1,3 +1,4 @@
+#include "keypolicy.h"
 #include "tsf.h"
 
 namespace fcitx {
@@ -73,6 +74,17 @@ STDMETHODIMP Tsf::OnChange(REFGUID guid) {
         return result;
     }
     if (value.vt == VT_I4 && keyboardOpen_ != (value.lVal != 0)) {
+        // Windows may handle the IME hotkey through the compartment before
+        // delivering a key sink callback. Coalesce both routes for this press.
+        if (modeSwitchPressed() && foreground_ && textEditSinkContext_ &&
+            remoteContextId_ && pipe_.connected() && messageWindow_ &&
+            PostMessageW(messageWindow_, kModeSwitchMessage, 0, 0)) {
+            if (!modeSwitchKeyDown_) {
+                modeSwitchPending_ = true;
+                modeSwitchKeyDown_ = true;
+            }
+            return S_OK;
+        }
         keyboardOpen_ = value.lVal != 0;
         notifyLangBarItem();
         if (messageWindow_) {
@@ -95,6 +107,7 @@ bool Tsf::cycleMode(bool synchronous) {
         pipe_.disconnect();
         return false;
     }
+    setKeyboardOpen(reply.enabled);
     submitSnapshot(std::move(reply), synchronous);
     return true;
 }
