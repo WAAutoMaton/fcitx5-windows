@@ -2,10 +2,12 @@
 
 [中文文档](README_zh-cn.md)
 
-An in-progress Windows port of Fcitx5, with a basic Pinyin input path on AMD64.
+An in-progress Windows port of Fcitx5. On AMD64 it provides Pinyin, Shuangpin
+and multiple `chinese-addons` table input methods through a TSF integration.
 Core runs in a separate process; a TSF DLL integrates with applications, and a
-WinUI settings app manages input methods and engine configuration. Unified x64
-installers are available through the CI packaging and Nightly release workflow.
+WinUI settings app manages the ordered input-method list and engine
+configuration. Unified x64 installers are available through the CI packaging
+and Nightly release workflow.
 
 ## Features and Status
 
@@ -20,18 +22,19 @@ installers are available through the CI packaging and Nightly release workflow.
   cycles through the same input-method list.
 - Settings to add, remove and reorder installed input methods, with shared
   Pinyin/Shuangpin options, eight built-in Shuangpin profiles and table-engine
-  options. Available entries include Wubi and Cangjie, depending on installed data.
+  options. The bundled table entries are Wubi, Wubi Pinyin, Cangjie, Dianbaoma,
+  Erbi, Bingchan, Wanfeng and Ziranma; an entry is available when its engine and
+  table data are installed.
 - Third-party Pinyin dictionary loading status and automatic dictionary reload.
 - Automatic background Core startup, with settings and service controls in the
   input indicator's right-click menu.
 
-The registered input indicator has been confirmed working. Automated probes use
-real Pinyin and TSF contexts but simulate key/menu callbacks. Broader application
-compatibility, OS event dispatch, themes and multiple-monitor DPI still need
-validation. Candidate mouse selection and accessibility are not implemented.
-Input-method probes cover real Wubi commits and list management; broader Wubi
-and other table-method application coverage, ARM64 Pinyin/TSF and Rime still
-need validation.
+Automated probes use real Pinyin, table-engine and TSF contexts, but simulate
+key/menu callbacks rather than Windows' registered event dispatch. The input
+method probes cover real Wubi commits and list management; other table methods
+still need broader application coverage. Candidate mouse selection,
+accessibility, Rime, ARM64 Pinyin/TSF, themes and multiple-monitor DPI remain
+outside the validated scope.
 
 ## Install
 
@@ -93,10 +96,11 @@ language options. Activation starts Core automatically.
 
 Use `Ctrl+Space` or left-click the input-method indicator to cycle through the
 enabled list. The default list is English keyboard and Pinyin; Settings lets
-you add methods such as Shuangpin or Wubi and change their order. Unavailable
-entries are skipped. With Pinyin selected, type `nihao` in a text application
-and select a candidate with Space or a number key. Changing input methods or
-losing focus cancels unfinished preedit without committing it.
+you add Shuangpin or any available table method and change their order.
+Unavailable entries are skipped. With Pinyin selected, type `nihao` in a text
+application and select a candidate with Space or a number key. With Wubi
+selected, enter a Wubi code and select its candidate in the same way. Changing
+input methods or losing focus cancels unfinished preedit without committing it.
 
 Right-click the input-method indicator for:
 
@@ -126,7 +130,7 @@ for previews, alternate paths and troubleshooting.
 
 - [Build, deployment and validation](docs/build.md)
 - [Windows installer implementation and validation limits](docs/windows-installer-design.md)
-- [Pinyin architecture, individual builds and validation limits](docs/pinyin.md)
+- [Input-method architecture, individual builds and validation limits](docs/pinyin.md)
 - [Windows settings design](docs/windows-settings-design.md)
 - [Candidate rendering and DPI validation](docs/windows-candidate-rendering.md)
 

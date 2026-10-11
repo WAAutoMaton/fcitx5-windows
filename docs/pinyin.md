@@ -1,7 +1,8 @@
-# Windows Pinyin Integration
+# Windows Input-Method Integration
 
-This guide describes the AMD64 Pinyin integration and its current validation
-scope as of 2026-10-11. For installation, see [Install in the README](../README.md#install);
+This guide describes the AMD64 integration for Pinyin, Shuangpin and the
+`chinese-addons` table input methods, together with its current validation scope
+as of 2026-10-11. For installation, see [Install in the README](../README.md#install);
 for input usage, see [Run](../README.md#run).
 For build options, deployment and registration details, see the
 [build guide](build.md).
@@ -38,13 +39,27 @@ sessions on the TSF owning thread.
 | [win32/settings/SettingsWindow.cpp](../win32/settings/SettingsWindow.cpp) | WinUI input-method list, engine options, Pinyin dictionary tab and background IPC |
 | [win32/dll/register.cpp](../win32/dll/register.cpp) | Profile, branding icon and capability registration |
 
-### Input Modes and Indicator
+### Input Methods and Indicator
 
 `windowskeyboard` is a static direct-input engine with no XKB dependency. It
 provides the first group entry required by Core; it never commits ASCII itself.
-The in-memory Windows group includes installed, available entries such as
-`pinyin`, `shuangpin`, Wubi and other table methods. The user's enabled list and
-order are stored separately; the default list is `keyboard-us` and `pinyin`.
+The in-memory Windows group includes installed, available entries from the
+Pinyin and table addons. The current table set is:
+
+| Entry | Input method |
+| --- | --- |
+| `wbx` | Wubi |
+| `wbpy` | Wubi Pinyin |
+| `cangjie` | Cangjie |
+| `db` | Dianbaoma |
+| `erbi` | Erbi |
+| `qxm` | Bingchan |
+| `wanfeng` | Wanfeng |
+| `zrm` | Ziranma |
+
+An entry is advertised as available only when its addon and table data can be
+loaded. The user's enabled list and order are stored separately; the default
+list is `keyboard-us` and `pinyin`.
 Settings can add, remove and reorder entries, including removing English
 keyboard, while retaining at least one available method.
 
@@ -59,7 +74,7 @@ preserved-key and Ctrl+Space compartment callbacks share the cycle operation,
 with duplicate/repeat suppression until Space is released. Ordinary Space is
 never registered as a preserved key. Existing user groups are not saved or
 overwritten. Both upstream keyboard support and ASCII fallback are disabled by
-default and by the Pinyin build script.
+default and by the Windows build script.
 Core prewarms Pinyin before accepting pipe clients so initial model paging does
 not consume the first key's IPC timeout. Runtime DLL search includes its own bin.
 
@@ -559,17 +574,18 @@ also models a Settings process hosting TSF. It is separate from default CTest
 because it requires a complete deployment and starts real service processes.
 
 The earlier service-control validation passed AMD64 Core, TSF Release and WinUI Release
-builds, all eight default CTests, the service probe with actual WinUI, and all
-three existing Pinyin probes. The WinUI save/cancel, restart and single-instance
-test passed again with screenshots in `build/service-settings-ui-test`.
+builds, the then-current eight-test CTest suite, the service probe with actual
+WinUI, and the three Pinyin/TSF probes. The default suite now has thirteen
+tests. The WinUI save/cancel, restart and single-instance test passed again with
+screenshots in `build/service-settings-ui-test`.
 Registered-TIP OS menu dispatch remains unverified.
 
 ## Remaining Validation and Limits
 
-- The user confirmed the registered input indicator works. This is narrower
-  than a complete real-application input compatibility test; OS key/hotkey
-  dispatch and input in Notepad, browsers and other hosts still need broader
-  validation. The test application and Windows-version matrix were not recorded.
+- Automated language-bar and TSF probes cover the indicator's state, labels and
+  commands, but not Windows' registered event dispatch. OS key/hotkey dispatch
+  and input in Notepad, browsers and other hosts still need broader validation;
+  the test application and Windows-version matrix were not recorded.
 - Candidate rendering, DPI behavior and screen-reader integration are not
   verified in those applications; the window does not implement ITfUIElement.
 - Input-indicator theme coloring, Explorer restart, multiple-monitor DPI and
@@ -592,8 +608,9 @@ Registered-TIP OS menu dispatch remains unverified.
 - Polling is a minimal deferred-output mechanism, not an asynchronous push queue
   or transactional exactly-once delivery across process failures. An IPC timeout
   can lose the pending input; it does not guarantee recovery of a consumed key.
-- Only AMD64 Core/TSF/Pinyin was exercised locally. The existing Core ARM64 build
-  matrix does not imply Pinyin or TSF ARM64 compatibility.
+- Local validation covers AMD64 Core/TSF, Pinyin, Shuangpin and Wubi probes.
+  The current CI does not build ARM64; no Pinyin, table-engine or TSF ARM64
+  compatibility is implied.
 
 The first-run Pinyin history load may log a missing/empty-history error; the
 system dictionary/model and actual Chinese conversion are verified separately.

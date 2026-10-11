@@ -20,7 +20,7 @@ Install the following before running the build scripts:
 | Component | Requirements |
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
-| Core/Pinyin | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd |
+| Core/input methods | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; the pinned libime/chinese-addons data supplies Pinyin, Shuangpin and table methods |
 | TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, ATL and ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
@@ -44,7 +44,10 @@ Run from the repository root:
 ```
 
 The script initializes pinned submodules, applies compatibility patches and
-builds Core/libime/chinese-addons, TSF and WinUI Settings. It stages the complete
+builds Core/libime/chinese-addons, TSF and WinUI Settings. The resulting runtime
+contains Pinyin, Shuangpin and the available chinese-addons table entries
+(Wubi, Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan, Wanfeng and Ziranma).
+It stages the complete
 runtime under `build/all/prefix`, runs the thirteen default TSF CTest tests, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
@@ -82,8 +85,9 @@ same standard cache; extracted or deployed data alone does not establish its
 version. Source-data generation has not been validated end to end locally.
 
 For individual Core, TSF and Settings builds, see the
-[Pinyin integration guide](pinyin.md#build-and-deploy-core). A plain root CMake
-build does not build/deploy libime, chinese-addons, TSF, Settings or Pinyin data.
+[input-method integration guide](pinyin.md#build-and-deploy-core). A plain root
+CMake build does not build/deploy libime, chinese-addons, TSF, Settings or input
+method data.
 
 ## CI Build and Artifact Flow
 
@@ -93,7 +97,7 @@ run in separate jobs:
 | Job | Responsibility |
 | --- | --- |
 | `build-x64` | Run the unified build with `-SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
-| `test-x64` | Download the x64 runtime and tests; run build-script regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, default CTest and dictionary integration checks |
+| `test-x64` | Download the x64 runtime and tests; run build-script regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/table-method/Wubi regressions, default CTest and dictionary integration checks |
 | `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
 | `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install and uninstall, and upload the installer log |
 | `release` | Wait for the x64 build, tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
