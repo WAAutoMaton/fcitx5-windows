@@ -18,7 +18,8 @@ class Tsf : public ITfTextInputProcessorEx,
             public ITfKeyEventSink,
             public ITfCompartmentEventSink,
             public ITfCompositionSink,
-            public ITfDisplayAttributeProvider {
+            public ITfDisplayAttributeProvider,
+            public ITfTextLayoutSink {
   public:
     Tsf();
     ~Tsf();
@@ -58,6 +59,8 @@ class Tsf : public ITfTextInputProcessorEx,
 
     STDMETHODIMP OnCompositionTerminated(TfEditCookie ecWrite,
                                          ITfComposition *pComposition) override;
+    STDMETHODIMP OnLayoutChange(ITfContext *context, TfLayoutCode code,
+                                ITfContextView *view) override;
     STDMETHODIMP
     EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo **result) override;
     STDMETHODIMP
@@ -66,9 +69,17 @@ class Tsf : public ITfTextInputProcessorEx,
 
   private:
     friend class SnapshotEditSession;
+    friend class CandidatePositionEditSession;
+    friend struct TsfCandidateTestAccess;
     HRESULT initThreadMgrEventSink();
     void uninitThreadMgrEventSink();
     bool initTextEditSink(CComPtr<ITfDocumentMgr> documentMgr);
+    void refreshCandidatePosition(TfEditCookie cookie, ITfContext *context,
+                                  uint64_t generation);
+    bool requestCandidatePosition();
+    void updateCandidates(TfEditCookie cookie, ITfContext *context,
+                          const PipeClient::KeyReply &reply);
+    void hideCandidates();
     HRESULT initKeyEventSink();
     void uninitKeyEventSink();
     HRESULT initKeyboardCompartment();
@@ -102,6 +113,7 @@ class Tsf : public ITfTextInputProcessorEx,
     TfClientId clientId_ = TF_CLIENTID_NULL;
     DWORD threadMgrEventSinkCookie_ = TF_INVALID_COOKIE;
     DWORD textEditSinkCookie_ = TF_INVALID_COOKIE;
+    DWORD textLayoutSinkCookie_ = TF_INVALID_COOKIE;
     CComPtr<ITfContext> textEditSinkContext_;
     uint64_t remoteContextId_ = 0;
     PipeClient pipe_;
@@ -114,6 +126,13 @@ class Tsf : public ITfTextInputProcessorEx,
     };
     std::deque<EditOperation> edits_;
     bool editRequested_ = false;
+    bool candidateRefreshPosted_ = false;
+    bool candidatePositionRequested_ = false;
+    bool candidateLayoutPending_ = false;
+    ULONGLONG candidateLayoutDeadline_ = 0;
+    PipeClient::KeyReply displayedCandidates_;
+    CComPtr<ITfContextView> candidateView_;
+    HWND candidateOwner_ = nullptr;
     uint64_t generation_ = 0;
     PipeClient::KeyReply state_;
     std::string displayedPreedit_;
@@ -125,6 +144,7 @@ class Tsf : public ITfTextInputProcessorEx,
     ULONGLONG nextReconnect_ = 0;
     bool foreground_ = true;
     static constexpr UINT kEnsureServiceMessage = WM_APP + 7;
+    static constexpr UINT kRefreshCandidateMessage = WM_APP + 8;
     struct ServiceResult {
         DWORD error;
         bool closingHost = false;

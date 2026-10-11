@@ -15,6 +15,9 @@ struct CandidateWindowTestAccess {
         return view.rows_[index].text.layout;
     }
     static void discardTarget(CandidateWindow &view) { view.discardTarget(); }
+    static void loseTarget(CandidateWindow &view) {
+        view.finishPaint(D2DERR_RECREATE_TARGET);
+    }
     static void checkTrimming(const CandidateWindow &view) {
         DWRITE_LINE_METRICS line{};
         UINT32 count = 0;
@@ -195,6 +198,8 @@ void windowTests() {
                                             context));
         assert(view.visible());
         const auto window = Access::window(view);
+        // Production show paints before returning; no message pump is needed.
+        assert(!GetUpdateRect(window, nullptr, FALSE));
         assert(AreDpiAwarenessContextsEqual(
             GetWindowDpiAwarenessContext(window),
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
@@ -214,6 +219,20 @@ void windowTests() {
         reply.selected = 2;
         view.show(reply, owner, anchor);
         assert(previous == Access::text(view, 0));
+        assert(view.update(reply));
+        assert(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),
+                                            context));
+        Access::loseTarget(view);
+        assert(view.visible());
+        SendMessageW(window, WM_TIMER, 1, 0);
+        assert(view.visible());
+        Access::loseTarget(view);
+        Access::loseTarget(view);
+        Access::loseTarget(view);
+        assert(!view.visible());
+        assert(!view.update(reply));
+        view.show(reply, owner, anchor);
+        assert(view.visible());
         Access::discardTarget(view);
         InvalidateRect(window, nullptr, FALSE);
         UpdateWindow(window);

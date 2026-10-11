@@ -10,6 +10,7 @@ constexpr wchar_t kWindowClass[] = L"Fcitx5WindowsCandidatesV3";
 constexpr float kPadding = 8;
 constexpr float kGap = 10;
 constexpr float kBorder = 1;
+constexpr UINT_PTR kPaintRetryTimer = 1;
 
 D2D1_COLOR_F systemColor(int index) {
     const auto color = GetSysColor(index);
@@ -39,8 +40,10 @@ CandidateWindow::~CandidateWindow() {
 
 void CandidateWindow::hide() {
     if (window_) {
+        KillTimer(window_, kPaintRetryTimer);
         ShowWindow(window_, SW_HIDE);
     }
+    paintFailures_ = 0;
 }
 
 bool CandidateWindow::initialize() {
@@ -249,6 +252,7 @@ void CandidateWindow::position() {
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     positioning_ = false;
     InvalidateRect(window_, nullptr, FALSE);
+    UpdateWindow(window_);
 }
 
 void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
@@ -300,6 +304,23 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
     SetWindowLongPtrW(window_, GWLP_HWNDPARENT,
                       reinterpret_cast<LONG_PTR>(owner));
     position();
+}
+
+bool CandidateWindow::update(const PipeClient::KeyReply &reply) {
+    if (!visible()) {
+        return false;
+    }
+    const auto owner = GetWindow(window_, GW_OWNER);
+    ScopedDpiAwareness scope(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    if (reply.candidates.empty() ||
+        (owner && (!IsWindowVisible(owner) || IsIconic(owner))) ||
+        !scope.valid() || !initialize() || !updateRows(reply)) {
+        hide();
+        return false;
+    }
+    selected_ = reply.selected;
+    position();
+    return IsWindowVisible(window_) != FALSE;
 }
 
 void CandidateWindow::discardTarget() {
@@ -382,15 +403,27 @@ HRESULT CandidateWindow::draw(ID2D1RenderTarget *target,
 void CandidateWindow::paint() {
     PAINTSTRUCT paint{};
     BeginPaint(window_, &paint);
-    if (createTarget()) {
-        if (FAILED(draw(target_, brush_))) {
-            discardTarget();
-            hide();
-        }
-    } else {
-        hide();
-    }
+    const auto result =
+        createTarget() ? draw(target_, brush_) : D2DERR_RECREATE_TARGET;
     EndPaint(window_, &paint);
+    finishPaint(result);
+}
+
+void CandidateWindow::finishPaint(HRESULT result) {
+    if (SUCCEEDED(result)) {
+        paintFailures_ = 0;
+        KillTimer(window_, kPaintRetryTimer);
+        return;
+    }
+    discardTarget();
+    // Recover device loss without hiding; bound retries on the host thread.
+    if (result == D2DERR_RECREATE_TARGET && visible() &&
+        ++paintFailures_ <= 2 &&
+        SetTimer(window_, kPaintRetryTimer, 16 * paintFailures_, nullptr)) {
+        return;
+    }
+    OutputDebugStringW(L"Fcitx5: candidate drawing failed\n");
+    hide();
 }
 
 LRESULT CALLBACK CandidateWindow::windowProc(HWND window, UINT message,
@@ -410,6 +443,16 @@ LRESULT CALLBACK CandidateWindow::windowProc(HWND window, UINT message,
         case WM_PAINT:
             self->paint();
             return 0;
+        case WM_TIMER:
+            if (wParam == kPaintRetryTimer) {
+                KillTimer(window, kPaintRetryTimer);
+                if (self->visible()) {
+                    InvalidateRect(window, nullptr, FALSE);
+                    UpdateWindow(window);
+                }
+                return 0;
+            }
+            break;
         case WM_ERASEBKGND:
             return 1;
         case WM_DPICHANGED:
@@ -429,6 +472,7 @@ LRESULT CALLBACK CandidateWindow::windowProc(HWND window, UINT message,
             }
             return 0;
         case WM_NCDESTROY:
+            self->paintFailures_ = 0;
             self->window_ = nullptr;
             self->discardTarget();
             SetWindowLongPtrW(window, GWLP_USERDATA, 0);

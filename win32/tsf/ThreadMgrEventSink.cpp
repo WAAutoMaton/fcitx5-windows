@@ -67,7 +67,8 @@ void Tsf::clearRemoteContext() {
     displayedCursor_ = 0;
     state_ = {};
     handledKeys_.reset();
-    candidates_.hide();
+    hideCandidates();
+    candidatePositionRequested_ = false;
     if (remoteContextId_ != 0) {
         pipe_.focusOut(remoteContextId_);
         pipe_.destroyContext(remoteContextId_);

@@ -48,6 +48,13 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
+    if (self && message == Tsf::kRefreshCandidateMessage) {
+        self->AddRef();
+        self->candidateRefreshPosted_ = false;
+        self->requestCandidatePosition();
+        self->Release();
+        return 0;
+    }
     if (self && message == LangBarItem::kToggleMessage) {
         self->AddRef();
         self->toggleMode();
@@ -78,7 +85,7 @@ void Tsf::pollState() {
     if (!win32::ipc::currentInstallationAllowsStart()) {
         pipe_.disconnect();
         clearRemoteContext();
-        candidates_.hide();
+        hideCandidates();
         return;
     }
     if (serviceHostClosing_ ||
@@ -88,6 +95,9 @@ void Tsf::pollState() {
     }
     if (!textEditSinkContext_ || !foreground_) {
         return;
+    }
+    if (candidateLayoutPending_) {
+        requestCandidatePosition();
     }
     if (!pipe_.connected()) {
         if (GetTickCount64() < nextReconnect_) {
@@ -117,7 +127,7 @@ void Tsf::pollState() {
         return;
     }
     if (reply.settingsRevision != state_.settingsRevision) {
-        candidates_.hide();
+        hideCandidates();
     }
     if (!reply.commit.empty() || !reply.preedit.empty() || composition_ ||
         !reply.candidates.empty() || candidates_.visible()) {

@@ -66,6 +66,7 @@ STDAPI Tsf::Deactivate() {
         UnregisterClassW(L"Fcitx5WindowsDispatchV2", module);
         messageWindow_ = nullptr;
     }
+    candidateRefreshPosted_ = false;
     if (!threadMgr_) {
         pipe_.disconnect();
         return S_OK;

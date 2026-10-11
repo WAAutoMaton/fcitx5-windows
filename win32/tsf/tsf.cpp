@@ -41,6 +41,8 @@ STDAPI Tsf::QueryInterface(REFIID riid, void **ppvObject) {
         *ppvObject = (ITfCompositionSink *)this;
     else if (IsEqualIID(riid, IID_ITfDisplayAttributeProvider))
         *ppvObject = (ITfDisplayAttributeProvider *)this;
+    else if (IsEqualIID(riid, IID_ITfTextLayoutSink))
+        *ppvObject = (ITfTextLayoutSink *)this;
 
     if (*ppvObject) {
         AddRef();

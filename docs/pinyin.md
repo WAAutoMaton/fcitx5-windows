@@ -207,9 +207,10 @@ For CTest alone, without starting Core:
 ctest --test-dir win32/build/pinyin-tsf --output-on-failure
 ```
 
-The default nine tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
-`test_candidate`, `test_transport`, `test_service`, `test_langbar` and `test_register`. Root/upstream tests are
-disabled by the default build configuration; these nine tests are not the full
+The default twelve tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
+`test_candidate`, `test_candidate_tsf`, `test_transport`, `test_service`, `test_setup`,
+`test_langbar`, `test_about` and `test_register`. Root/upstream tests are
+disabled by the default build configuration; these twelve tests are not the full
 upstream test suite.
 
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
@@ -240,19 +241,24 @@ upstream test suite.
   icon pixels.
 - `test_candidate`: production DirectWrite/Direct2D rendering at five synthetic
   DPIs, color emoji and monochrome VS15, ellipsis/layout reuse, owner awareness,
-  thread DPI restoration, focus, positioning and resource recreation. See
+  thread DPI restoration, focus, positioning, immediate paint and bounded
+  resource recreation. See
   [candidate verification](windows-candidate-rendering.md#verification).
+- `test_candidate_tsf`: a real TSF context checks retained candidate content and
+  anchor during `TS_E_NOLAYOUT`, merged `ITfTextLayoutSink` repositioning through
+  read-only sessions, caret fallback for clipped composition, timeout/recovery,
+  commit/cancel, hidden owners and late focus/deactivation sessions.
 - `test_register`: actual DLL branding resource and Shell icon extraction,
   plus profile/category calls captured by fake COM managers to verify character
   lengths, DLL path, icon index, `SYSTRAYSUPPORT` and failure handling. It never
   invokes system registration and does not prove taskbar rendering.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers all three probes with CTest;
-a deployed Core must already be running, bringing the total to twelve.
+a deployed Core must already be running, bringing the total to fifteen.
 `dictionaries_probe` and `service_probe` are built but invoked by their separate
-scripts, rather than registered by this option. The latest candidate-rendering
-validation passed AMD64 Release, all nine default tests and the three Pinyin
-probes; see [the recorded scope](windows-candidate-rendering.md#verification).
+scripts, rather than registered by this option. The recorded candidate-rendering
+validation includes the historical Pinyin probes and the current twelve-test
+TSF-only regression; see [the recorded scope](windows-candidate-rendering.md#verification).
 
 `scripts/test-pinyin.ps1` accepts `-Prefix` and `-TsfBuild` for other deployment
 and TSF build directories. Logs are written to `build/pinyin-test/core.stdout.log`

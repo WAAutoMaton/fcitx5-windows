@@ -10,11 +10,12 @@ STDMETHODIMP Tsf::OnCompositionTerminated(TfEditCookie ecWrite,
         }
         composition_.Release();
         ++generation_;
+        candidatePositionRequested_ = false;
         edits_.clear();
         editRequested_ = false;
         displayedPreedit_.clear();
         displayedCursor_ = 0;
-        candidates_.hide();
+        hideCandidates();
         PipeClient::KeyReply reply;
         if (remoteContextId_ && pipe_.reset(remoteContextId_, reply)) {
             state_ = std::move(reply);

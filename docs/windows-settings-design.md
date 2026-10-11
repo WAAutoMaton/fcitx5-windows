@@ -183,7 +183,7 @@ probes 的适配器回调不能代替实际 OS 菜单派发和真实应用验证
 
 ## 已记录的验证
 
-- 设置功能的 AMD64 Core、TSF Release、WinUI Release 构建和当时的 8 项默认 CTest 已通过。加入 `test_candidate` 后当前默认为 9 项；后续候选窗改动的 9 项测试和真实拼音/TSF probes 均已通过，详见 [候选窗验证记录](windows-candidate-rendering.md#verification)。这些是既有验证记录，本次文档更新不代表重新执行了构建或集成测试。
+- 设置功能的 AMD64 Core、TSF Release、WinUI Release 构建和当时的 8 项默认 CTest 已通过。后续候选窗改动新增 `test_candidate` 与 `test_candidate_tsf`，当前默认为 12 项；真实拼音/TSF probes 的历史验证和本次候选布局回归范围见 [候选窗验证记录](windows-candidate-rendering.md#verification)。这些是既有验证记录，本次文档更新不代表重新执行 Core 集成 probes。
 - `ipc_probe`、`settings_probe` 和扩展后的 `tsf_probe` 通过，真实全拼/小鹤/自然码中文提交、英文保持、存储失败保留解码上下文和迟到编辑取消均验证。
 - 按用户明确授权安装当前用户的 x64 DDLM `8000.994.2142.0` 后，`scripts/test-settings-ui.ps1` 验证实际窗口、确定/取消、自然码/小鹤、重启恢复和单实例，截图在 `build/settings-ui-test`。窗口当前 200% 缩放正常；跨屏、文本缩放、高对比度和其他主题仍未全面验证。
 - 未执行输入法注册/注销，真实任务栏指示器右键菜单派发尚未实测。

@@ -15,9 +15,13 @@ bool Tsf::initTextEditSink(CComPtr<ITfDocumentMgr> documentMgr) {
         if (SUCCEEDED(textEditSinkContext_->QueryInterface(IID_ITfSource,
                                                            (void **)&source))) {
             source->UnadviseSink(textEditSinkCookie_);
+            if (textLayoutSinkCookie_ != TF_INVALID_COOKIE) {
+                source->UnadviseSink(textLayoutSinkCookie_);
+            }
         }
         textEditSinkContext_ = nullptr;
         textEditSinkCookie_ = TF_INVALID_COOKIE;
+        textLayoutSinkCookie_ = TF_INVALID_COOKIE;
     }
     if (documentMgr == nullptr) {
         return true;
@@ -37,6 +41,13 @@ bool Tsf::initTextEditSink(CComPtr<ITfDocumentMgr> documentMgr) {
         } else {
             textEditSinkCookie_ = TF_INVALID_COOKIE;
         }
+        if (ret) {
+            if (FAILED(source->AdviseSink(IID_ITfTextLayoutSink,
+                                          (ITfTextLayoutSink *)this,
+                                          &textLayoutSinkCookie_))) {
+                textLayoutSinkCookie_ = TF_INVALID_COOKIE;
+            }
+        }
     }
     if (!ret) {
         textEditSinkContext_ = nullptr;
@@ -44,6 +55,20 @@ bool Tsf::initTextEditSink(CComPtr<ITfDocumentMgr> documentMgr) {
     }
     initRemoteContext();
     return true;
+}
+
+STDMETHODIMP Tsf::OnLayoutChange(ITfContext *context, TfLayoutCode,
+                                 ITfContextView *) {
+    if (context != textEditSinkContext_ || !messageWindow_ ||
+        displayedCandidates_.candidates.empty()) {
+        return S_OK;
+    }
+    if (!candidateRefreshPosted_) {
+        candidateRefreshPosted_ =
+            PostMessageW(messageWindow_, kRefreshCandidateMessage, 0, 0) !=
+            FALSE;
+    }
+    return S_OK;
 }
 
 STDMETHODIMP Tsf::OnEndEdit(ITfContext *context, TfEditCookie cookie,
@@ -73,10 +98,11 @@ STDMETHODIMP Tsf::OnEndEdit(ITfContext *context, TfEditCookie cookie,
         (start > 0 || end < 0)) {
         cancelComposition();
         ++generation_;
+        candidatePositionRequested_ = false;
         edits_.clear();
         editRequested_ = false;
         displayedPreedit_.clear();
-        candidates_.hide();
+        hideCandidates();
         PipeClient::KeyReply reply;
         if (remoteContextId_ && pipe_.reset(remoteContextId_, reply)) {
             state_ = std::move(reply);

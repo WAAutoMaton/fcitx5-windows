@@ -36,7 +36,7 @@ Run from the repository root:
 
 The script initializes pinned submodules, applies compatibility patches and
 builds Core/libime/chinese-addons, TSF and WinUI Settings. It stages the complete
-runtime under `build/all/prefix`, runs the ten default TSF CTest tests, then
+runtime under `build/all/prefix`, runs the twelve default TSF CTest tests, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
 
@@ -161,11 +161,11 @@ require an interactive desktop and installed Settings runtimes. See
 [probe coverage and limits](pinyin.md#build-and-test-tsf) for the distinction
 between actual TSF contexts, simulated callbacks and real OS dispatch.
 
-Default CTest includes `test_candidate`, which exercises the production
+Default CTest includes `test_candidate` and `test_candidate_tsf`, which exercise the production
 DirectWrite/Direct2D draw function and popup lifecycle without Core or TIP
 registration. See [candidate rendering validation](windows-candidate-rendering.md#verification)
 for preview images and the remaining physical-monitor/application checks.
-Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the ten
+Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the twelve
 default tests; it requires a running deployed Core.
 
 The following script regressions do not perform real registration or terminate

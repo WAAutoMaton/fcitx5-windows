@@ -2,6 +2,7 @@
 #include "textutil.h"
 #include "tsf.h"
 #include <new>
+#include <textstor.h>
 
 extern void DllAddRef();
 extern void DllRelease();
@@ -99,6 +100,51 @@ class CancelEditSession final : public ITfEditSession {
     CComPtr<ITfComposition> composition_;
 };
 
+class CandidatePositionEditSession final : public ITfEditSession {
+  public:
+    CandidatePositionEditSession(Tsf *owner, ITfContext *context,
+                                 uint64_t generation)
+        : owner_(owner), context_(context), generation_(generation) {
+        owner_->AddRef();
+    }
+    ~CandidatePositionEditSession() { owner_->Release(); }
+    STDMETHODIMP QueryInterface(REFIID id, void **result) override {
+        if (!result) {
+            return E_INVALIDARG;
+        }
+        *result = nullptr;
+        if (id == IID_IUnknown || id == IID_ITfEditSession) {
+            *result = static_cast<ITfEditSession *>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override {
+        return InterlockedIncrement(&references_);
+    }
+    STDMETHODIMP_(ULONG) Release() override {
+        const auto remaining = InterlockedDecrement(&references_);
+        if (!remaining) {
+            delete this;
+        }
+        return remaining;
+    }
+    STDMETHODIMP DoEditSession(TfEditCookie cookie) override {
+        if (generation_ == owner_->generation_) {
+            owner_->candidatePositionRequested_ = false;
+        }
+        owner_->refreshCandidatePosition(cookie, context_, generation_);
+        return S_OK;
+    }
+
+  private:
+    LONG references_ = 1;
+    Tsf *owner_;
+    CComPtr<ITfContext> context_;
+    uint64_t generation_;
+};
+
 void Tsf::cancelComposition() {
     if (!composition_ || !textEditSinkContext_) {
         return;
@@ -122,6 +168,147 @@ bool Tsf::submitSnapshot(PipeClient::KeyReply reply, bool synchronous) {
     state_.commit.clear();
     edits_.push_back({textEditSinkContext_, std::move(reply), generation_});
     return editRequested_ || requestNextEdit(synchronous);
+}
+
+bool Tsf::requestCandidatePosition() {
+    if (candidateLayoutPending_ &&
+        GetTickCount64() >= candidateLayoutDeadline_) {
+        candidates_.hide();
+    }
+    if (!textEditSinkContext_ || displayedCandidates_.candidates.empty() ||
+        candidatePositionRequested_) {
+        return false;
+    }
+    CComPtr<ITfEditSession> session;
+    CComPtr<ITfContext> context = textEditSinkContext_;
+    const auto generation = generation_;
+    session.Attach(new (std::nothrow)
+                       CandidatePositionEditSession(this, context, generation));
+    if (!session) {
+        return false;
+    }
+    HRESULT result = E_FAIL;
+    candidatePositionRequested_ = true;
+    auto request = context->RequestEditSession(
+        clientId_, session, TF_ES_SYNC | TF_ES_READ, &result);
+    if (generation != generation_ || context != textEditSinkContext_) {
+        return false;
+    }
+    if (FAILED(request) || result == TF_E_SYNCHRONOUS ||
+        result == TF_E_LOCKED) {
+        result = E_FAIL;
+        request = context->RequestEditSession(
+            clientId_, session, TF_ES_ASYNC | TF_ES_READ, &result);
+    }
+    if (FAILED(request) || FAILED(result)) {
+        candidatePositionRequested_ = false;
+        return false;
+    }
+    return true;
+}
+
+void Tsf::refreshCandidatePosition(TfEditCookie cookie, ITfContext *context,
+                                   uint64_t generation) {
+    if (generation != generation_ || context != textEditSinkContext_ ||
+        !foreground_ || displayedCandidates_.candidates.empty()) {
+        return;
+    }
+    if (displayedCandidates_.settingsRevision < state_.settingsRevision) {
+        hideCandidates();
+        return;
+    }
+    updateCandidates(cookie, context, displayedCandidates_);
+}
+
+void Tsf::hideCandidates() {
+    candidates_.hide();
+    candidateLayoutPending_ = false;
+    candidateLayoutDeadline_ = 0;
+    displayedCandidates_ = {};
+    candidateView_.Release();
+    candidateOwner_ = nullptr;
+}
+
+void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
+                           const PipeClient::KeyReply &snapshot) {
+    const auto reply = snapshot;
+    if (reply.candidates.empty()) {
+        hideCandidates();
+        return;
+    }
+    CComPtr<ITfContextView> view;
+    HWND window = nullptr;
+    if (FAILED(context->GetActiveView(&view)) || !view ||
+        FAILED(view->GetWnd(&window)) ||
+        (window && (!IsWindowVisible(window) || IsIconic(window)))) {
+        hideCandidates();
+        return;
+    }
+    if (view != candidateView_ || window != candidateOwner_) {
+        hideCandidates();
+        candidateView_ = view;
+        candidateOwner_ = window;
+    }
+    displayedCandidates_ = reply;
+    displayedCandidates_.commit.clear();
+    CComPtr<ITfRange> range;
+    if (composition_) {
+        composition_->GetRange(&range);
+    }
+    TF_SELECTION selection{};
+    ULONG fetched = 0;
+    CComPtr<ITfRange> caret;
+    if (SUCCEEDED(context->GetSelection(cookie, TF_DEFAULT_SELECTION, 1,
+                                        &selection, &fetched)) &&
+        fetched) {
+        caret.Attach(selection.range);
+    }
+    if (!range) {
+        range = caret;
+    }
+    if (!range) {
+        hideCandidates();
+        return;
+    }
+    RECT anchor{};
+    BOOL clipped = FALSE;
+    ScopedDpiAwareness scope(window ? GetWindowDpiAwarenessContext(window)
+                                    : GetThreadDpiAwarenessContext());
+    if (!scope.valid()) {
+        hideCandidates();
+        return;
+    }
+    auto result = view->GetTextExt(cookie, range, &anchor, &clipped);
+    // A partially offscreen composition can still have a visible caret.
+    if ((result == TS_E_NOLAYOUT || (SUCCEEDED(result) && clipped)) && caret &&
+        SUCCEEDED(caret->Collapse(cookie, TF_ANCHOR_END))) {
+        result = view->GetTextExt(cookie, caret, &anchor, &clipped);
+    }
+    if (result == TS_E_NOLAYOUT) {
+        if (!candidateLayoutPending_) {
+            candidateLayoutDeadline_ = GetTickCount64() + 250;
+            if (messageWindow_ && !candidateRefreshPosted_) {
+                candidateRefreshPosted_ =
+                    PostMessageW(messageWindow_, kRefreshCandidateMessage, 0,
+                                 0) != FALSE;
+            }
+        }
+        candidateLayoutPending_ = true;
+        if (GetTickCount64() < candidateLayoutDeadline_) {
+            candidates_.update(reply);
+        } else {
+            candidates_.hide();
+        }
+        return;
+    }
+    if (FAILED(result) || clipped || anchor.bottom <= anchor.top ||
+        anchor.right < anchor.left) {
+        hideCandidates();
+        return;
+    }
+    candidateLayoutPending_ = false;
+    candidateLayoutDeadline_ = 0;
+    candidates_.show(reply, window, anchor);
 }
 
 bool Tsf::requestNextEdit(bool synchronous) {
@@ -167,6 +354,7 @@ void Tsf::finishEdit(uint64_t generation, HRESULT result) {
     }
     if (FAILED(result)) {
         ++generation_;
+        candidatePositionRequested_ = false;
         edits_.clear();
         cancelComposition();
         displayedPreedit_.clear();
@@ -176,7 +364,7 @@ void Tsf::finishEdit(uint64_t generation, HRESULT result) {
             pipe_.reset(remoteContextId_, empty);
         }
         state_ = std::move(empty);
-        candidates_.hide();
+        hideCandidates();
         OutputDebugStringW(
             L"Fcitx5: document edit failed; input state reset\n");
     } else if (!edits_.empty() && messageWindow_) {
@@ -205,6 +393,7 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
     }
     CComPtr<ITfRange> range;
     if (!commit.empty()) {
+        hideCandidates();
         if (composition_) {
             CComPtr<ITfComposition> composition = composition_;
             if (FAILED(composition->GetRange(&range)) || !range ||
@@ -245,6 +434,7 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
     const bool changed = displayedPreedit_ != reply.preedit ||
                          displayedCursor_ != reply.preeditCursor;
     if (preedit.empty() && composition_) {
+        hideCandidates();
         CComPtr<ITfComposition> composition = composition_;
         range.Release();
         if (FAILED(composition->GetRange(&range)) || !range ||
@@ -307,39 +497,7 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
     }
     displayedPreedit_ = reply.preedit;
     displayedCursor_ = reply.preeditCursor;
-    if (reply.candidates.empty()) {
-        candidates_.hide();
-        return S_OK;
-    }
-    if (!range) {
-        TF_SELECTION selection{};
-        ULONG fetched = 0;
-        if (FAILED(context->GetSelection(cookie, TF_DEFAULT_SELECTION, 1,
-                                         &selection, &fetched)) ||
-            !fetched) {
-            candidates_.hide();
-            return S_OK;
-        }
-        range.Attach(selection.range);
-    }
-    CComPtr<ITfContextView> view;
-    RECT anchor{};
-    BOOL clipped = FALSE;
-    HWND window = nullptr;
-    if (SUCCEEDED(context->GetActiveView(&view)) && view &&
-        SUCCEEDED(view->GetWnd(&window))) {
-        // Query TSF geometry in the owner's coordinate space before converting
-        // it to the candidate window's physical screen coordinates.
-        ScopedDpiAwareness scope(window ? GetWindowDpiAwarenessContext(window)
-                                        : GetThreadDpiAwarenessContext());
-        if (scope.valid() &&
-            SUCCEEDED(view->GetTextExt(cookie, range, &anchor, &clipped)) &&
-            !clipped) {
-            candidates_.show(reply, window, anchor);
-            return S_OK;
-        }
-    }
-    candidates_.hide();
+    updateCandidates(cookie, context, reply);
     return S_OK;
 }
 

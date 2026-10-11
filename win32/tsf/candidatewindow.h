@@ -17,6 +17,8 @@ class CandidateWindow {
     ~CandidateWindow();
     // anchor is in the owner's logical screen coordinates (TSF GetTextExt).
     void show(const PipeClient::KeyReply &reply, HWND owner, RECT anchor);
+    // Keep the current screen anchor while the owner's text layout catches up.
+    bool update(const PipeClient::KeyReply &reply);
     void hide();
     bool visible() const { return window_ && IsWindowVisible(window_); }
 
@@ -44,6 +46,7 @@ class CandidateWindow {
     bool createTarget();
     void discardTarget();
     HRESULT draw(ID2D1RenderTarget *target, ID2D1SolidColorBrush *brush);
+    void finishPaint(HRESULT result);
     void paint();
     HWND window_ = nullptr;
     HINSTANCE module_ = nullptr;
@@ -58,6 +61,7 @@ class CandidateWindow {
     float commentLeft_ = 0;
     bool positioning_ = false;
     bool layoutDirty_ = true;
+    unsigned paintFailures_ = 0;
     CComPtr<ID2D1Factory> drawingFactory_;
     CComPtr<IDWriteFactory> textFactory_;
     CComPtr<IDWriteTextFormat> textFormat_;
