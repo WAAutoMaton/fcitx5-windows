@@ -1,5 +1,7 @@
 # Fcitx5 Windows
 
+[中文文档](README_zh-cn.md)
+
 An in-progress Windows port of Fcitx5, with a basic Pinyin input path on AMD64.
 Core runs in a separate process; a TSF DLL integrates with applications, and a
 WinUI settings app provides Pinyin configuration. There is no unified installer yet.
