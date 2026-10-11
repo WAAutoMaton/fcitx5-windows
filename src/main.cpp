@@ -1,3 +1,4 @@
+#include "../win32/i18n/translator.h"
 #include "../win32/ipc/service.h"
 #include "windowsfrontend.h"
 #include "windowskeyboard.h"
@@ -45,11 +46,26 @@ void setupEnv() {
     setenv("LIBIME_MODEL_DIRS", (rootPath / "lib" / "libime").string());
 }
 
-void start(const ::fs::path &settingsFile,
+void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
            win32::ipc::ServiceProcess &service) {
     Log::setLogRule("*=3,notimedate");
     setupEnv();
-    std::setlocale(LC_ALL, "");
+    const auto *locale = std::setlocale(LC_ALL, "");
+    if (!locale || std::string_view(locale) == "C") {
+        if (!std::setlocale(LC_ALL, ".UTF-8")) {
+            FCITX_WARN() << "Cannot initialize a non-C locale for gettext";
+        }
+    }
+    win32::ipc::GlobalSettings uiSettings;
+    if (!win32::i18n::readSettings(uiSettingsFile, uiSettings)) {
+        FCITX_WARN()
+            << "Cannot read UI language settings; using system language";
+    }
+    const auto activeLanguage =
+        win32::i18n::resolveLanguage(uiSettings.language);
+    const auto language = win32::i18n::localeName(activeLanguage);
+    setenv("LANGUAGE", language);
+    setenv("FCITX_LOCALE", language);
     instance = std::make_unique<Instance>(0, nullptr);
     auto &addonMgr = instance->addonManager();
     win32::WindowsKeyboardFactory keyboardFactory;
@@ -86,7 +102,7 @@ void start(const ::fs::path &settingsFile,
     dispatcher = std::make_unique<fcitx::EventDispatcher>();
     dispatcher->attach(&instance->eventLoop());
     pipeServer = std::make_unique<fcitx::win32::WindowsPipeServer>(
-        *instance, *dispatcher, settingsFile);
+        *instance, *dispatcher, settingsFile, uiSettingsFile, activeLanguage);
     pipeServer->start();
     auto shutdown = instance->eventLoop().addTimeEvent(
         CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 100000, 0,
@@ -151,20 +167,29 @@ int main(int argc, char **argv) {
             return 0;
         }
         fs::path settingsFile;
-        if (argc == 3 &&
-            std::string_view(argv[1]) == "--windows-settings-file") {
-            settingsFile = fs::absolute(fs::path(
-                std::u8string(reinterpret_cast<const char8_t *>(argv[2]))));
-        } else if (argc != 1) {
-            throw std::runtime_error(
-                "Usage: Fcitx5 [--windows-settings-file PATH | "
-                "--stop-services | --restart-services]");
+        fs::path uiSettingsFile;
+        for (int i = 1; i < argc; i += 2) {
+            if (i + 1 >= argc)
+                throw std::runtime_error("Missing settings path");
+            auto path = fs::absolute(fs::path(
+                std::u8string(reinterpret_cast<const char8_t *>(argv[i + 1]))));
+            if (std::string_view(argv[i]) == "--windows-settings-file")
+                settingsFile = path;
+            else if (std::string_view(argv[i]) == "--windows-ui-settings-file")
+                uiSettingsFile = path;
+            else
+                throw std::runtime_error("Unknown Core argument");
         }
+        if (uiSettingsFile.empty())
+            uiSettingsFile =
+                settingsFile.empty()
+                    ? fcitx::win32::i18n::settingsPath()
+                    : settingsFile.parent_path() / "windows-ui.conf";
         fcitx::win32::ipc::ServiceProcess service(L"Core");
         if (!service.acquire()) {
             return 0;
         }
-        fcitx::start(settingsFile, service);
+        fcitx::start(settingsFile, uiSettingsFile, service);
         return 0;
     } catch (const std::exception &error) {
         FCITX_ERROR() << error.what();

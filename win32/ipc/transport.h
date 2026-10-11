@@ -35,8 +35,12 @@ inline std::wstring pipeName() {
     if (sid.empty() || !ProcessIdToSessionId(GetCurrentProcessId(), &session)) {
         return {};
     }
-    return LR"(\\.\pipe\fcitx5-windows-v2-)" + sid + L"-" +
-           std::to_wstring(session);
+    auto name = LR"(\\.\pipe\fcitx5-windows-v2-)" + sid + L"-" +
+                std::to_wstring(session);
+#ifdef FCITX5_UI_TEST
+    name += L"-ui-test";
+#endif
+    return name;
 }
 
 inline bool transfer(HANDLE pipe, bool write, void *data, DWORD size,

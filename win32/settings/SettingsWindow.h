@@ -1,11 +1,13 @@
 #pragma once
 
+#include "../i18n/translator.h"
 #include "../ipc/service.h"
 #include "../tsf/pipeclient.h"
 #undef GetCurrentTime
 #include <memory>
 #include <vector>
 #include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
@@ -19,6 +21,14 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
   private:
     winrt::fire_and_forget transfer(bool save);
     winrt::fire_and_forget chooseMethod();
+    winrt::fire_and_forget chooseGlobal();
+    winrt::Windows::Foundation::IAsyncOperation<bool> resolveDraft();
+    winrt::Windows::Foundation::IAsyncOperation<bool> loadGlobal();
+    winrt::Windows::Foundation::IAsyncOperation<bool> saveGlobal();
+    void renderGlobal();
+    std::wstring tr(const char *context, const char *english) const;
+    std::wstring errorText(ipc::SettingsError error) const;
+    void translateStatic();
     winrt::fire_and_forget changeSelection(int action);
     winrt::Windows::Foundation::IAsyncOperation<bool> saveConfig();
     winrt::Windows::Foundation::IAsyncOperation<bool>
@@ -47,6 +57,15 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     ipc::MethodConfigReply config_;
     std::vector<std::string> availableIds_;
     bool working_ = false, rendering_ = false;
+    enum class PageKind { InputMethod, Global };
+    PageKind page_ = PageKind::InputMethod;
+    win32::i18n::Translator translator_;
+    bool languageInitialized_ = false;
+    ipc::GlobalSettingsReply global_;
+    winrt::Microsoft::UI::Xaml::Controls::Primitives::ToggleButton
+        globalButton_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::StackPanel globalPanel_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ComboBox language_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock status_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button confirm_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button retry_{nullptr};

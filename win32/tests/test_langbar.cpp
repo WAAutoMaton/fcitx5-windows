@@ -33,6 +33,7 @@ class UpdateSink : public ITfLangBarItemSink {
 
 class TestMenu : public ITfMenu {
   public:
+    fcitx::win32::i18n::Translation translation;
     STDMETHODIMP QueryInterface(REFIID id, void **result) override {
         if (!result) {
             return E_INVALIDARG;
@@ -56,14 +57,14 @@ class TestMenu : public ITfMenu {
                             fcitx::LangBarItem::kRestartMenuId,
                             fcitx::LangBarItem::kStopMenuId,
                             fcitx::LangBarItem::kAboutMenuId};
-        const wchar_t *labels[] = {
-            L"\u8f93\u5165\u6cd5\u8bbe\u7f6e",
-            L"\u7528\u6237\u6570\u636e\u6587\u4ef6\u5939",
-            L"\u91cd\u542f\u670d\u52a1", L"\u5173\u95ed\u670d\u52a1",
-            L"\u5173\u4e8e"};
+        const char *labels[] = {"Input Method Settings", "User Data Folder",
+                                "Restart Services", "Stop Services", "About"};
         assert(items < std::size(labels));
         assert(id == ids[items]);
-        assert(std::wstring(text, length) == labels[items]);
+        const fcitx::win32::i18n::Translator english;
+        assert(
+            std::wstring(text, length) ==
+            (translation ? *translation : english).wide("menu", labels[items]));
         ++items;
         return S_OK;
     }
@@ -139,6 +140,16 @@ int main() {
     assert(item->InitMenu(nullptr) == E_INVALIDARG);
     TestMenu menu;
     assert(item->InitMenu(&menu) == S_OK && menu.items == 5);
+    for (const auto language :
+         {fcitx::win32::ipc::UiLanguage::SimplifiedChinese,
+          fcitx::win32::ipc::UiLanguage::TraditionalChinese,
+          fcitx::win32::ipc::UiLanguage::English}) {
+        TestMenu translated;
+        translated.translation =
+            std::make_shared<fcitx::win32::i18n::Translator>(language);
+        item->setTranslation(translated.translation);
+        assert(item->InitMenu(&translated) == S_OK && translated.items == 5);
+    }
     assert(item->OnMenuSelect(999) == E_INVALIDARG);
     const auto dispatch =
         CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,

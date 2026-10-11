@@ -38,3 +38,4 @@ target_compile_definitions(Fcitx5Utils PUBLIC -DFcitx5Utils_EXPORTS)
 target_compile_definitions(Fcitx5Core PUBLIC -DFcitx5Core_EXPORTS)
 
 add_subdirectory(src)
+include(cmake/windows-translations.cmake)

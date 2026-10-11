@@ -36,6 +36,7 @@
     <OutDir>$(ProjectDir)..\build\settings\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)..\build\settings\obj\$(Configuration)\</IntDir>
     <TargetName>Fcitx5Settings</TargetName>
+    <I18nBuildDir Condition="'$(I18nBuildDir)'==''">$(ProjectDir)..\build\settings\i18n\$(Configuration)</I18nBuildDir>
     <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
     <AppxPackage>false</AppxPackage>
     <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
@@ -49,11 +50,12 @@
       <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(UiTest)'=='true'">FCITX5_UI_TEST;NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(IntDir);$(IntDir)Generated Files;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>advapi32.lib;secur32.lib;user32.lib;ole32.lib;shell32.lib;windowsapp.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(I18nBuildDir)\settings-i18n.lib;advapi32.lib;secur32.lib;user32.lib;ole32.lib;shell32.lib;windowsapp.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest><AdditionalManifestFiles>app.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles></Manifest>
   </ItemDefinitionGroup>

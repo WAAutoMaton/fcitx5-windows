@@ -12,23 +12,26 @@ extern void DllRelease();
 namespace fcitx {
 namespace {
 constexpr wchar_t kDescription[] = L"Fcitx5 input mode";
-constexpr wchar_t kTooltipChinese[] = L"Fcitx5 Pinyin - Chinese input";
-constexpr wchar_t kTooltipEnglish[] = L"Fcitx5 Pinyin - English input";
+constexpr auto kTooltipChinese =
+    win32::i18n::mark("menu", "Fcitx5 Pinyin - Chinese input");
+constexpr auto kTooltipEnglish =
+    win32::i18n::mark("menu", "Fcitx5 Pinyin - English input");
 struct MenuCommand {
     UINT id;
     UINT message;
-    const wchar_t *text;
+    const char *text;
 };
 constexpr MenuCommand kCommands[] = {
     {LangBarItem::kSettingsMenuId, LangBarItem::kSettingsMessage,
-     L"\u8f93\u5165\u6cd5\u8bbe\u7f6e"},
+     win32::i18n::mark("menu", "Input Method Settings")},
     {LangBarItem::kUserDataMenuId, LangBarItem::kUserDataMessage,
-     L"\u7528\u6237\u6570\u636e\u6587\u4ef6\u5939"},
+     win32::i18n::mark("menu", "User Data Folder")},
     {LangBarItem::kRestartMenuId, LangBarItem::kRestartMessage,
-     L"\u91cd\u542f\u670d\u52a1"},
+     win32::i18n::mark("menu", "Restart Services")},
     {LangBarItem::kStopMenuId, LangBarItem::kStopMessage,
-     L"\u5173\u95ed\u670d\u52a1"},
-    {LangBarItem::kAboutMenuId, LangBarItem::kAboutMessage, L"\u5173\u4e8e"}};
+     win32::i18n::mark("menu", "Stop Services")},
+    {LangBarItem::kAboutMenuId, LangBarItem::kAboutMessage,
+     win32::i18n::mark("menu", "About")}};
 
 HICON makeTextIcon(const wchar_t *text) {
     const auto baseSize = GetSystemMetrics(SM_CXSMICON);
@@ -166,9 +169,20 @@ STDMETHODIMP LangBarItem::GetTooltipString(BSTR *pbstrToolTip) {
     if (!pbstrToolTip) {
         return E_INVALIDARG;
     }
-    *pbstrToolTip = SysAllocString(
-        methodName_.empty() ? (chineseMode_ ? kTooltipChinese : kTooltipEnglish)
-                            : methodName_.c_str());
+    *pbstrToolTip = nullptr;
+    try {
+        const win32::i18n::Translator english;
+        const auto snapshot = translation_;
+        const auto text =
+            methodName_.empty()
+                ? (snapshot ? *snapshot : english)
+                      .wide("menu",
+                            chineseMode_ ? kTooltipChinese : kTooltipEnglish)
+                : methodName_;
+        *pbstrToolTip = SysAllocString(text.c_str());
+    } catch (...) {
+        return E_OUTOFMEMORY;
+    }
     return *pbstrToolTip ? S_OK : E_OUTOFMEMORY;
 }
 
@@ -187,9 +201,13 @@ STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT point, const RECT *) {
             CreateWindowExW(WS_EX_TOOLWINDOW, L"STATIC", L"", WS_POPUP, point.x,
                             point.y, 0, 0, nullptr, nullptr, nullptr, nullptr);
         bool populated = owner != nullptr;
+        const auto translation = translation_;
+        const win32::i18n::Translator english;
         for (const auto &command : kCommands) {
+            const auto text = (translation ? *translation : english)
+                                  .wide("menu", command.text);
             populated = populated &&
-                        AppendMenuW(menu, MF_STRING, command.id, command.text);
+                        AppendMenuW(menu, MF_STRING, command.id, text.c_str());
         }
         if (!populated) {
             if (owner) {
@@ -216,10 +234,14 @@ STDMETHODIMP LangBarItem::InitMenu(ITfMenu *menu) {
     if (!menu) {
         return E_INVALIDARG;
     }
+    const auto translation = translation_;
+    const win32::i18n::Translator english;
     for (const auto &command : kCommands) {
-        const auto result = menu->AddMenuItem(
-            command.id, 0, nullptr, nullptr, command.text,
-            static_cast<ULONG>(wcslen(command.text)), nullptr);
+        const auto text =
+            (translation ? *translation : english).wide("menu", command.text);
+        const auto result =
+            menu->AddMenuItem(command.id, 0, nullptr, nullptr, text.c_str(),
+                              static_cast<ULONG>(text.size()), nullptr);
         if (FAILED(result)) {
             return result;
         }
@@ -299,6 +321,11 @@ void LangBarItem::notify(DWORD flags) {
     if (sink) {
         sink->OnUpdate(flags);
     }
+}
+
+void LangBarItem::setTranslation(win32::i18n::Translation translation) {
+    translation_ = std::move(translation);
+    notify(TF_LBI_TEXT | TF_LBI_TOOLTIP);
 }
 
 void LangBarItem::setMode(bool chineseMode) {

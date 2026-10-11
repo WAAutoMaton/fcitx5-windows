@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../i18n/translator.h"
 #include <atlcomcli.h>
 #include <ctffunc.h>
 #include <ctfutb.h>
@@ -47,6 +48,7 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     void setInputMethod(bool enabled, std::wstring name, std::wstring label,
                         std::wstring icon = {});
     void detach();
+    void setTranslation(win32::i18n::Translation translation);
 
   private:
     HICON createIcon() const;
@@ -62,6 +64,7 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     DWORD sinkCookie_ = TF_INVALID_COOKIE;
     DWORD nextSinkCookie_ = 0;
     bool shown_ = true;
+    win32::i18n::Translation translation_;
 };
 
 } // namespace fcitx

@@ -94,6 +94,11 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
 }
 
 void Tsf::pollState() {
+    if (const auto translation = translationMonitor_.poll()) {
+        if (langBarItem_)
+            langBarItem_.p->setTranslation(translation);
+        about_.setTranslation(translation);
+    }
     if (!(GetKeyState(VK_SPACE) & 0x8000) && !modeSwitchPending_) {
         modeSwitchKeyDown_ = false;
     }

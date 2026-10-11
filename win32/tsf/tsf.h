@@ -142,6 +142,7 @@ class Tsf : public ITfTextInputProcessorEx,
     std::bitset<256> handledKeys_;
     CandidateWindow candidates_;
     AboutWindow about_;
+    win32::i18n::TranslationMonitor translationMonitor_;
     HWND messageWindow_ = nullptr;
     ULONGLONG nextReconnect_ = 0;
     bool foreground_ = true;

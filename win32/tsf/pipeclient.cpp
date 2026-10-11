@@ -190,6 +190,22 @@ bool PipeClient::getDictionaries(ipc::DictionariesReply &reply) {
            ipc::decodeDictionariesReply(response.payload, reply);
 }
 
+bool PipeClient::getGlobalSettings(ipc::GlobalSettingsReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::GetGlobalSettings, 0, {}, response) &&
+           response.type == ipc::MessageType::GlobalSettingsReply &&
+           ipc::decodeGlobalSettingsReply(response.payload, reply);
+}
+
+bool PipeClient::setGlobalSettings(const ipc::GlobalSettings &settings,
+                                   ipc::GlobalSettingsReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::SetGlobalSettings, 0,
+                   ipc::encodeGlobalSettings(settings), response) &&
+           response.type == ipc::MessageType::GlobalSettingsReply &&
+           ipc::decodeGlobalSettingsReply(response.payload, reply);
+}
+
 bool PipeClient::setSettings(const ipc::PinyinSettings &settings,
                              ipc::SettingsReply &reply) {
     ipc::Frame response;

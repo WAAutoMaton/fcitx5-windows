@@ -19,4 +19,8 @@ New-Item -ItemType Directory -Force "$destination/tsf" | Out-Null
 New-Item -ItemType Directory -Force "$destination/setup" | Out-Null
 Copy-Item -LiteralPath $dll -Destination "$destination/tsf/fcitx5-x86_64.dll"
 Copy-Item -LiteralPath $helper -Destination "$destination/setup/Fcitx5SetupHelper.exe"
+if (Test-Path -LiteralPath "$TsfBuild/share/locale") {
+    New-Item -ItemType Directory -Force "$destination/share/locale" | Out-Null
+    Copy-Item "$TsfBuild/share/locale/*" -Destination "$destination/share/locale" -Recurse -Force
+}
 Write-Output "Deployed $destination/tsf/fcitx5-x86_64.dll. Registration was not changed."

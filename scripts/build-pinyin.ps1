@@ -6,6 +6,7 @@ param(
     [string]$BuildRoot = '',
     [ValidateSet('Source', 'Prebuilt')][string]$DataMode = 'Source',
     [string]$DataArchive = '',
+    [string]$BoostSource = '',
     [int]$Jobs = 6
 )
 
@@ -68,8 +69,11 @@ try {
     $common = @('-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_INSTALL_PREFIX=$Prefix",
         "-DCMAKE_C_COMPILER=$sysroot/bin/clang.exe", "-DCMAKE_CXX_COMPILER=$sysroot/bin/clang++.exe",
         "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe")
+    $localeOptions = @()
+    if ($BoostSource) { $localeOptions += "-DFETCHCONTENT_SOURCE_DIR_NATIVE_BOOST=$([IO.Path]::GetFullPath($BoostSource))" }
     Invoke-Checked 'cmake' (@('-S', $root, '-B', "$BuildRoot/pinyin-core", '-DARCH=AMD64',
-        '-DENABLE_WINDOWS_ASCII_FALLBACK=OFF', '-DENABLE_KEYBOARD=OFF') + $common)
+        '-DENABLE_WINDOWS_ASCII_FALLBACK=OFF', '-DENABLE_KEYBOARD=OFF',
+        "-DWINDOWS_DEPENDENCY_PREFIX=$DependencyPrefix") + $common + $localeOptions)
     Invoke-Checked 'cmake' @('--build', "$BuildRoot/pinyin-core", '-j', "$Jobs")
     Invoke-Checked 'cmake' @('--install', "$BuildRoot/pinyin-core")
 

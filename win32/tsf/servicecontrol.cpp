@@ -149,18 +149,21 @@ void Tsf::pollServiceTask() {
         requestService(pending);
     }
     if (error && command != kEnsureServiceMessage) {
-        const auto text =
+        const auto translation = translationMonitor_.snapshot();
+        auto text = translation->wide(
+            "settings",
             command == LangBarItem::kUserDataMessage
-                ? L"\u65e0\u6cd5\u6253\u5f00\u7528\u6237\u6570"
-                  L"\u636e\u6587\u4ef6\u5939\u3002\nWindows error: " +
-                      std::to_wstring(error)
-                : L"\u670d\u52a1\u64cd\u4f5c\u5931\u8d25\u3002\n"
-                  L"\u670d\u52a1\u5df2\u5173\u95ed\u65f6\uff0c\u8bf7\u5148"
-                  L"\u9009\u62e9\u201c\u91cd\u542f\u670d\u52a1\u201d\u3002\n"
-                  L"\u8bf7\u786e\u8ba4 DLL\u3001Core \u548c\u8bbe\u7f6e"
-                  L"\u7a0b\u5e8f\u5df2\u90e8\u7f72\u5230\u540c\u4e00"
-                  L"\u5b89\u88c5\u76ee\u5f55\u3002\nWindows error: " +
-                      std::to_wstring(error);
+                ? win32::i18n::mark("settings",
+                                    "Cannot open the user data folder.")
+                : win32::i18n::mark("settings", "Service operation failed."));
+        if (command != LangBarItem::kUserDataMessage)
+            text += L"\n" + translation->wide(
+                                "settings",
+                                "If services are stopped, restart services. "
+                                "Check that the DLL, Core and Settings are in "
+                                "the same installation directory.");
+        text += L"\n" +
+                translation->format("settings", "Windows error: {0}", error);
         MessageBoxW(nullptr, text.c_str(), L"Fcitx5", MB_OK | MB_ICONERROR);
     }
 }

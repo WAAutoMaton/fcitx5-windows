@@ -1,3 +1,4 @@
+#include "../i18n/translator.h"
 #include "../ipc/service.h"
 #include "App.h"
 #include <MddBootstrap.h>
@@ -14,6 +15,13 @@ bool settingsServiceStopping() {
 } // namespace fcitx
 
 static int runSettings() {
+    fcitx::ipc::GlobalSettings languageSettings;
+    try {
+        fcitx::win32::i18n::readSettings(fcitx::win32::i18n::settingsPath(),
+                                         languageSettings);
+    } catch (...) {
+    }
+    const fcitx::win32::i18n::Translator translator(languageSettings.language);
     const auto activationName = fcitx::ipc::settingsActivationBase();
     fcitx::ipc::ServiceSecurity security;
     fcitx::ipc::ServiceHandle activation(CreateEventW(
@@ -50,9 +58,12 @@ static int runSettings() {
     if (FAILED(initialized)) {
         wchar_t message[256]{};
         swprintf_s(message,
-                   L"\u9700\u8981\u5b8c\u6574\u7684 Windows App SDK 1.8 x64 "
-                   L"\u8fd0\u884c\u65f6\u3002\n"
+                   L"%ls\n"
                    L"Framework / DDLM >= %ls\nHRESULT: 0x%08X",
+                   translator
+                       .wide("settings",
+                             "The Windows App SDK 1.8 x64 runtime is required.")
+                       .c_str(),
                    WINDOWSAPPSDK_RUNTIME_VERSION_DOTQUADSTRING_W,
                    static_cast<unsigned>(initialized));
         MessageBoxW(nullptr, message, L"Fcitx5 settings", MB_OK | MB_ICONERROR);

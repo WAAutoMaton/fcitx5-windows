@@ -5,6 +5,32 @@
 using namespace fcitx::win32::ipc;
 
 int main() {
+    assert(globalSettingsRequest(MessageType::GetGlobalSettings));
+    assert(globalSettingsRequest(MessageType::SetGlobalSettings));
+    GlobalSettings global{UiLanguage::TraditionalChinese, 42};
+    GlobalSettings restoredGlobal;
+    assert(decodeGlobalSettings(encodeGlobalSettings(global), restoredGlobal) &&
+           restoredGlobal == global);
+    auto globalPayload = encodeGlobalSettings(global);
+    globalPayload[0] = 255;
+    assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
+    globalPayload = encodeGlobalSettings(global);
+    globalPayload.push_back(0);
+    assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
+    globalPayload = encodeGlobalSettings(global);
+    globalPayload.pop_back();
+    assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
+    GlobalSettingsReply globalReply;
+    globalReply.settings = global;
+    globalReply.resolvedLanguage = UiLanguage::TraditionalChinese;
+    globalReply.coreActiveLanguage = UiLanguage::English;
+    GlobalSettingsReply decodedGlobalReply;
+    auto globalReplyPayload = encodeGlobalSettingsReply(globalReply);
+    assert(decodeGlobalSettingsReply(globalReplyPayload, decodedGlobalReply));
+    assert(decodedGlobalReply.settings == global &&
+           decodedGlobalReply.coreActiveLanguage == UiLanguage::English);
+    globalReplyPayload[10] = static_cast<uint8_t>(UiLanguage::System);
+    assert(!decodeGlobalSettingsReply(globalReplyPayload, decodedGlobalReply));
     Frame source;
     source.type = MessageType::KeyDown;
     source.requestId = 42;

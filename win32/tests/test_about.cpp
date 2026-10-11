@@ -97,13 +97,21 @@ int main(int argc, char **argv) {
         if (*fcitx::buildinfo::ci) {
             assert(info.find(fcitx::buildinfo::ci) != std::wstring::npos);
         } else {
-            assert(info.find(L"\u672c\u5730\u7f16\u8bd1") !=
-                   std::wstring::npos);
+            assert(info.find(L"Local build") != std::wstring::npos);
         }
         assert(text(GetDlgItem(window, 104)) == AboutWindow::homepage());
         assert(std::wstring(AboutWindow::license) ==
                L"https://www.gnu.org/licenses/gpl-3.0.html");
         assert(about.show() && about.handle() == window);
+        auto traditional = std::make_shared<fcitx::win32::i18n::Translator>(
+            fcitx::win32::ipc::UiLanguage::TraditionalChinese);
+        about.setTranslation(traditional);
+        assert(about.show() && about.handle() == window);
+        assert(text(window) == L"\u95dc\u65bc Fcitx5");
+        assert(text(GetDlgItem(window, IDOK)) == L"\u95dc\u9589");
+        about.setTranslation(
+            std::make_shared<fcitx::win32::i18n::Translator>());
+        assert(about.show() && text(window) == L"About Fcitx5");
         const auto aware = SetThreadDpiAwarenessContext(
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         checkBounds(window);

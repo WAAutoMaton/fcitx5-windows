@@ -47,6 +47,7 @@ jobs:
           $bundle = 'build/ci-x64/test-bundle'
           New-Item -ItemType Directory -Force "$bundle/tests", "$bundle/dll" | Out-Null
           Copy-Item "$build/tests/*.exe" "$bundle/tests"
+          Copy-Item "$build/share" "$bundle/share" -Recurse
           Copy-Item "$build/dll/fcitx5-x86_64.dll", "$build/dll/penguin.ico" "$bundle/dll"
           function Convert-TestArgument([string]$Value) {
             $value = $Value.Replace('\', '/')

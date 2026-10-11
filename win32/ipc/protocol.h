@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 6;
+constexpr uint16_t kVersion = 7;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -44,6 +44,9 @@ enum class MessageType : uint16_t {
     MethodConfigReply = 27,
     CycleInputMethod = 28,
     SelectInputMethod = 29,
+    GetGlobalSettings = 30,
+    SetGlobalSettings = 31,
+    GlobalSettingsReply = 32,
 };
 
 enum class PinyinScheme : uint8_t { Full = 0, Double = 1 };
@@ -67,7 +70,33 @@ enum class SettingsError : uint8_t {
     ApplyFailed,
     LaunchFailed,
     LastInputMethod,
+    Busy,
 };
+
+enum class UiLanguage : uint8_t {
+    System = 0,
+    SimplifiedChinese = 1,
+    TraditionalChinese = 2,
+    English = 3,
+};
+
+struct GlobalSettings {
+    UiLanguage language = UiLanguage::System;
+    uint64_t revision = 1;
+    bool operator==(const GlobalSettings &) const = default;
+};
+
+struct GlobalSettingsReply {
+    SettingsError error = SettingsError::None;
+    GlobalSettings settings;
+    UiLanguage resolvedLanguage = UiLanguage::English;
+    UiLanguage coreActiveLanguage = UiLanguage::English;
+};
+
+constexpr bool validLanguage(UiLanguage language, bool allowSystem = true) {
+    return language <= UiLanguage::English &&
+           (allowSystem || language != UiLanguage::System);
+}
 
 struct PinyinSettings {
     PinyinScheme scheme = PinyinScheme::Full;
@@ -104,7 +133,9 @@ constexpr bool globalSettingsRequest(MessageType type) {
            type == MessageType::GetInputMethods ||
            type == MessageType::SetInputMethods ||
            type == MessageType::GetMethodConfig ||
-           type == MessageType::SetMethodConfig;
+           type == MessageType::SetMethodConfig ||
+           type == MessageType::GetGlobalSettings ||
+           type == MessageType::SetGlobalSettings;
 }
 
 constexpr uint32_t kMaxDictionaries = 4096;
@@ -269,6 +300,64 @@ inline std::vector<uint8_t> encodeSettings(const PinyinSettings &settings) {
     return writer.take();
 }
 
+inline std::vector<uint8_t>
+encodeGlobalSettings(const GlobalSettings &settings) {
+    Writer writer;
+    writer.u8(static_cast<uint8_t>(settings.language));
+    writer.u64(settings.revision);
+    return writer.take();
+}
+
+inline bool decodeGlobalSettings(const std::vector<uint8_t> &payload,
+                                 GlobalSettings &settings) {
+    Reader reader(payload.data(), payload.size());
+    GlobalSettings result;
+    uint8_t language = 0;
+    if (!reader.u8(language) || !reader.u64(result.revision) ||
+        !result.revision || reader.remaining()) {
+        return false;
+    }
+    result.language = static_cast<UiLanguage>(language);
+    if (!validLanguage(result.language)) {
+        return false;
+    }
+    settings = result;
+    return true;
+}
+
+inline std::vector<uint8_t>
+encodeGlobalSettingsReply(const GlobalSettingsReply &reply) {
+    Writer writer;
+    writer.u8(static_cast<uint8_t>(reply.error));
+    const auto settings = encodeGlobalSettings(reply.settings);
+    writer.bytes(settings.data(), settings.size());
+    writer.u8(static_cast<uint8_t>(reply.resolvedLanguage));
+    writer.u8(static_cast<uint8_t>(reply.coreActiveLanguage));
+    return writer.take();
+}
+
+inline bool decodeGlobalSettingsReply(const std::vector<uint8_t> &payload,
+                                      GlobalSettingsReply &reply) {
+    if (payload.size() != 12) {
+        return false;
+    }
+    GlobalSettingsReply result;
+    if (payload[0] > static_cast<uint8_t>(SettingsError::Busy) ||
+        !decodeGlobalSettings({payload.begin() + 1, payload.begin() + 10},
+                              result.settings)) {
+        return false;
+    }
+    result.error = static_cast<SettingsError>(payload[0]);
+    result.resolvedLanguage = static_cast<UiLanguage>(payload[10]);
+    result.coreActiveLanguage = static_cast<UiLanguage>(payload[11]);
+    if (!validLanguage(result.resolvedLanguage, false) ||
+        !validLanguage(result.coreActiveLanguage, false)) {
+        return false;
+    }
+    reply = result;
+    return true;
+}
+
 inline bool readSettings(Reader &reader, PinyinSettings &settings) {
     uint8_t scheme = 0, profile = 0;
     if (!reader.u8(scheme) || !reader.u8(profile) ||
@@ -307,7 +396,7 @@ inline bool decodeSettingsReply(const std::vector<uint8_t> &payload,
     SettingsReply result;
     uint8_t error = 0, pinyin = 0, shuangpin = 0;
     if (!reader.u8(error) ||
-        error > static_cast<uint8_t>(SettingsError::LastInputMethod) ||
+        error > static_cast<uint8_t>(SettingsError::Busy) ||
         !reader.u8(pinyin) || pinyin > 1 || !reader.u8(shuangpin) ||
         shuangpin > 1 || !readSettings(reader, result.settings) ||
         reader.remaining()) {

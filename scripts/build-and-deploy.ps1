@@ -17,6 +17,7 @@ param(
     [string]$MSYS2Root = 'C:/msys64',
     [string]$LLVMRoot = 'C:/Program Files/LLVM',
     [string]$DependencyPrefix = '',
+    [string]$BoostSource = '',
     [ValidateSet('Source', 'Prebuilt')][string]$DataMode = 'Prebuilt',
     [string]$DataArchive = '',
     [ValidateRange(1, 256)][int]$Jobs = 6,
@@ -92,6 +93,7 @@ if (!$DependencyPrefix -and (Test-Path -LiteralPath "$root/build/deps/clang64" -
     $DependencyPrefix = "$root/build/deps/clang64"
 }
 if ($DependencyPrefix) { $DependencyPrefix = Resolve-BuildPath $DependencyPrefix }
+if ($BoostSource) { $BoostSource = Resolve-BuildPath $BoostSource }
 if ($DataArchive) { $DataArchive = Resolve-BuildPath $DataArchive }
 
 $cmake = (Get-Command cmake.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
@@ -143,6 +145,7 @@ try {
         MSYS2Root = $MSYS2Root; DependencyPrefix = $DependencyPrefix
         Prefix = $staging; BuildRoot = $BuildRoot
         DataMode = $DataMode; DataArchive = $DataArchive; Jobs = $Jobs
+        BoostSource = $BoostSource
     }
     & "$PSScriptRoot/build-pinyin.ps1" @coreParameters
 
@@ -154,14 +157,19 @@ try {
             [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
         }
     }
-    Invoke-BuildCommand $cmake @('-S', "$root/win32", '-B', $tsfBuild, '-G', 'Ninja',
+    $localeOptions = @()
+    if ($BoostSource) { $localeOptions += "-DFETCHCONTENT_SOURCE_DIR_NATIVE_BOOST=$BoostSource" }
+    if ($DependencyPrefix) { $localeOptions += "-DNATIVE_BOOST_HEADERS=$DependencyPrefix/include" }
+    else { $localeOptions += "-DNATIVE_BOOST_HEADERS=$MSYS2Root/clang64/include" }
+    Invoke-BuildCommand $cmake (@('-S', "$root/win32", '-B', $tsfBuild, '-G', 'Ninja',
         '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_C_COMPILER=$clang", "-DCMAKE_CXX_COMPILER=$clangxx",
         "-DCMAKE_RC_COMPILER=$resourceCompiler", "-DCMAKE_MAKE_PROGRAM=$ninja",
-        '-DENABLE_PINYIN_INTEGRATION_TESTS=OFF')
+        '-DENABLE_PINYIN_INTEGRATION_TESTS=OFF') + $localeOptions)
     Invoke-BuildCommand $cmake @('--build', $tsfBuild, '-j', "$Jobs")
 
     Write-Host '[3/5] Build WinUI Settings and stage TSF/Settings.'
-    & "$PSScriptRoot/build-settings.ps1" -Configuration Release -Prefix $staging
+    $settingsBoostSource = if ($BoostSource) { $BoostSource } else { "$tsfBuild/_deps/native_boost-src" }
+    & "$PSScriptRoot/build-settings.ps1" -Configuration Release -Prefix $staging -BuildRoot "$BuildRoot/settings" -BoostSource $settingsBoostSource -BoostHeaders $(if ($DependencyPrefix) { "$DependencyPrefix/include" } else { "$MSYS2Root/clang64/include" })
     & "$PSScriptRoot/deploy-tsf.ps1" -Prefix $staging -TsfBuild $tsfBuild
 
     Write-Host '[4/5] Validate staged outputs and run default CTest tests.'
@@ -170,6 +178,11 @@ try {
             'setup/Fcitx5SetupHelper.exe', 'settings/Fcitx5Settings.exe')) {
         if (!(Test-Path -LiteralPath "$staging/$file" -PathType Leaf)) {
             throw "Missing staged output: $file"
+        }
+    }
+    foreach ($language in @('zh_CN', 'zh_TW')) {
+        if (!(Test-Path -LiteralPath "$staging/share/locale/$language/LC_MESSAGES/fcitx5-windows.mo" -PathType Leaf)) {
+            throw "Missing Windows translation catalog: $language"
         }
     }
     if (!$SkipTests) {
@@ -181,7 +194,7 @@ try {
     Write-Host '[5/5] Deploy the complete runtime tree.'
     Assert-DeploymentWritable $Prefix
     New-Item -ItemType Directory -Force $Prefix | Out-Null
-    foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'setup', 'settings')) {
+    foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'setup', 'settings', 'licenses')) {
         Copy-Item -LiteralPath "$staging/$directory" -Destination $Prefix -Recurse -Force
     }
     Write-Output "Deployment ready: $Prefix"

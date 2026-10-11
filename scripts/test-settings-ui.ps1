@@ -22,6 +22,7 @@ public static class FcitxSettingsCapture {
 if (Get-Process Fcitx5,Fcitx5Settings -ErrorAction SilentlyContinue) { throw 'Core or Settings is already running; isolated UI tests need a free endpoint.' }
 $coreProcess = $null; $windowProcess = $null; $secondProcess = $null
 $settingsFile = [IO.Path]::GetFullPath("$LogDirectory/windows.conf")
+[IO.File]::WriteAllText("$LogDirectory/windows-ui.conf", "[General]`nVersion=1`nLanguage=zh-Hans`nRevision=1`n")
 $configuration = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Fcitx5/config/fcitx5'
 $backups = @{}
 foreach ($relative in @('conf/pinyin.conf', 'table/wbx.conf')) {

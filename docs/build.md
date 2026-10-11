@@ -24,6 +24,7 @@ Install the following before running the build scripts:
 | TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, ATL and ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
+| UI localization | Boost 1.92 portable headers, gettext tools; the SHA256-pinned Boost.Locale 1.92 source archive is downloaded by CMake |
 
 The default tool locations are `C:/msys64` and `C:/Program Files/LLVM`.
 `cmake`, `git` and `magick` must be available in `PATH`. The unified script uses
@@ -34,6 +35,15 @@ Core uses the MSYS2 Windows GNU runtime; TSF uses the Windows SDK/ATL toolchain.
 Boost/iostreams and zstd must match the clang64 target/runtime. These environments
 are separate and cannot be substituted for each other. Scripts do not install
 or upgrade tools or system runtimes.
+
+Each toolchain compiles Boost.Locale's message/encoding components separately.
+Native builds copy only the portable `boost` headers into their own include
+directory; they do not include GNU toolchain headers or link MSYS2 Boost DLLs.
+ICU and Boost.Thread binaries are not needed for this message-only integration.
+Custom headers can be supplied with `-DNATIVE_BOOST_HEADERS=<include directory>`
+or `build-settings.ps1 -BoostHeaders <include directory>`; version mismatches fail
+configuration. An offline Boost.Locale checkout can be supplied with
+`-BoostSource <source directory>` to the build scripts.
 
 ## Unified Build Options
 
@@ -48,7 +58,7 @@ builds Core/libime/chinese-addons, TSF and WinUI Settings. The resulting runtime
 contains Pinyin, Shuangpin and the available chinese-addons table entries
 (Wubi, Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan, Wanfeng and Ziranma).
 It stages the complete
-runtime under `build/all/prefix`, runs the thirteen default TSF CTest tests, then
+runtime under `build/all/prefix`, runs the fourteen default TSF CTest tests, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
 
@@ -59,6 +69,7 @@ It does not register/unregister TSF, stop applications or start services.
 | `-MSYS2Root` | `C:/msys64` |
 | `-LLVMRoot` | `C:/Program Files/LLVM`; standalone LLVM with `clang`, `clang++`, `llvm-rc` |
 | `-DependencyPrefix` | Optional matching clang64 Boost/zstd prefix; uses `build/deps/clang64` if present |
+| `-BoostSource` | Optional local Boost.Locale 1.92 source directory for offline builds; shared source, separate build caches |
 | `-DataMode` | `Prebuilt`; `Source` generates data locally and takes more time/memory |
 | `-DataArchive` | Optional local prebuilt archive, checked against the locked SHA256 |
 | `-Jobs` | `6`; parallel jobs for CMake builds |
@@ -73,9 +84,16 @@ are resolved from the current working directory. For an isolated deployment:
 ./scripts/build-and-deploy.ps1 -WhatIf
 ```
 
-Settings uses the independent MSBuild output/cache under `win32/build/settings`,
-then copies its runtime files into the staging prefix. `-BuildRoot` does not
-relocate that MSBuild cache.
+The unified build places Settings' independent MSVC translation-library build,
+MSBuild output and object files under `BuildRoot/settings`, then stages them.
+Standalone `build-settings.ps1` defaults to `win32/build/settings` and also accepts
+`-BuildRoot`. NuGet restore metadata stays in its existing project cache.
+
+Windows translations are authored in `po/zh_CN.po` and `po/zh_TW.po` and compiled
+to `share/locale/<language>/LC_MESSAGES/fcitx5-windows.mo`; English falls back to
+source strings. Run `scripts/update-translations.ps1` when adding messages, or
+use `-ExtractOnly` to update just the POT. Normal builds do not rewrite PO/POT.
+The isolated runtime also includes `licenses/Boost-1.92-LICENSE.txt`.
 
 Precompiled data is shared in `build/pinyin-data`. Before downloading, the script
 also checks local `libime*.pkg.tar.zst` archives in `build/deps` and

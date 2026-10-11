@@ -23,6 +23,8 @@ HRESULT Tsf::initLangBarItem() {
     }
     langBarItemManager_ = std::move(manager);
     langBarItem_.Attach(item);
+    item->setTranslation(translationMonitor_.snapshot());
+    about_.setTranslation(translationMonitor_.snapshot());
     return S_OK;
 }
 
@@ -66,6 +68,7 @@ STDAPI Tsf::Activate(ITfThreadMgr *pThreadMgr, TfClientId tfClientId) {
 }
 
 STDAPI Tsf::Deactivate() {
+    translationMonitor_.reset();
     about_.close();
     if (serviceTask_.valid()) {
         serviceTask_.get();

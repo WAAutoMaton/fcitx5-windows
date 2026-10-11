@@ -40,6 +40,9 @@ class PipeClient {
     bool setMethodConfig(const ipc::MethodConfigRequest &config,
                          ipc::MethodConfigReply &reply);
     bool getSettings(ipc::SettingsReply &reply);
+    bool getGlobalSettings(ipc::GlobalSettingsReply &reply);
+    bool setGlobalSettings(const ipc::GlobalSettings &settings,
+                           ipc::GlobalSettingsReply &reply);
     bool getDictionaries(ipc::DictionariesReply &reply);
     bool setSettings(const ipc::PinyinSettings &settings,
                      ipc::SettingsReply &reply);

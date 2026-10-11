@@ -1,4 +1,5 @@
 #include "windowsfrontend.h"
+#include "../win32/i18n/settings.h"
 #include "../win32/ipc/transport.h"
 #include <algorithm>
 #include <chrono>
@@ -241,9 +242,14 @@ ipc::KeyReply WindowsInputContext::snapshot(bool consumed, bool enabled) {
 
 WindowsPipeServer::WindowsPipeServer(Instance &instance,
                                      EventDispatcher &dispatcher,
-                                     std::filesystem::path settingsFile)
+                                     std::filesystem::path settingsFile,
+                                     std::filesystem::path uiSettingsFile,
+                                     ipc::UiLanguage activeLanguage)
     : instance_(instance), dispatcher_(dispatcher),
       settings_(instance, std::move(settingsFile)), dictionaries_(instance),
+      uiSettingsFile_(uiSettingsFile.empty() ? i18n::settingsPath()
+                                             : std::move(uiSettingsFile)),
+      activeLanguage_(i18n::resolveLanguage(activeLanguage)),
       settingsEpoch_(settings_.revision()) {}
 
 ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
@@ -415,11 +421,13 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     if ((request.type == MessageType::Hello &&
          (request.contextId || !request.payload.empty())) ||
         (ipc::globalSettingsRequest(request.type) &&
-         (request.contextId || (request.type != MessageType::SetSettings &&
-                                request.type != MessageType::SetInputMethods &&
-                                request.type != MessageType::GetMethodConfig &&
-                                request.type != MessageType::SetMethodConfig &&
-                                !request.payload.empty()))) ||
+         (request.contextId ||
+          (request.type != MessageType::SetSettings &&
+           request.type != MessageType::SetGlobalSettings &&
+           request.type != MessageType::SetInputMethods &&
+           request.type != MessageType::GetMethodConfig &&
+           request.type != MessageType::SetMethodConfig &&
+           !request.payload.empty()))) ||
         (request.type == MessageType::CreateContext && request.contextId) ||
         ((request.type == MessageType::FocusIn ||
           request.type == MessageType::FocusOut ||
@@ -442,6 +450,24 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     }
 
     switch (request.type) {
+    case MessageType::GetGlobalSettings:
+    case MessageType::SetGlobalSettings: {
+        ipc::GlobalSettingsReply reply;
+        reply.coreActiveLanguage = activeLanguage_;
+        if (!i18n::readSettings(uiSettingsFile_, reply.settings)) {
+            reply.error = ipc::SettingsError::SaveFailed;
+        } else if (request.type == MessageType::SetGlobalSettings) {
+            ipc::GlobalSettings requested;
+            reply.error = ipc::decodeGlobalSettings(request.payload, requested)
+                              ? i18n::saveSettings(uiSettingsFile_, requested,
+                                                   reply.settings)
+                              : ipc::SettingsError::Invalid;
+        }
+        reply.resolvedLanguage = i18n::resolveLanguage(reply.settings.language);
+        response.type = MessageType::GlobalSettingsReply;
+        response.payload = ipc::encodeGlobalSettingsReply(reply);
+        break;
+    }
     case MessageType::GetInputMethods:
     case MessageType::SetInputMethods: {
         auto error = ipc::SettingsError::None;

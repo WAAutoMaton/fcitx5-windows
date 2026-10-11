@@ -8,7 +8,7 @@
 namespace fcitx {
 namespace {
 constexpr wchar_t kClassName[] = L"Fcitx5WindowsAbout";
-constexpr wchar_t kTitle[] = L"\u5173\u4e8e Fcitx5";
+constexpr wchar_t kTitle[] = L"About Fcitx5";
 constexpr int kHeading = 100;
 constexpr int kDetails = 101;
 constexpr int kLicense = 102;
@@ -48,18 +48,26 @@ class DpiScope {
 };
 } // namespace
 
-std::wstring AboutWindow::details() {
-    std::wstring result = L"\u67b6\u6784\uff1a";
-    result += architecture();
-    result += L"\r\nCI \u7f16\u53f7\uff1a";
+std::wstring AboutWindow::details(const win32::i18n::Translator *translator) {
+    const win32::i18n::Translator english;
+    const auto &translation = translator ? *translator : english;
+    std::wstring result = translation.wide("about", "Architecture: ");
+    result += std::wstring(architecture()) == L"Unknown"
+                  ? translation.wide("about", "Unknown")
+                  : architecture();
+    result += L"\r\n" + translation.wide("about", "CI build: ");
     result +=
         *buildinfo::ci
             ? buildinfo::ci
-            : L"\u672c\u5730\u7f16\u8bd1\uff08\u65e0 CI \u4fe1\u606f\uff09";
+            : translation.wide("about", "Local build (no CI information)");
     result += L"\r\nCommit\uff1a";
-    result += buildinfo::commit;
-    result += L"\r\nCommit \u65f6\u95f4\uff1a";
-    result += buildinfo::commitTime;
+    result += std::wstring(buildinfo::commit) == L"Unavailable"
+                  ? translation.wide("about", "Unavailable")
+                  : buildinfo::commit;
+    result += L"\r\n" + translation.wide("about", "Commit time: ");
+    result += std::wstring(buildinfo::commitTime) == L"Unavailable"
+                  ? translation.wide("about", "Unavailable")
+                  : buildinfo::commitTime;
     return result;
 }
 
@@ -69,6 +77,7 @@ AboutWindow::~AboutWindow() { close(); }
 
 bool AboutWindow::show() {
     if (window_) {
+        refreshText();
         ShowWindow(window_, SW_RESTORE);
         SetForegroundWindow(window_);
         return true;
@@ -110,7 +119,7 @@ bool AboutWindow::show() {
 }
 
 bool AboutWindow::createControls() {
-    const auto info = details();
+    const auto info = details(translation_.get());
     struct Control {
         int id;
         const wchar_t *type;
@@ -121,11 +130,11 @@ bool AboutWindow::createControls() {
         {kHeading, L"STATIC", L"Fcitx5 for Windows", SS_LEFT},
         {kDetails, L"EDIT", info.c_str(),
          ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_TABSTOP},
-        {kLicense, L"BUTTON", L"GPL-3.0 \u8bb8\u53ef\u8bc1", WS_TABSTOP},
-        {kHomepage, L"BUTTON", L"\u4ed3\u5e93\u4e3b\u9875", WS_TABSTOP},
+        {kLicense, L"BUTTON", L"GPL-3.0 License", WS_TABSTOP},
+        {kHomepage, L"BUTTON", L"Repository Homepage", WS_TABSTOP},
         {kUrl, L"EDIT", homepage(),
          ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_TABSTOP},
-        {IDOK, L"BUTTON", L"\u5173\u95ed", WS_TABSTOP}};
+        {IDOK, L"BUTTON", L"Close", WS_TABSTOP}};
     for (const auto &control : controls) {
         const auto child = CreateWindowExW(
             0, control.type, control.text,
@@ -138,7 +147,24 @@ bool AboutWindow::createControls() {
         }
     }
     EnableWindow(GetDlgItem(window_, kHomepage), webLink(homepage()));
+    refreshText();
     return true;
+}
+
+void AboutWindow::refreshText() {
+    const auto snapshot = translation_;
+    const win32::i18n::Translator english;
+    const auto &translation = snapshot ? *snapshot : english;
+    SetWindowTextW(window_, translation.wide("about", "About Fcitx5").c_str());
+    SetWindowTextW(GetDlgItem(window_, kDetails),
+                   details(&translation).c_str());
+    const std::pair<int, const char *> labels[] = {
+        {kLicense, win32::i18n::mark("about", "GPL-3.0 License")},
+        {kHomepage, win32::i18n::mark("about", "Repository Homepage")},
+        {IDOK, win32::i18n::mark("about", "Close")}};
+    for (const auto &[id, message] : labels)
+        SetWindowTextW(GetDlgItem(window_, id),
+                       translation.wide("about", message).c_str());
 }
 
 void AboutWindow::layout() {
@@ -162,7 +188,7 @@ void AboutWindow::layout() {
     place(kHeading, 24, 22, 512, 40);
     place(kDetails, 24, 78, 512, 110);
     place(kLicense, 24, 204, 172, 34);
-    place(kHomepage, 208, 204, 128, 34);
+    place(kHomepage, 208, 204, 180, 34);
     place(kUrl, 24, 248, 512, 42);
     place(IDOK, 436, 292, 100, 30);
     if (font_) {

@@ -1,6 +1,6 @@
 # Windows 输入法设置设计与实现
 
-更新日期：2026-10-11。当前协议为 v6。设置窗口使用左侧有序输入法列表、右侧共享设置面板；拼音页还包含只读“词库”tab。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
+当前协议为 v7。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页还包含只读“词库”tab。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
 
 ## 当前方案
 
@@ -8,12 +8,14 @@
 
 默认列表为英文键盘和拼音。用户可以添加已安装的 chinese-addons 输入法（五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风或自然码），删除和上下调整顺序，至少保留一个可用输入法。列表修改即时保存；页面选项在“应用”时保存，成功后窗口保持打开。切换页面时有未应用草稿会询问保存、放弃或取消；关闭窗口放弃未应用草稿。Core 是配置的唯一写入者和运行时状态的管理者。
 
+全局设置入口、gettext + Boost.Locale 国际化与语言生效时机见 [Windows UI 国际化与全局设置设计](windows-ui-localization-design.md)。语言设置在重启服务后应用到 Core / Settings，菜单和关于使用独立的后台刷新机制。
+
 ## 实现位置
 
 - `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，显示当前输入法图标/标签和名称，左键轮换输入法；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
 - `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
-- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v6 framing、输入法目录、选项描述、设置消息、词库状态及运行时代次；全局请求与 context 请求分别校验。
+- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v7 framing、输入法目录、选项描述、全局语言设置、词库状态及运行时代次；全局请求与 context 请求分别校验。
 - `src/main.cpp`：初始化 Core、预热拼音并创建 Windows 设置管理器；完整内存输入法组由 `src/windowsinputmethods.cpp` 按已安装可用条目建立。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置保存、真实 profile 应用、中文 entry 切换与 context 同步。
 - `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。
@@ -96,6 +98,7 @@ flowchart LR
 | --- | --- |
 | 标题 | “输入法设置”，使用系统标题栏 |
 | 输入法列表 | `ListView`：按用户顺序显示图标和名称；添加、删除、上移、下移 |
+| 全局设置 | 左侧操作按钮下方的独立导航项；右侧语言下拉框提供跟随系统、简体中文、繁體中文、English，使用“应用”保存 |
 | 页面 | 根据 entry 的 panel 标识显示拼音、码表或键盘设置；拼音/双拼共用拼音面板，码表共用控件布局但选项值按各自 entry 保存 |
 | 选项 | 通过上游 `Configuration::dumpDescription()` 生成布尔开关、整数步进框、枚举菜单、文本/按键列表控件；递归展示模糊拼音等子配置 |
 | 双拼键位 | `ComboBox`：小鹤、自然码、微软、紫光、智能 ABC、中文之星、拼音加加、国标 |
@@ -122,6 +125,7 @@ v6 增加输入法目录、有序选择、配置描述和循环/指定切换，�
 | --- | --- |
 | `OpenSettings` | 无可执行路径参数；返回启动/激活结果 |
 | `GetSettings` | 返回 `PinyinSettings`（scheme、profile、revision）及 `pinyinAvailable` / `shuangpinAvailable` |
+| `GetGlobalSettings` / `SetGlobalSettings` | v7：查询/保存独立 revision 的 UI 语言偏好，回复解析后的目标语言与 Core 当前语言 |
 | `SetSettings` | 提交 scheme、profile、revision（草稿读取时的版本）；返回实际配置、新 revision 或错误 |
 | `GetDictionaries` | 返回第三方词库目录、实际发现的扩展词库路径和加载状态 |
 | `GetInputMethods` / `SetInputMethods` | 目录及有序选择，字段包含 id、name、icon、iconLabel、panel、available、keyboard；写入使用共享 revision，拒绝空列表和重复 id |
@@ -153,7 +157,7 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 
 `patches/chinese-addons-windows-table.patch` 在 Windows 中启用已带数据的仓颉条目，并将内置码表路径优先解析到部署树 `share/libime`；码表不存在时配置接口返回不可用。兼容补丁由 `apply-pinyin-patches.ps1` 按固定版本幂等应用。
 
-设置全局生效，不要求重启 Core、重新注册 DLL 或重启应用。只增加设置入口的正常功能更新不应被设计成必须重新注册的操作；若同时修改注册元数据，仍按项目现有规则单独处理。
+输入引擎设置即时生效，不要求重启 Core、重新注册 DLL 或重启应用。UI 语言是独立的全局设置，Core / Settings 在重启服务后生效；菜单在后台刷新后下次打开生效，已有关于窗口在再次点击时刷新。语言设置不触发预编辑重置，也不要求重新注册。
 
 ## 持久化与状态一致性
 
@@ -178,7 +182,7 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 | 部署 | `scripts/build-settings.ps1`、`deploy-tsf.ps1`、`build-and-deploy.ps1`：构建并联合部署至运行树；系统运行时需另行准备 |
 | 验证 | `win32/tests/`、拼音/词库/服务/UI 脚本；CI 统一构建包含独立 MSBuild Settings 工程，测试 job 复用运行树执行拼音/词库集成验证 |
 
-Core 和 TSF 使用两套独立 CMake 工程；MSBuild 设置程序由统一脚本调度，不把 WinUI 工具要求强加给只构建 Core 的用户。统一入口暂存目录默认是 `build/all/prefix`，Settings 的 MSBuild 输出/缓存仍在 `win32/build/settings`，不受 `-BuildRoot` 影响。完整构建选项见 [build.md](build.md)。
+Core 和 TSF 使用两套独立 CMake 工程；MSBuild 设置程序由统一脚本调度，不把 WinUI 工具要求强加给只构建 Core 的用户。统一入口暂存目录默认是 `build/all/prefix`，Settings 的独立 MSVC 翻译库、MSBuild 输出及对象文件位于 `BuildRoot/settings`。完整构建选项见 [build.md](build.md)。
 
 ## 验证与剩余范围
 

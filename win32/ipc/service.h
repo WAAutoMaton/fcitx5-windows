@@ -56,10 +56,15 @@ inline std::wstring serviceIdentity() {
     }
     const auto logonTime = logon->LogonTime.QuadPart;
     LsaFreeReturnBuffer(logon);
-    return L"Fcitx5Service-" + sid + L"-" + std::to_wstring(session) + L"-" +
-           std::to_wstring(statistics.AuthenticationId.HighPart) + L"-" +
-           std::to_wstring(statistics.AuthenticationId.LowPart) + L"-" +
-           std::to_wstring(logonTime);
+    auto identity =
+        L"Fcitx5Service-" + sid + L"-" + std::to_wstring(session) + L"-" +
+        std::to_wstring(statistics.AuthenticationId.HighPart) + L"-" +
+        std::to_wstring(statistics.AuthenticationId.LowPart) + L"-" +
+        std::to_wstring(logonTime);
+#ifdef FCITX5_UI_TEST
+    identity += L"-ui-test";
+#endif
+    return identity;
 }
 
 class ServiceSecurity {

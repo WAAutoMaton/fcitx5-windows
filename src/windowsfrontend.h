@@ -50,7 +50,9 @@ class WindowsInputContext final : public InputContext {
 class WindowsPipeServer {
   public:
     WindowsPipeServer(Instance &instance, EventDispatcher &dispatcher,
-                      std::filesystem::path settingsFile = {});
+                      std::filesystem::path settingsFile = {},
+                      std::filesystem::path uiSettingsFile = {},
+                      ipc::UiLanguage activeLanguage = ipc::UiLanguage::System);
     ~WindowsPipeServer();
 
     void start();
@@ -78,6 +80,8 @@ class WindowsPipeServer {
     EventDispatcher &dispatcher_;
     WindowsSettings settings_;
     WindowsDictionaries dictionaries_;
+    std::filesystem::path uiSettingsFile_;
+    ipc::UiLanguage activeLanguage_;
     uint64_t settingsEpoch_ = 1;
     std::atomic_bool stopping_ = false;
     std::thread thread_;

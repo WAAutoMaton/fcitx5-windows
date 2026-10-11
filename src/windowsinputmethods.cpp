@@ -1,8 +1,10 @@
+#include "../win32/i18n/translator.h"
 #include "windowssettings.h"
 #include <algorithm>
 #include <charconv>
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/iniparser.h>
+#include <fcitx-utils/environ.h>
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/standardpaths.h>
 #include <fcitx/addonmanager.h>
@@ -123,6 +125,12 @@ std::string WindowsSettings::configKey(const std::string &id) const {
 }
 
 void WindowsSettings::initializeMethods() {
+    const auto language = getEnvironmentOrEmpty("FCITX_LOCALE");
+    const auto selectedLanguage =
+        language == "zh_CN"   ? ipc::UiLanguage::SimplifiedChinese
+        : language == "zh_TW" ? ipc::UiLanguage::TraditionalChinese
+                              : ipc::UiLanguage::English;
+    i18n::Translator translator(selectedLanguage);
     instance_.inputMethodManager().foreachEntries(
         [&](const InputMethodEntry &entry) {
             if (!ipc::validMethodId(entry.uniqueName()) ||
@@ -138,21 +146,21 @@ void WindowsSettings::initializeMethods() {
             info.panel = info.keyboard ? "keyboard" : entry.addon();
             info.iconLabel = entry.label();
             if (info.id == "keyboard-us") {
-                info.name = "\xe8\x8b\xb1\xe6\x96\x87\xe9\x94\xae\xe7\x9b\x98";
+                info.name = translator.text("input-method", "English Keyboard");
             }
             if (info.id == "pinyin") {
-                info.name = "\xe6\x8b\xbc\xe9\x9f\xb3";
-                info.iconLabel = info.name.substr(0, 3);
+                info.name = translator.text("input-method", "Pinyin");
+                info.iconLabel = "\xe6\x8b\xbc";
             }
             if (info.id == "shuangpin") {
-                info.name = "\xe5\x8f\x8c\xe6\x8b\xbc";
-                info.iconLabel = info.name.substr(0, 3);
+                info.name = translator.text("input-method", "Shuangpin");
+                info.iconLabel = "\xe5\x8f\x8c";
             }
             if (info.id == "wbx") {
-                info.name = "\xe4\xba\x94\xe7\xac\x94\xe5\xad\x97\xe5\x9e\x8b";
+                info.name = translator.text("input-method", "Wubi");
             }
             if (info.id == "wbpy") {
-                info.name = "\xe4\xba\x94\xe7\xac\x94\xe6\x8b\xbc\xe9\x9f\xb3";
+                info.name = translator.text("input-method", "Wubi Pinyin");
                 info.iconLabel = "W";
                 info.icon = "fcitx-wbpy";
             }

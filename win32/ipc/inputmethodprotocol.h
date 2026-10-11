@@ -141,7 +141,7 @@ inline bool decodeSelection(const std::vector<uint8_t> &payload,
 inline bool readSettingsError(Reader &reader, SettingsError &error) {
     uint8_t value = 0;
     if (!reader.u8(value) ||
-        value > static_cast<uint8_t>(SettingsError::LastInputMethod)) {
+        value > static_cast<uint8_t>(SettingsError::Busy)) {
         return false;
     }
     error = static_cast<SettingsError>(value);
