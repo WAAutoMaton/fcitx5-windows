@@ -96,7 +96,8 @@ run in separate jobs:
 | `build-x64` | Run the unified build with `-SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
 | `test-x64` | Download the x64 runtime and tests; run build-script regressions, the existing icon checksum, Pinyin/TSF/settings probes, default CTest and dictionary integration checks |
 | `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
-| `release` | Wait for both architectures, x64 tests and packaging to succeed, then publish the installers and SHA256 files |
+| `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install and uninstall, and upload the installer log |
+| `release` | Wait for both architectures, x64 tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
 
 `test-x64` and `package-installer-x64` both depend only on `build-x64`, so they
 can start in parallel as soon as that job finishes. Packaging can succeed even
@@ -154,6 +155,14 @@ The script regression can run without system installation:
 ```powershell
 ./scripts/test-build-installer.ps1
 ```
+
+The GitHub Actions `installer-smoke-x64` job executes the no-runtime package on
+a fresh Windows runner with `/VERYSILENT /MACHINEONLY=1`, verifies the installed
+files, machine registration and managed install state, then invokes the installed
+`Fcitx5SetupHelper.exe uninstall --silent` entry point and checks that both
+uninstall registrations are removed. The bundled-runtime package is still only
+packaged in CI; installing system runtimes and exercising the original-user
+configuration path require a dedicated clean Windows VM or self-hosted runner.
 
 ## Deployment and Updates
 

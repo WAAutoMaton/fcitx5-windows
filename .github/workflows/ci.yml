@@ -261,8 +261,39 @@ jobs:
             dist/installer/*.sha256
             dist/installer/*.txt
 
+  installer-smoke-x64:
+    needs: package-installer-x64
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Disable CRLF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-installer-x64
+          path: dist/installer
+
+      - name: Run install and uninstall smoke test
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/installer -Filter '*-x64-no-runtime-setup.exe' -File)
+          if ($installer.Count -ne 1) { throw "Expected exactly one no-runtime installer, found $($installer.Count)." }
+          ./scripts/test-installer.ps1 -InstallerPath $installer[0].FullName
+
+      - name: Upload installer smoke logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-smoke-logs
+          if-no-files-found: warn
+          path: build/installer-smoke
+
   release:
-    needs: [build-core-arm64, build-x64, test-x64, package-installer-x64]
+    needs: [build-core-arm64, build-x64, test-x64, package-installer-x64, installer-smoke-x64]
     if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
     runs-on: ubuntu-latest
     permissions:

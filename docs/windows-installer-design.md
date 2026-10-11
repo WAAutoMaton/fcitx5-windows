@@ -112,7 +112,7 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 `Fcitx5-installer-x64` artifact 包含两种 EXE、各自 SHA256 和 manifest，共六个文件。Nightly 只发布两个 EXE 和各自 SHA256，共四个附件；不发布 manifest、Core 开发包或内部运行树/测试 artifact。PR 只上传 artifact，不发布 Nightly。
 
-当前 CI 没有代码签名步骤，也没有真实安装/卸载 smoke test，仓库尚无 `scripts/test-installer.ps1`。这些属于后续工作，不能把 package job 成功作为真实系统安装验收。完整产物流向见 [CI 构建与产物](build.md#ci-build-and-artifact-flow)。
+当前 CI 没有代码签名步骤。`installer-smoke-x64` 在全新的 Windows runner 上执行不含运行库包的静默机器级安装/卸载，核对安装文件、HKLM 安装状态和卸载清理；它不安装 VC++/Windows App Runtime，也不执行原始用户配置。含运行库包、完整用户初始化、升级及重启后的延迟删除仍需干净 Windows VM 或 self-hosted runner 验证，不能把 smoke job 作为这些场景的验收。完整产物流向见 [CI 构建与产物](build.md#ci-build-and-artifact-flow)。
 
 ## 已记录的验证
 
