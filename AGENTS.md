@@ -24,12 +24,14 @@
 | `win32/tsf/` | TSF 生命周期、事件订阅、按键回调、编辑会话、composition、候选窗、语言栏输入模式项和 Pipe 客户端 |
 | `win32/ipc/` | Core/TSF 共用的 Named Pipe framing 和协议定义 |
 | `win32/settings/` | 独立 WinUI 3 设置程序，使用 MSBuild 构建拼音设置和只读词库页 |
+| `win32/setup/`、`installer/`、`cmake/installer-lock.json` | 原生安装/卸载 helper、Inno Setup 7 x64 双版本安装包及运行库依赖锁 |
 | `win32/assets/` | 输入法图标，使用 ImageMagick 将 SVG 转为 ICO |
 | `win32/tests/` | Windows 工程的 CTest 测试 |
 | `win32/scripts/` | 开发期注册、注销、DLL 占用释放、格式化和格式检查脚本 |
 | `docs/pinyin.md` | 拼音构建、隔离部署、IPC/TSF 设计和验证边界 |
 | `docs/build.md` | 统一构建、部署、注册/释放脚本和验证入口 |
 | `docs/windows-settings-design.md`、`docs/windows-candidate-rendering.md` | 设置/服务控制和候选窗的当前实现、设计与验证边界 |
+| `docs/windows-installer-design.md` | 统一安装包当前实现、构建发布流程及待验收范围 |
 | `.github/workflows/ci.yml` | ARM64 Core 构建、x64 统一构建及产物复用、独立测试/安装包并行执行和 Nightly 发布 |
 
 ## 当前架构与实现边界
@@ -40,7 +42,7 @@
 - `win32` 工程构建 `tsf` 静态库和 `fcitx5-x86_64` DLL；DLL 目前只链接 `tsf`，没有链接 Fcitx5 Core。
 - 根工程使用 MSYS2 / Clang Windows GNU 工具链；TSF 工程依赖 Windows SDK 和 ATL。不要将两者的编译器、头文件、运行库环境混为一谈。
 - `win32/settings` 使用独立 MSBuild 工程构建 WinUI 设置程序。
-- Core 是独立宿主进程，TSF DLL 加载到应用进程，两者通过用户级 Named Pipe 通信，不传递 C++ 对象、分配器或引擎 ABI。TSF 激活后在工作线程自动后台启动 Core；Settings 按需启动。当前没有统一安装器。
+- Core 是独立宿主进程，TSF DLL 加载到应用进程，两者通过用户级 Named Pipe 通信，不传递 C++ 对象、分配器或引擎 ABI。TSF 激活后在工作线程自动后台启动 Core；Settings 按需启动。统一 Windows 11 x64 安装器已接入，提供含/不含运行库的两种 EXE，真实安装、升级及卸载清理仍需系统验证。
 
 ### IPC、线程与状态设计
 
@@ -106,6 +108,7 @@
 - `scripts/build-and-deploy.ps1` 是 AMD64 Release 统一入口：默认预编译数据，初始化固定子模块并应用补丁，在 `build/all` 隔离构建 Core/libime/addons/TSF，调度独立 Settings 构建并将三套工程产物暂存于 `build/all/prefix`，初始化 VS x64 环境并明确使用独立 LLVM/llvm-rc，默认运行 TSF CTest，成功后复制运行树到 `dist/pinyin`。支持 `-Prefix`/`-BuildRoot`/工具及依赖路径/`-DataArchive`/`-Jobs`/`-SkipTests`，`-WhatIf` 无构建及部署副作用。不安装工具/运行时，不注册/注销、不停止或启动服务；目标或暂存文件占用时退出。最终复制不是原子切换，部署前需由用户关闭服务及加载该 DLL 的应用，或选择另一隔离前缀。`build-pinyin.ps1 -BuildRoot` 供统一入口隔离缓存，默认单独调用仍使用 `build`。
 - 预编译数据共享缓存位于 `build/pinyin-data`；下载前还查找该目录及 `build/deps` 的 `libime*.pkg.tar.zst`（包括既有 `libime-data.pkg.tar.zst`），必须匹配锁定 SHA256 才复用。显式 `-DataArchive` 也会先校验并填充标准缓存。已有解包目录或部署文件不单独作为版本校验依据；重复构建继续使用 Ninja 增量缓存。
 - `-BuildRoot` 控制 Core/libime/addons/TSF 的构建目录及暂存前缀，不改变 Settings 的 MSBuild 输出/缓存 `win32/build/settings`。三套工程仍独立；Settings 产物构建后复制到统一暂存运行树。
+- `scripts/build-installer.ps1` 使用独立完整暂存树及 Inno Setup 7 生成安装包、manifest 和 SHA256；默认附带运行库安装程序，`-SkipRuntimes` 不要求它们存在。打包会写入 `setup/managed-install` 并复制许可证，不能对正在使用的开发运行树执行；该标记使服务启动要求有效安装状态。打包不执行安装器、注册或服务控制，`-WhatIf` 只检查输入并预览。本地打包应按 `cmake/installer-lock.json` 核对依赖哈希，脚本本身只检查依赖文件存在。
 
 ### 核心工程
 

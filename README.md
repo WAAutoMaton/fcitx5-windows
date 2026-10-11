@@ -4,7 +4,8 @@
 
 An in-progress Windows port of Fcitx5, with a basic Pinyin input path on AMD64.
 Core runs in a separate process; a TSF DLL integrates with applications, and a
-WinUI settings app provides Pinyin configuration. There is no unified installer yet.
+WinUI settings app provides Pinyin configuration. Unified x64 installers are
+available through the CI packaging and Nightly release workflow.
 
 ## Features and Status
 
@@ -26,6 +27,27 @@ compatibility, OS event dispatch, themes and multiple-monitor DPI still need
 validation. Candidate mouse selection and accessibility are not implemented;
 ARM64 Pinyin/TSF, Wubi and Rime are not validated.
 
+## Install
+
+The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
+workflow publishes two Windows 11 x64 installers and their SHA256 files:
+
+- `Fcitx5-<run>-x64-setup.exe`: bundles Visual C++ and Windows App Runtime installers.
+- `Fcitx5-<run>-x64-no-runtime-setup.exe`: requires those runtimes to be installed
+  beforehand, including x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`
+  for the current user.
+
+The installer targets Program Files, registers TSF, configures the initiating
+user's input method and starts Core. Both package variants have been compiled
+locally; clean-machine installation, upgrades, UAC user handling and restart
+cleanup still need validation. Only x64 TSF is built; x86 and native ARM64
+applications are not covered. See [installer status and limits](docs/windows-installer-design.md).
+
+For an installer-managed copy, use **Uninstall Fcitx5** in the Start menu or
+Windows' installed-apps list. User data and shared runtimes are retained;
+locked files may require a Windows restart to finish removal. The PowerShell
+registration helpers below are for development deployments.
+
 ## Build and Deploy
 
 Prepare CMake 3.27+, Git, MSYS2 clang64 and its dependencies, standalone LLVM,
@@ -41,8 +63,8 @@ From the repository root in a normal Windows PowerShell terminal, run:
 ```
 
 This initializes pinned submodules, applies Windows patches, builds AMD64 Release
-Core, TSF and Settings, runs the nine default TSF tests, and deploys to
-`dist/pinyin`. It uses checksum-verified precompiled dictionary/model data and
+Core, TSF, the setup helper and Settings, runs the thirteen default TSF tests,
+and deploys to `dist/pinyin`. It uses checksum-verified precompiled dictionary/model data and
 reuses the build cache on subsequent runs.
 
 The script does not install tools/runtimes or register the input method. Before
@@ -52,7 +74,7 @@ paths, individual builds and integration checks.
 
 ## Run
 
-Register the deployed input method:
+For a development deployment, register the input method:
 
 ```powershell
 ./win32/scripts/install.ps1
@@ -73,12 +95,13 @@ Right-click the input-mode indicator for:
 - `重启服务`: restart/start Core and reopen Settings if it was already open.
 - `关闭服务`: stop Core/Settings and pause automatic startup until a restart.
 - `用户数据文件夹`: open `%APPDATA%/Fcitx5`, including settings and Pinyin learning data.
+- `关于`: show architecture, CI build number, commit and project/license links.
 
 Compatible Fcitx5/libime binary `.dict` files placed in
 `%APPDATA%/Fcitx5/pinyin/dictionaries` are loaded automatically. See
 [dictionary details](docs/pinyin.md#third-party-dictionaries) for formats and conversion.
 
-To remove the input method, choose `关闭服务`, then run:
+To unregister a development deployment, choose `关闭服务`, then run:
 
 ```powershell
 ./win32/scripts/uninstall.ps1
@@ -91,6 +114,7 @@ for previews, alternate paths and troubleshooting.
 ## Documentation
 
 - [Build, deployment and validation](docs/build.md)
+- [Windows installer implementation and validation limits](docs/windows-installer-design.md)
 - [Pinyin architecture, individual builds and validation limits](docs/pinyin.md)
 - [Windows settings design](docs/windows-settings-design.md)
 - [Candidate rendering and DPI validation](docs/windows-candidate-rendering.md)

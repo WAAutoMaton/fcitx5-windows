@@ -35,6 +35,8 @@ WinUI 3 是 Windows App SDK 的 UI 部分，与操作系统和 Windows SDK 分�
 
 按用户选择采用 unpackaged + framework-dependent 文件夹部署。WinUI NuGet 固定为 `1.8.260803003`，运行时元数据固定为 `1.8.260921001`；需要当前用户安装 x64 Framework 和 DDLM 包 `8000.994.2142.0` 或更新兼容版本，以及 Visual C++ 运行库。应用启动时显式调用 bootstrap；缺少运行时显示错误，不自动安装。设置程序无需注册 MSIX。
 
+统一安装器已提供含/不含外部运行库的两种 x64 包；含运行库版本在安装阶段部署依赖并检查发起用户的 Settings runtime，不含版本要求预先准备依赖。构建/部署脚本仍不安装系统运行库。安装流程及真实系统验证边界见 [Windows 安装实现](windows-installer-design.md)。
+
 独立 MSBuild `.vcxproj` 使用 MSVC、C++/WinRT 和 NuGet，由 `scripts/build-settings.ps1` 调用。界面通过 WinUI `XamlReader` 加载 XAML，复用系统控件和元数据提供者，不要求 UWP 工具工作负载。Core 的 MSYS2/Clang GNU 工具链和 TSF 的 Clang/Ninja 工程继续独立构建。
 
 参考：
@@ -163,7 +165,7 @@ Pinyin 的 `setConfig()` 还会保存 `conf/pinyin.conf`，但现有实现不向
 | Core | `src/main.cpp`、`windowsfrontend.*`、`windowssettings.*`、`windowsdictionaries.*` |
 | 设置程序 | `win32/settings/`：独立 `.vcxproj`、运行时 XAML、窗口和客户端 |
 | 部署 | `scripts/build-settings.ps1`、`deploy-tsf.ps1`、`build-and-deploy.ps1`：构建并联合部署至运行树；系统运行时需另行准备 |
-| 验证 | `win32/tests/`、拼音/词库/服务/UI 脚本；CI 包含独立 Settings 构建和词库集成验证 |
+| 验证 | `win32/tests/`、拼音/词库/服务/UI 脚本；CI 统一构建包含独立 MSBuild Settings 工程，测试 job 复用运行树执行拼音/词库集成验证 |
 
 Core 和 TSF 使用两套独立 CMake 工程；MSBuild 设置程序由统一脚本调度，不把 WinUI 工具要求强加给只构建 Core 的用户。统一入口暂存目录默认是 `build/all/prefix`，Settings 的 MSBuild 输出/缓存仍在 `win32/build/settings`，不受 `-BuildRoot` 影响。完整构建选项见 [build.md](build.md)。
 
@@ -183,7 +185,7 @@ probes 的适配器回调不能代替实际 OS 菜单派发和真实应用验证
 
 ## 已记录的验证
 
-- 设置功能的 AMD64 Core、TSF Release、WinUI Release 构建和当时的 8 项默认 CTest 已通过。后续候选窗改动新增 `test_candidate` 与 `test_candidate_tsf`，当前默认为 12 项；真实拼音/TSF probes 的历史验证和本次候选布局回归范围见 [候选窗验证记录](windows-candidate-rendering.md#verification)。这些是既有验证记录，本次文档更新不代表重新执行 Core 集成 probes。
+- 设置功能的 AMD64 Core、TSF Release、WinUI Release 构建和当时的 8 项默认 CTest 已通过。后续候选窗、关于及安装/卸载回归扩展后，当前默认为 13 项；完整清单见 [TSF 测试](pinyin.md#build-and-test-tsf)，候选布局的历史验证范围见 [候选窗验证记录](windows-candidate-rendering.md#verification)。这些是既有验证记录，本次文档更新不代表重新执行 Core 集成 probes。
 - `ipc_probe`、`settings_probe` 和扩展后的 `tsf_probe` 通过，真实全拼/小鹤/自然码中文提交、英文保持、存储失败保留解码上下文和迟到编辑取消均验证。
 - 按用户明确授权安装当前用户的 x64 DDLM `8000.994.2142.0` 后，`scripts/test-settings-ui.ps1` 验证实际窗口、确定/取消、自然码/小鹤、重启恢复和单实例，截图在 `build/settings-ui-test`。窗口当前 200% 缩放正常；跨屏、文本缩放、高对比度和其他主题仍未全面验证。
 - 未执行输入法注册/注销，真实任务栏指示器右键菜单派发尚未实测。

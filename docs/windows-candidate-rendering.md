@@ -80,6 +80,11 @@ and [presentation options](https://learn.microsoft.com/en-us/windows/win32/api/d
 
 ## Verification
 
+The runs recorded below used the test set available at the time. The current
+default TSF suite has thirteen tests, including the later `test_uninstall`;
+see [the current test list](pinyin.md#build-and-test-tsf). This documentation
+update does not rerun candidate previews or Pinyin probes.
+
 `test_candidate` is a default CTest with no Core or registration requirement.
 The production draw function runs through a software WIC target at 96/120/144/
 192/288 DPI. Emoji colored pixels are compared with a monochrome control;

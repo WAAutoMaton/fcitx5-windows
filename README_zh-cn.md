@@ -3,7 +3,7 @@
 [English](README.md)
 
 这是一个正在开发中的 Fcitx5 Windows 移植版本，目前在 AMD64 上提供基本的拼音输入路径。
-Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设置程序提供拼音配置。当前还没有统一安装程序。
+Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设置程序提供拼音配置。统一 x64 安装包已接入 CI 打包和 Nightly 发布流程。
 
 ## 功能与状态
 
@@ -16,6 +16,17 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 已确认注册后的输入指示器可以正常工作。自动化 probe 使用真实的拼音和 TSF context，但会模拟按键及菜单回调。更广泛的应用兼容性、操作系统事件派发、主题和多显示器 DPI 仍需验证。尚未实现候选鼠标选择和无障碍支持；ARM64 拼音/TSF、五笔和 Rime 尚未验证。
 
+## 安装
+
+[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)流程提供两种 Windows 11 x64 安装包及其 SHA256 文件：
+
+- `Fcitx5-<run>-x64-setup.exe`：附带 Visual C++ 和 Windows App Runtime 安装程序。
+- `Fcitx5-<run>-x64-no-runtime-setup.exe`：需要预先安装上述运行库，包括当前用户的 x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
+
+安装器将完整运行树安装到 Program Files，注册 TSF，配置安装发起用户的输入法并启动 Core。两种安装包均已在本机编译；干净机器安装、升级、UAC 用户身份处理及重启清理仍需验证。当前只构建 x64 TSF，不覆盖 x86 和原生 ARM64 应用。详见[安装实现与验证边界](docs/windows-installer-design.md)。
+
+安装器管理的版本请通过开始菜单的 **Uninstall Fcitx5** 或 Windows 已安装应用列表卸载。用户数据和共享运行库会保留；文件被占用时可能需要重启 Windows 才能完成删除。下文的 PowerShell 注册脚本用于开发部署。
+
 ## 构建与部署
 
 请准备 CMake 3.27+、Git、MSYS2 clang64 及其依赖、独立的 LLVM、ImageMagick，以及带有 C++ 工具、Windows SDK、ATL、MSBuild 和 NuGet 的 Visual Studio。
@@ -27,13 +38,13 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 ./scripts/build-and-deploy.ps1
 ```
 
-该脚本会初始化固定版本的子模块、应用 Windows 补丁、构建 AMD64 Release 版 Core、TSF 和 Settings，运行九项默认 TSF 测试，并部署到 `dist/pinyin`。脚本使用经过校验和验证的预编译词典/模型数据，并在后续运行中复用构建缓存。
+该脚本会初始化固定版本的子模块、应用 Windows 补丁、构建 AMD64 Release 版 Core、TSF、安装 helper 和 Settings，运行 13 项默认 TSF 测试，并部署到 `dist/pinyin`。脚本使用经过校验和验证的预编译词典/模型数据，并在后续运行中复用构建缓存。
 
 脚本不会安装工具或运行库，也不会注册输入法。更新已有部署前，请选择`关闭服务`并关闭加载其 DLL 的应用程序。自定义路径、单独构建和集成检查请参阅[构建选项和部署详情](docs/build.md)。
 
 ## 运行
 
-注册已部署的输入法：
+开发部署完成后，注册输入法：
 
 ```powershell
 ./win32/scripts/install.ps1
@@ -50,10 +61,11 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 - `重启服务`：重启或启动 Core；如果 Settings 原本已打开，则重新打开它。
 - `关闭服务`：停止 Core/Settings，并暂停自动启动，直到服务再次重启。
 - `用户数据文件夹`：打开 `%APPDATA%/Fcitx5`，其中包括设置和拼音学习数据。
+- `关于`：显示架构、CI 编号、commit 及项目/许可证链接。
 
 放置在 `%APPDATA%/Fcitx5/pinyin/dictionaries` 中的兼容 Fcitx5/libime 二进制 `.dict` 文件会自动加载。格式和转换方法请参阅[词库详情](docs/pinyin.md#third-party-dictionaries)。
 
-移除输入法时，先选择`关闭服务`，然后运行：
+注销开发部署时，先选择`关闭服务`，然后运行：
 
 ```powershell
 ./win32/scripts/uninstall.ps1
@@ -64,6 +76,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 ## 文档
 
 - [构建、部署与验证](docs/build.md)
+- [Windows 安装实现与验证边界](docs/windows-installer-design.md)
 - [拼音架构、单独构建与验证限制](docs/pinyin.md)
 - [Windows 设置设计](docs/windows-settings-design.md)
 - [候选窗渲染与 DPI 验证](docs/windows-candidate-rendering.md)

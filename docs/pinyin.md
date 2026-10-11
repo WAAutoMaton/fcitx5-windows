@@ -1,7 +1,8 @@
 # Windows Pinyin Integration
 
 This guide describes the AMD64 Pinyin integration and its current validation
-scope as of 2026-10-10. For a quick start, see [Run in the README](../README.md#run).
+scope as of 2026-10-11. For installation, see [Install in the README](../README.md#install);
+for input usage, see [Run](../README.md#run).
 For build options, deployment and registration details, see the
 [build guide](build.md).
 
@@ -121,9 +122,10 @@ runtime under `build/all/prefix`, runs default TSF CTest, then copies to
 [build options and update procedure](build.md#unified-build-options).
 
 Prerequisites: CMake 3.27+, MSYS2 clang64 Clang/Ninja/pkgconf/ECM/dlfcn/libuv/
-gettext, zstd, and Boost headers/iostreams. No script installs or upgrades system
-packages. Run the commands from the repository root. The build script currently
-targets AMD64 using clang64 and does not offer an ARM64 Pinyin build option.
+gettext, zstd, and Boost headers/iostreams. Build/deploy scripts do not install or
+upgrade system packages. Run the commands from the repository root. The build
+script currently targets AMD64 using clang64 and does not offer an ARM64 Pinyin
+build option.
 
 ```powershell
 ./scripts/build-pinyin.ps1 -DataMode Prebuilt
@@ -207,10 +209,10 @@ For CTest alone, without starting Core:
 ctest --test-dir win32/build/pinyin-tsf --output-on-failure
 ```
 
-The default twelve tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
+The default thirteen tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
 `test_candidate`, `test_candidate_tsf`, `test_transport`, `test_service`, `test_setup`,
-`test_langbar`, `test_about` and `test_register`. Root/upstream tests are
-disabled by the default build configuration; these twelve tests are not the full
+`test_uninstall`, `test_langbar`, `test_about` and `test_register`. Root/upstream tests are
+disabled by the default build configuration; these thirteen tests are not the full
 upstream test suite.
 
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
@@ -252,12 +254,16 @@ upstream test suite.
   plus profile/category calls captured by fake COM managers to verify character
   lengths, DLL path, icon index, `SYSTRAYSUPPORT` and failure handling. It never
   invokes system registration and does not prove taskbar rendering.
+- `test_setup` and `test_uninstall`: user-profile backup/restore, registration
+  ownership and maintenance checks, plus the production uninstall launcher with
+  mocked system calls, including elevation, cancellation, silent operation and
+  successful removal requiring restart (`3010`). No real installation occurs.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers all three probes with CTest;
-a deployed Core must already be running, bringing the total to fifteen.
+a deployed Core must already be running, bringing the total to sixteen.
 `dictionaries_probe` and `service_probe` are built but invoked by their separate
 scripts, rather than registered by this option. The recorded candidate-rendering
-validation includes the historical Pinyin probes and the current twelve-test
+validation includes historical Pinyin probes and the then-current twelve-test
 TSF-only regression; see [the recorded scope](windows-candidate-rendering.md#verification).
 
 `scripts/test-pinyin.ps1` accepts `-Prefix` and `-TsfBuild` for other deployment
@@ -320,7 +326,7 @@ not persist separate unfinished preedits for multiple input fields.
 ## Windows Settings
 
 Right-clicking the language-bar input mode item opens a native menu with
-`输入法设置`, `用户数据文件夹`, `重启服务` and `关闭服务`. The settings
+`输入法设置`, `用户数据文件夹`, `重启服务`, `关闭服务` and `关于`. The settings
 command asks Core to launch the independent WinUI 3
 `settings/Fcitx5Settings.exe`. The Core connection and the settings launch are
 separate steps: a running Core can accept IPC while the settings window is
@@ -372,6 +378,11 @@ file manager, creating it when absent. This directory contains settings under
 `config/fcitx5` and Pinyin learning data under `pinyin` (`user.dict` and
 `user.history`). It uses Windows' roaming AppData known folder and remains
 available while services are stopped, without starting Core or Settings.
+
+`关于` opens a nonmodal native window on the TSF thread, showing the DLL target
+architecture, CI build number, commit/time and project/license links. It does
+not require Core, Settings or Windows App SDK. Reopening activates the existing
+window; TSF deactivation closes it.
 
 `重启服务` gracefully stops and restarts Core, or starts it when absent. If
 Settings was open, it closes and reopens after Core is ready; otherwise it
@@ -519,7 +530,11 @@ Registered-TIP OS menu dispatch remains unverified.
   broader Windows-version coverage still need registered-TIP validation.
   The automated probes do not verify taskbar rendering.
 - Candidates currently have keyboard-only selection, with no candidate mouse
-  interaction, ordinary notification-area tray or unified Core/TSF installer.
+  interaction or ordinary notification-area tray.
+- Unified Windows 11 x64 installers package Core/TSF/Settings in two variants,
+  with and without bundled runtimes. Packaging and mocked setup/uninstall paths
+  have been validated; real installation, upgrades and reboot cleanup still
+  need system testing. See [installer status](windows-installer-design.md).
 - Xiaohe and Ziranma Shuangpin commits are validated by probes. Other profiles,
   Wubi, Rime and Windows Store compatibility need broader validation.
   `SYSTRAYSUPPORT` does not declare `IMMERSIVESUPPORT`.

@@ -2,7 +2,16 @@
 
 The recommended AMD64 Release workflow is shown in the
 [README](../README.md#build-and-deploy). This guide covers prerequisites,
-custom build paths, validation and input-method registration.
+custom build paths, installer packaging, validation and input-method registration.
+
+## Installer Packages
+
+The CI/Nightly workflow packages Windows 11 x64 installers with and without
+bundled Visual C++/Windows App Runtime installers. See
+[Install in the README](../README.md#install) for package selection and removal,
+and [installer implementation](windows-installer-design.md) for current behavior
+and unverified system-installation scenarios. The build/deploy and registration
+scripts in this guide remain separate development tools.
 
 ## Prerequisites
 
@@ -36,7 +45,7 @@ Run from the repository root:
 
 The script initializes pinned submodules, applies compatibility patches and
 builds Core/libime/chinese-addons, TSF and WinUI Settings. It stages the complete
-runtime under `build/all/prefix`, runs the twelve default TSF CTest tests, then
+runtime under `build/all/prefix`, runs the thirteen default TSF CTest tests, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
 
@@ -112,6 +121,40 @@ All multi-file artifacts use the artifact action's default ZIP archive mode.
 Installer artifacts use compression level zero. Release downloads only the
 named installer artifact, without merging the internal runtime and test bundles.
 
+## Build Installer Packages
+
+Prepare a complete isolated runtime tree with the unified build, then package
+it with Inno Setup 7 (`-IsccPath` can select the compiler explicitly):
+
+```powershell
+./scripts/build-and-deploy.ps1 -Prefix ./dist/installer-stage -BuildRoot ./build/installer
+./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer -SkipRuntimes
+./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer
+```
+
+The bundled variant requires `vc_redist.x64.exe` and
+`WindowsAppRuntimeInstall-x64.exe` in `-Dependencies`. Prepare and verify these
+against `cmake/installer-lock.json`; CI downloads and checks the locked SHA256
+values. The packaging script itself checks presence, not dependency hashes.
+`-SkipRuntimes` requires neither installer. Both modes require Inno Setup 7,
+the setup helper and the complete Core/TSF/Settings staging tree.
+
+`-PackageVersion` defaults to `0.1.0.0`; `-PackageName` overrides the output
+basename. Each variant produces an EXE, `.exe.sha256` and `.manifest.txt` with
+version, commit, runtime-bundling mode and compiler version. All input/output
+paths must be inside the repository.
+
+Packaging copies license files and writes `setup/managed-install` into the
+staging tree. Use a dedicated packaging prefix: that marker makes service startup
+require installer-managed state, so do not package an active development tree.
+`-WhatIf` validates required input files without compiling or changing the tree.
+Packaging does not register TSF, start services or execute runtime installers.
+The script regression can run without system installation:
+
+```powershell
+./scripts/test-build-installer.ps1
+```
+
 ## Deployment and Updates
 
 Keep the complete runtime tree together:
@@ -165,8 +208,8 @@ Default CTest includes `test_candidate` and `test_candidate_tsf`, which exercise
 DirectWrite/Direct2D draw function and popup lifecycle without Core or TIP
 registration. See [candidate rendering validation](windows-candidate-rendering.md#verification)
 for preview images and the remaining physical-monitor/application checks.
-Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the twelve
-default tests; it requires a running deployed Core.
+Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the thirteen
+default tests, for sixteen total; it requires a running deployed Core.
 
 The following script regressions do not perform real registration or terminate
 applications:
@@ -181,6 +224,10 @@ rejection without building. The second checks registration/release helpers
 with mocked system operations and requires the default deployed DLL to exist.
 
 ## Registration and DLL Management
+
+For installer-managed copies, use the Start menu or Windows installed-apps
+uninstall entry so user configuration, maintenance and file removal are handled
+together. The helpers below only register/unregister development deployments.
 
 Install/uninstall helpers default to `dist/pinyin/tsf/fcitx5-x86_64.dll`, resolved
 relative to the repository regardless of the current directory. Use `-Prefix`
