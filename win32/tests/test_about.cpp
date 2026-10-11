@@ -92,7 +92,8 @@ int main(int argc, char **argv) {
         assert(info.find(L"x64 (AMD64)") != std::wstring::npos);
 #endif
         assert(info.find(fcitx::buildinfo::commitTime) != std::wstring::npos);
-        assert(info.find(fcitx::buildinfo::origin) != std::wstring::npos);
+        assert(info.find(L"http://") == std::wstring::npos);
+        assert(info.find(L"https://") == std::wstring::npos);
         if (*fcitx::buildinfo::ci) {
             assert(info.find(fcitx::buildinfo::ci) != std::wstring::npos);
         } else {

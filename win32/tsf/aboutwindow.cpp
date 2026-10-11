@@ -60,8 +60,6 @@ std::wstring AboutWindow::details() {
     result += buildinfo::commit;
     result += L"\r\nCommit \u65f6\u95f4\uff1a";
     result += buildinfo::commitTime;
-    result += L"\r\n\u4ed3\u5e93\uff1a";
-    result += buildinfo::origin;
     return result;
 }
 

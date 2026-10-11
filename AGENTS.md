@@ -68,7 +68,7 @@
 - `test_register` 加载实际 DLL 检查内嵌品牌图标和 Shell 图标提取，使用模拟 COM 管理器验证 profile 字符长度、DLL 路径、类别和失败返回；不执行系统注册或修改输入法设置。
 - 语言栏右键通过原生 popup menu 提供“输入法设置”“重启服务”“关闭服务”。重启会重启/启动 Core，只有原本打开的 Settings 才重新打开；关闭会停止两者并暂停自动拉起。TSF 在 Settings 自身进程内时，由短暂运行的 `Fcitx5 --restart-services/--stop-services` 控制进程等待宿主退出，避免等待自身。真实已注册指示器右键派发尚未验证；左键仍切换中英文。
 - 语言栏右键另提供“用户数据文件夹”，后台通过 Windows Roaming AppData known folder 打开 `%APPDATA%/Fcitx5`（含 `config/fcitx5` 设置和 `pinyin` 用户词典、学习历史），不存在时创建目录。服务关闭时仍可使用，不启动 Core/Settings，不变更 IPC 协议。
-- 语言栏右键另提供“关于”，在 TSF 所属线程打开原生非模态窗口，显示 `Fcitx5 for Windows`、DLL 目标架构、CI 编号、commit 和 commit 时间、构建时 origin 及 GPL-3.0/仓库主页链接。每次 TSF 构建重新读取元数据；GitHub Actions 使用 `GITHUB_RUN_NUMBER`，本地 CI 编号显示占位说明；SSH origin 转为 HTTPS 主页。重复打开激活已有窗口，停用/析构关闭；不依赖 Core/Settings 或新运行时，不改变 IPC 和注册元数据。
+- 语言栏右键另提供“关于”，在 TSF 所属线程打开原生非模态窗口，显示 `Fcitx5 for Windows`、DLL 目标架构、CI 编号、commit 和 commit 时间，以及 GPL-3.0/仓库主页链接；仓库 URL 仅在窗口下方展示一次，可复制。每次 TSF 构建重新读取元数据；GitHub Actions 使用 `GITHUB_RUN_NUMBER`，本地 CI 编号显示占位说明；SSH origin 转为 HTTPS 主页。重复打开激活已有窗口，停用/析构关闭；不依赖 Core/Settings 或新运行时，不改变 IPC 和注册元数据。
 - `scripts/deploy-tsf.ps1 -Prefix -TsfBuild` 将 DLL 复制到隔离安装树的 `tsf`；部署后的 TSF 在激活时固定定位并后台启动相邻 `bin/Fcitx5.exe`，Settings 位于 `settings/Fcitx5Settings.exe`。部署脚本本身不启动服务、不注册或注销，旧构建目录 DLL 不能自动推断 Core 安装路径。
 - `win32/settings` 是第三套独立 MSBuild 工程，使用框架依赖的 Windows App SDK 1.8；要求当前用户有 x64 Framework/DDLM >= 8000.994.2142.0 和 Visual C++ 运行库。`scripts/build-settings.ps1 -Prefix` 部署到隔离安装树的 `settings`，不安装系统运行时。
 - 设置窗口提供全拼/双拼及八种内置键位；Core 在主事件循环切换 `pinyin`/`shuangpin` entry 和真实 `ShuangpinProfile`，保存用户 `conf/windows.conf` 并在重启恢复。存储失败先返回，不清空解码上下文；成功切换取消预编辑，英文 context 保持关闭。设置运行时代次拒绝旧预编辑但保留已经接收的提交。
@@ -189,6 +189,8 @@
 - 完成后简要报告修改文件、行为变化、执行的验证和仍未验证的内容；架构或实现进度改变时更新本文件。
 
 ## 当前验证记录
+
+- 关于窗口已移除详情区重复的仓库地址，仅保留下方主页 URL 和打开按钮。`win32/build/about-tsf` Release DLL/`test_about` 增量构建、该测试、修改文件格式检查及 `git diff --check` 通过；200% 截图 `build/about-preview/about-single-url.png` 确认 URL 仅显示一次。未替换默认部署 DLL或执行注册/注销。
 
 - Release 最终附件已收敛为两个 x64 安装器（含/不含运行库）及各自 SHA256，共四个文件；CI 不再打包、上传或下载两个架构的 Core 开发包。保留 ARM64 Core 编译检查、x64 联合构建及测试/打包依赖，内部 runtime/tests/Settings artifacts 不变。YAML/job 与 artifact 对应检查、Bash 和全部剩余 Windows run 块的 PowerShell 语法检查、九种模拟发布路径及 `git diff --check` 通过；模拟确认旧 Core 压缩包不会进入发布参数。未执行远端发布，下次成功 CI 才会替换现有 Nightly 附件。
 
