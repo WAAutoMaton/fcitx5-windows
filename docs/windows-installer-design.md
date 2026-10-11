@@ -120,6 +120,8 @@ sequenceDiagram
 
 Inno 脚本的关键配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.22000`、`PrivilegesRequired=admin` 和固定 AppId。显式设置 `CloseApplications=no`、`RestartApplications=no`，避免安装引擎默认自动关闭应用；不设置强制重启。DLL 的 `uninsrestartdelete` 与原生注销流程配合，避免同时由 `regserver` 和 helper 重复管理注册。
 
+原生 helper 向执行用户的 `%LOCALAPPDATA%/fcitx5/installer-helper.log` 追加 UTF-8 日志，每行包含本地时间、PID 和 TID，返回码同时显示十进制与十六进制。用户初始化记录 Settings runtime-check、运行库安装、profile 枚举与备份、启用/默认设置、COM 创建、语言切换、profile 激活及 Core 就绪检查；语言切换前后只读查询当前语言和目标 profile 启用状态，并保存查询 HRESULT。`ActivateProfile` 原始 HRESULT 在转换之前记录，可区分 `S_FALSE` 与 `E_FAIL`。日志写入失败不改变安装返回码，日志代码恢复 `GetLastError()`；尚未通过实际安装重现确认此次 TSF 激活失败的具体调用。
+
 用户启用调用 `InstallLayoutOrTip`，使用本项目的 profile 描述串：
 
 ```text

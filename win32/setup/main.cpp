@@ -1,6 +1,7 @@
 #include "../dll/register.h"
 #include "../dll/util.h"
 #include "../ipc/service.h"
+#include "log.h"
 #include "userprofile.h"
 #include <algorithm>
 #include <fstream>
@@ -251,14 +252,19 @@ DWORD configure(const fs::path &root) {
     }
     auto result = runProcess(root / "settings" / "Fcitx5Settings.exe",
                              L"--runtime-check");
+    fcitx::setup::logStep("configure-user Settings runtime-check", result);
     if (result) {
         result = runProcess(root / "setup" / "WindowsAppRuntimeInstall-x64.exe",
                             L"--quiet");
+        fcitx::setup::logStep("configure-user Windows App Runtime install",
+                              result);
         if (result) {
             return result;
         }
         result = runProcess(root / "settings" / "Fcitx5Settings.exe",
                             L"--runtime-check");
+        fcitx::setup::logStep("configure-user Settings runtime-check retry",
+                              result);
         if (result) {
             return result;
         }
@@ -336,24 +342,15 @@ DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
 }
 
 void logResult(const std::wstring &command, DWORD result) {
-    PWSTR folder = nullptr;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE,
-                                       nullptr, &folder))) {
-        const auto directory = fs::path(folder) / "fcitx5";
-        CoTaskMemFree(folder);
-        std::error_code error;
-        fs::create_directories(directory, error);
-        std::ofstream log(directory / "installer-helper.log", std::ios::app);
-        log << fcitx::guidToString(GUID_NULL) << ' '
-            << std::string(command.begin(), command.end())
-            << " result=" << result << '\n';
-    }
+    fcitx::setup::logStep(std::string(command.begin(), command.end()), result);
 }
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     const auto initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(initialized)) {
+        fcitx::setup::logStep("CoInitializeEx",
+                              static_cast<DWORD>(initialized));
         return static_cast<int>(initialized);
     }
     struct ComLifetime {
@@ -400,6 +397,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
     DWORD result = ERROR_GEN_FAILURE;
     try {
+        fcitx::setup::logMessage(std::string(command.begin(), command.end()) +
+                                 " begin");
+        fcitx::setup::logMessage(L"prefix=" + root.wstring());
         if (command == L"preflight-machine") {
             result = pendingDeletion(root)     ? ERROR_SUCCESS_REBOOT_REQUIRED
                      : !ownsRegistration(root) ? ERROR_ALREADY_EXISTS
@@ -437,8 +437,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
     } catch (const std::system_error &error) {
         result = static_cast<DWORD>(error.code().value());
+        fcitx::setup::logMessage(error.what());
     } catch (...) {
         result = ERROR_GEN_FAILURE;
+        fcitx::setup::logMessage("Unhandled helper exception");
     }
     logResult(command, result);
     if (result && command == L"uninstall" && !silent &&

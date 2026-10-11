@@ -189,6 +189,8 @@
 
 ## 当前验证记录
 
+- 安装 helper 的 `%LOCALAPPDATA%/fcitx5/installer-helper.log` 已增加本地时间、PID/TID、命令开始和安装根，以及 Settings runtime-check、用户 profile 启用/默认设置、COM 创建、`ChangeCurrentLanguage` 和 `ActivateProfile` 原始 HRESULT、语言切换前后当前语言及启用状态、Core 重启/就绪步骤。日志失败不改变安装返回码并恢复 `GetLastError()`，保留现有安装/回滚行为。`build/all/tsf` 的 Release helper 和 `test_setup` 构建、该测试、修改文件格式检查及 `git diff --check` 通过；只读 `preflight-machine` 确认实际日志格式。未执行真实安装、注册/注销、用户配置或服务重启，CI 安装包需重新构建后复现以定位本机 `configure-user` 的 `0x80004005`。
+
 - CI 已拆分为 `build-core-arm64`、`build-x64`、`test-x64`、`package-installer-x64` 和 `release`。x64 Core/libime/addons/TSF/Settings 统一 Release 构建一次，构建 job 跳过测试；测试与打包同时依赖该构建，下载同一运行树。默认 CTest 导出相对路径 JSON 清单，由测试 runner 按下载目录恢复绝对命令及工作目录，保留图标校验、脚本回归和拼音/词库 probes；原独立 Debug TSF 构建不再执行。x64 开发包单独安装已经构建的 Core，不混入拼音依赖。多文件 artifact 使用默认 ZIP 模式，修复安装包六文件上传与 `archive: false` 冲突；release 只下载开发包及安装包，并等待测试和打包全部成功。本机 YAML/job 依赖及 artifact 对应检查、全部 Windows run 块的 PowerShell 语法检查、两个脚本回归通过；已有 Release 测试包经 ZIP 解包至含空格/单引号的新目录后 10 项 CTest 和图标校验通过，Core 实际安装/开发包的 125 项内容及无拼音依赖验证、现有双安装包六文件 ZIP 和元数据检查通过，验证文件在 `build/ci-workflow-validation`。当次 Core 已运行，未停止服务或重跑拼音/词库 probes；GitHub runner 上完整产物传递及发布仍需重跑确认。
 
 - 安装包 CI 将检查通过的 Inno Setup 7 完整路径经 `GITHUB_ENV` 传给两个打包调用的 `-IsccPath`；打包脚本校验主版本为 7，不再搜索版本 6 安装目录，manifest 记录实际版本。`scripts/test-build-installer.ps1` 已覆盖 PATH 中为 6 时显式选择 7、默认及显式选择 6 的拒绝和实际版本记录；脚本及修改后的 CI PowerShell 语法检查、`git diff --check` 通过。本机使用显式 7.1.0 路径和 `build/all/prefix` 实际编译两种包，产物及日志位于 `build/ci-inno7-validation`；未执行安装器、注册/注销或修改输入法设置，GitHub runner 上的完整 CI 尚待重跑确认。

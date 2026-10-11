@@ -3,6 +3,7 @@
 #include "../ipc/atomicfile.h"
 #include "../ipc/service.h"
 #include "../tsf/pipeclient.h"
+#include "log.h"
 #include <atlcomcli.h>
 #include <fstream>
 #include <msctf.h>
@@ -21,6 +22,8 @@ class InputApi {
     InputApi() {
         module_ =
             LoadLibraryExW(L"input.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        logStep("LoadLibraryExW input.dll",
+                module_ ? ERROR_SUCCESS : GetLastError());
         if (!module_) {
             ipc::serviceError();
         }
@@ -41,12 +44,14 @@ class InputApi {
     std::vector<InputProfile> profiles() const {
         for (unsigned attempt = 0; attempt < 3; ++attempt) {
             const auto count = enumerate(nullptr, nullptr, nullptr, nullptr, 0);
+            logStep("EnumEnabledLayoutOrTip count", count);
             if (!count || count > 4096) {
                 ipc::serviceError(ERROR_INVALID_DATA);
             }
             std::vector<InputProfile> items(count);
             const auto copied =
                 enumerate(nullptr, nullptr, nullptr, items.data(), count);
+            logStep("EnumEnabledLayoutOrTip copied", copied);
             if (copied && copied <= count) {
                 items.resize(copied);
                 return items;
@@ -103,9 +108,30 @@ bool sameProfile(const InputProfile &a, const InputProfile &b) {
                              std::wstring(b.id, wcsnlen(b.id, MAX_PATH));
 }
 
+void logProfileState(const char *stage, ITfInputProcessorProfiles *profiles,
+                     const InputProfile &profile) noexcept {
+    const auto lastError = GetLastError();
+    LANGID language = 0;
+    BOOL enabled = FALSE;
+    const auto currentResult = profiles->GetCurrentLanguage(&language);
+    const auto enabledResult = profiles->IsEnabledLanguageProfile(
+        profile.clsid, profile.language, profile.profile, &enabled);
+    char state[256]{};
+    snprintf(state, sizeof(state),
+             "%s GetCurrentLanguage=0x%08lX current=0x%04X target=0x%04X "
+             "IsEnabledLanguageProfile=0x%08lX enabled=%d",
+             stage, static_cast<DWORD>(currentResult), language,
+             profile.language, static_cast<DWORD>(enabledResult), enabled);
+    logMessage(state);
+    SetLastError(lastError);
+}
+
 DWORD activate(const InputProfile &profile) {
+    logMessage(L"activate target=" + profileId(profile));
     CComPtr<ITfInputProcessorProfileMgr> manager;
     auto result = manager.CoCreateInstance(CLSID_TF_InputProcessorProfiles);
+    logStep("CoCreateInstance ITfInputProcessorProfileMgr",
+            static_cast<DWORD>(result));
     if (FAILED(result)) {
         return static_cast<DWORD>(result);
     }
@@ -113,16 +139,23 @@ DWORD activate(const InputProfile &profile) {
     if (profile.type == 2) {
         const auto id = std::wstring(profile.id, wcsnlen(profile.id, MAX_PATH));
         layout = LoadKeyboardLayoutW(id.c_str(), KLF_ACTIVATE);
+        const auto error = layout ? ERROR_SUCCESS : GetLastError();
+        logStep("LoadKeyboardLayoutW", error);
         if (!layout) {
-            return GetLastError();
+            return error;
         }
     } else {
         // Change the caller's input language before requesting desktop
         // activation.
         CComPtr<ITfInputProcessorProfiles> profiles;
         result = profiles.CoCreateInstance(CLSID_TF_InputProcessorProfiles);
+        logStep("CoCreateInstance ITfInputProcessorProfiles",
+                static_cast<DWORD>(result));
         if (SUCCEEDED(result)) {
+            logProfileState("before ChangeCurrentLanguage", profiles, profile);
             result = profiles->ChangeCurrentLanguage(profile.language);
+            logStep("ChangeCurrentLanguage", static_cast<DWORD>(result));
+            logProfileState("after ChangeCurrentLanguage", profiles, profile);
         }
         if (FAILED(result)) {
             return static_cast<DWORD>(result);
@@ -134,6 +167,8 @@ DWORD activate(const InputProfile &profile) {
         profile.language, profile.type == 1 ? profile.clsid : CLSID_NULL,
         profile.type == 1 ? profile.profile : GUID_NULL, layout,
         TF_IPPMF_FORSESSION);
+    logStep("ActivateProfile TF_IPPMF_FORSESSION raw HRESULT",
+            static_cast<DWORD>(result));
     return result == S_OK
                ? ERROR_SUCCESS
                : static_cast<DWORD>(FAILED(result) ? result : E_FAIL);
@@ -201,10 +236,12 @@ const InputProfile *restoreProfile(const std::vector<InputProfile> &profiles,
 }
 
 DWORD configureUser(const std::filesystem::path &root) {
+    logMessage("configureUser begin");
     InputApi api;
     const auto before = api.profiles();
     const auto saved = backupPath();
     const auto first = !std::filesystem::exists(saved);
+    logStep("configureUser first initialization", first);
     if (first) {
         UserBackup backup;
         const auto *previous = defaultProfile(before);
@@ -216,45 +253,61 @@ DWORD configureUser(const std::filesystem::path &root) {
                 backup.enabled = 1;
             }
         }
-        if (!ipc::replaceFile(
-                saved, std::string_view(reinterpret_cast<const char *>(&backup),
-                                        sizeof(backup)))) {
+        const auto written = ipc::replaceFile(
+            saved, std::string_view(reinterpret_cast<const char *>(&backup),
+                                    sizeof(backup)));
+        logStep("Save user profile backup",
+                written ? ERROR_SUCCESS : ERROR_WRITE_FAULT);
+        if (!written) {
             return ERROR_WRITE_FAULT;
         }
     } else {
+        logMessage("Read existing user profile backup");
         readBackup();
     }
     const auto tip = fcitxProfile();
     const auto id = profileId(tip);
-    if (!api.install(id.c_str(), 0)) {
+    const auto installed = api.install(id.c_str(), 0);
+    logStep("InstallLayoutOrTip enable BOOL", installed);
+    if (!installed) {
         return ERROR_INSTALL_FAILURE;
     }
     if (first) {
-        if (!api.setDefault(id.c_str(), 0)) {
+        const auto setDefault = api.setDefault(id.c_str(), 0);
+        logStep("SetDefaultLayoutOrTip BOOL", setDefault);
+        if (!setDefault) {
             return ERROR_INSTALL_FAILURE;
         }
         const auto activated = activate(tip);
+        logStep("configureUser activate result", activated);
         if (activated) {
             return activated;
         }
     }
+    logMessage("configureUser Core restart begin");
     ipc::ServiceController controller(root / L"bin" / L"Fcitx5.exe");
     controller.restart();
+    logMessage("configureUser Core restart complete; waiting for GetSettings");
     for (unsigned attempt = 0; attempt < 100; ++attempt) {
         PipeClient pipe;
         if (pipe.connect()) {
             ipc::SettingsReply settings;
             if (pipe.getSettings(settings) &&
                 settings.error == ipc::SettingsError::None) {
+                logStep("configureUser Core GetSettings ready", ERROR_SUCCESS);
                 return ERROR_SUCCESS;
             }
         }
         Sleep(100);
     }
+    logStep("configureUser Core GetSettings timeout",
+            ERROR_SERVICE_REQUEST_TIMEOUT);
     return ERROR_SERVICE_REQUEST_TIMEOUT;
 }
 
 DWORD removeUser(const std::filesystem::path &root, bool rollback) {
+    logMessage(rollback ? "removeUser rollback begin"
+                        : "removeUser uninstall begin");
     InputApi api;
     const auto before = api.profiles();
     UserBackup backup;
