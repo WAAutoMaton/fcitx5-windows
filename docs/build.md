@@ -83,11 +83,11 @@ run in separate jobs:
 
 | Job | Responsibility |
 | --- | --- |
-| `build-core-arm64` | Build and archive ARM64 Core developer files; no ARM64 TSF or Pinyin integration validation |
-| `build-x64` | Run the unified build with `-SkipTests`; upload the complete runtime tree, portable TSF tests/probes, x64 Core developer archive and standalone Settings artifact |
+| `build-core-arm64` | Validate ARM64 Core compilation; no ARM64 TSF or Pinyin integration validation |
+| `build-x64` | Run the unified build with `-SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
 | `test-x64` | Download the x64 runtime and tests; run build-script regressions, the existing icon checksum, Pinyin/TSF/settings probes, default CTest and dictionary integration checks |
 | `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
-| `release` | Wait for both architectures, x64 tests and packaging to succeed, then publish the developer archives and installers |
+| `release` | Wait for both architectures, x64 tests and packaging to succeed, then publish the installers and SHA256 files |
 
 `test-x64` and `package-installer-x64` both depend only on `build-x64`, so they
 can start in parallel as soon as that job finishes. Packaging can succeed even
@@ -96,23 +96,21 @@ TSF build is no longer part of this workflow.
 
 Nightly publication uses GitHub CLI with job-scoped `contents: write` permission.
 Release jobs run one at a time, replace the previous `latest` prerelease and its
-assets, and move the tag to the workflow commit. Both developer archives and
-both installers with their SHA256 files are published with generated release
-notes. Missing asset patterns stop publication before the previous release is
-changed.
+assets, and move the tag to the workflow commit. Only the two x64 installers
+(with and without bundled runtimes) and their SHA256 files are published, with
+generated release notes. Missing asset patterns stop publication before the
+previous release is changed. Core developer archives are no longer packaged
+or uploaded by CI.
 
 The portable test bundle includes test executables, probes, the actual TSF DLL
 and generated icon. A relative-path JSON manifest comes from
 `ctest --show-only=json-v1`; the test runner restores CTest registration with its
 downloaded bundle's absolute commands and working directories, without
 reconfiguring CMake or depending on the original runner's checkout path.
-The x64 Core developer archive uses a separate install of the existing Core
-build, keeping libime/chinese-addons files out of that archive.
 
 All multi-file artifacts use the artifact action's default ZIP archive mode.
-Already compressed developer archives and installer artifacts use compression
-level zero. Release downloads only the named developer and installer artifacts,
-without merging the internal runtime and test bundles.
+Installer artifacts use compression level zero. Release downloads only the
+named installer artifact, without merging the internal runtime and test bundles.
 
 ## Deployment and Updates
 

@@ -41,38 +41,6 @@ jobs:
             -DARCH=ARM64
           cmake --build build/arm64
 
-      - name: Package
-        env:
-          DESTDIR: dist/arm64
-        run: |
-          cmake --install build/arm64
-          $prefixLine = cmake -LA -N build/arm64 |
-            Select-String '^CMAKE_INSTALL_PREFIX:'
-          if (!$prefixLine) { throw 'CMAKE_INSTALL_PREFIX was not found in the build cache.' }
-          $prefix = ($prefixLine.Line -split '=', 2)[1]
-          $relativePrefix = $prefix -replace '^[A-Za-z]:[\\/]*', ''
-          $stagingRoot = (Resolve-Path 'dist/arm64').Path
-          $installRoot = Join-Path $stagingRoot $relativePrefix
-          if (!(Test-Path (Join-Path $installRoot 'bin'))) {
-            throw "Installed bin directory was not found at $installRoot"
-          }
-          $archive = Join-Path (Split-Path -Parent $stagingRoot) 'Fcitx5-arm64-dev.tar.bz2'
-          Push-Location $installRoot
-          try {
-            tar cjf $archive bin/lib* include lib
-            if ($LASTEXITCODE -ne 0) { throw 'ARM64 developer archive failed.' }
-          } finally {
-            Pop-Location
-          }
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: Fcitx5-arm64
-          path: dist/Fcitx5-arm64-dev.tar.bz2
-          compression-level: 0
-          if-no-files-found: error
-
       - name: Setup tmate session
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
@@ -150,27 +118,6 @@ jobs:
         with:
           name: Fcitx5-tests-x64
           path: build/ci-x64/test-bundle/
-          if-no-files-found: error
-
-      - name: Package x64 Core developer files without rebuilding
-        run: |
-          cmake --install build/ci-x64/pinyin-core --prefix "$PWD/dist/core-dev-x64"
-          if ($LASTEXITCODE -ne 0) { throw 'Core developer installation failed.' }
-          $archive = Join-Path $PWD 'dist/Fcitx5-x86_64-dev.tar.bz2'
-          Push-Location dist/core-dev-x64
-          try {
-            tar cjf $archive bin/lib* include lib
-            if ($LASTEXITCODE -ne 0) { throw 'x64 developer archive failed.' }
-          } finally {
-            Pop-Location
-          }
-
-      - name: Upload x64 Core developer artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: Fcitx5-x86_64
-          path: dist/Fcitx5-x86_64-dev.tar.bz2
-          compression-level: 0
           if-no-files-found: error
 
       - name: Upload settings application
@@ -324,16 +271,6 @@ jobs:
       group: nightly-release
       cancel-in-progress: false
     steps:
-      - name: Download ARM64 Core developer artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: Fcitx5-arm64
-
-      - name: Download x64 Core developer artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: Fcitx5-x86_64
-
       - name: Download installer artifact
         uses: actions/download-artifact@v8
         with:
@@ -348,7 +285,6 @@ jobs:
           set -euo pipefail
           shopt -s failglob
           files=(
-            Fcitx5-*.tar.bz2
             Fcitx5-*-x64-setup.exe
             Fcitx5-*-x64-setup.exe.sha256
             Fcitx5-*-x64-no-runtime-setup.exe

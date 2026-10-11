@@ -190,6 +190,8 @@
 
 ## 当前验证记录
 
+- Release 最终附件已收敛为两个 x64 安装器（含/不含运行库）及各自 SHA256，共四个文件；CI 不再打包、上传或下载两个架构的 Core 开发包。保留 ARM64 Core 编译检查、x64 联合构建及测试/打包依赖，内部 runtime/tests/Settings artifacts 不变。YAML/job 与 artifact 对应检查、Bash 和全部剩余 Windows run 块的 PowerShell 语法检查、九种模拟发布路径及 `git diff --check` 通过；模拟确认旧 Core 压缩包不会进入发布参数。未执行远端发布，下次成功 CI 才会替换现有 Nightly 附件。
+
 - Nightly 发布已用 GitHub CLI 替换归档的 `marvinpinto/action-automatic-releases@latest`，移除该 action 引入的旧 Node.js 和 `set-output` 警告来源。release job 显式使用 `contents: write` 并串行执行，替换旧 `latest` 预发布及附件、将标签更新到 workflow commit，生成发布说明；附件模式缺失时在远端修改前退出。YAML/job 依赖和 Bash 语法检查、模拟首次/覆盖发布、仅有标签/仅有 release、查询/删除/标签更新/上传失败及附件缺失共九种路径通过，验证文件在 `build/ci-release-warning-validation`。未操作真实远端标签或 Release；GitHub runner 的发布及警告消除仍待下次 CI 确认。
 
 - “关于”菜单及原生窗口已通过 `win32/build/about-tsf` AMD64 TSF Release 构建和 11 项默认 CTest。`test_langbar` 验证五项菜单和停用后的迟到点击；`test_about` 验证内容、单实例重复打开、无模态 owner、DPI awareness 恢复、控件边界、Tab/Escape/关闭及销毁后重开。模拟 GitHub Actions 编号的构建/窗口测试和回到本地占位说明已通过，200% 原生窗口截图位于 `build/about-preview`。未替换默认部署 DLL、注册/注销或启动/停止 Core/Settings；真实系统右键派发、浏览器打开和物理跨屏/主题仍需验证。

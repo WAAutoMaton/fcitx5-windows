@@ -168,7 +168,7 @@ Inno 的 [`uninsrestartdelete`](https://jrsoftware.org/ishelp/topic_filessection
 
 ## CI 设计
 
-在 `.github/workflows/ci.yml` 新增 `package-installer-x64`，与当前 Core ARM64 开发包 job 分开。每次成功的 push、pull_request、workflow_dispatch 都上传安装包 artifact；构建或验证失败不能保证产生有效包。PR 包为未签名测试产物，正式 master/tag 可签名并加入发布附件。
+在 `.github/workflows/ci.yml` 新增 `package-installer-x64`，与 Core ARM64 编译检查 job 分开。每次成功的 push、pull_request、workflow_dispatch 都上传安装包 artifact；构建或验证失败不能保证产生有效包。PR 包为未签名测试产物，正式 master/tag 可签名并加入发布附件。
 
 建议该 job 使用现有统一构建入口，或将现有 x64 拼音 job 合并扩展为完整 Release 构建与打包，避免重编同一套 Core。不要将现有独立 Settings 输出与未经关联的 Core/DLL artifact 随意拼成一个包。
 
