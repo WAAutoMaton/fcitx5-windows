@@ -27,6 +27,7 @@ sessions on the TSF owning thread.
 | [src/main.cpp](../src/main.cpp) | Host initialization, in-memory input group and Pinyin warmup |
 | [src/windowsfrontend.cpp](../src/windowsfrontend.cpp) | Windows InputContext and Core pipe service |
 | [src/windowssettings.cpp](../src/windowssettings.cpp) | Pinyin scheme/profile application and authoritative persistence |
+| [src/windowsinputmethods.cpp](../src/windowsinputmethods.cpp) | Input-method catalog, ordered selection, shared engine options and cycling |
 | [src/windowsdictionaries.cpp](../src/windowsdictionaries.cpp) | Stable directory scans, addon reload and dictionary status queries |
 | [win32/ipc/protocol.h](../win32/ipc/protocol.h) | Shared framing and snapshot format |
 | [win32/tsf/pipeclient.cpp](../win32/tsf/pipeclient.cpp) | TSF pipe client and bounded I/O |
@@ -34,42 +35,53 @@ sessions on the TSF owning thread.
 | [win32/tsf/langbaritem.cpp](../win32/tsf/langbaritem.cpp) | Input mode button, notifications and lifetime |
 | [win32/tsf/servicecontrol.cpp](../win32/tsf/servicecontrol.cpp) | Background service commands and user-data folder opening |
 | [win32/tsf/candidatewindow.cpp](../win32/tsf/candidatewindow.cpp) | DirectWrite/Direct2D candidate popup and DPI positioning |
-| [win32/settings/SettingsWindow.cpp](../win32/settings/SettingsWindow.cpp) | WinUI Pinyin/dictionary tabs and background IPC |
+| [win32/settings/SettingsWindow.cpp](../win32/settings/SettingsWindow.cpp) | WinUI input-method list, engine options, Pinyin dictionary tab and background IPC |
 | [win32/dll/register.cpp](../win32/dll/register.cpp) | Profile, branding icon and capability registration |
 
 ### Input Modes and Indicator
 
 `windowskeyboard` is a static direct-input engine with no XKB dependency. It
 provides the first group entry required by Core; it never commits ASCII itself.
-The Windows group uses `keyboard-us`, `pinyin` and, when installed, `shuangpin`.
-Ctrl+Space switches direct/Chinese modes using the selected Pinyin scheme.
-TSF subscribes to the thread manager's `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`:
-system keyboard open/close changes select Pinyin/direct input in Core. Focus
-changes and reconnections preserve that system mode. An exact Ctrl+Space
-preserved key and the ordinary key callback use the same mode synchronization;
-ordinary Space is never registered as a preserved key. Existing user groups are
-not saved or overwritten. Both upstream keyboard support and ASCII fallback are
-disabled by default and by the Pinyin build script.
+The in-memory Windows group includes installed, available entries such as
+`pinyin`, `shuangpin`, Wubi and other table methods. The user's enabled list and
+order are stored separately; the default list is `keyboard-us` and `pinyin`.
+Settings can add, remove and reorder entries, including removing English
+keyboard, while retaining at least one available method.
+
+Ctrl+Space and indicator left-clicks use `CycleInputMethod` to advance through
+that ordered list, skipping unavailable entries. Changing methods cancels old
+preedit without committing it. TSF restores the current entry on focus changes
+and reconnection. Its thread-manager `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`
+reflects whether the actual entry is a non-keyboard method; explicit system
+open/close changes use `SetMode` to select an enabled non-keyboard/keyboard entry.
+If no matching entry exists, the current method is retained. Ordinary,
+preserved-key and Ctrl+Space compartment callbacks share the cycle operation,
+with duplicate/repeat suppression until Space is released. Ordinary Space is
+never registered as a preserved key. Existing user groups are not saved or
+overwritten. Both upstream keyboard support and ASCII fallback are disabled by
+default and by the Pinyin build script.
 Core prewarms Pinyin before accepting pipe clients so initial model paging does
 not consume the first key's IPC timeout. Runtime DLL search includes its own bin.
 
 TSF publishes one Language Bar button with `GUID_LBI_INPUTMODE` while the TIP
-is activated and removes it when deactivated. Chinese mode shows "中" and
-direct-input mode shows "A"; closing the keyboard compartment changes the icon
-rather than removing the item. Clicking it posts a message to the TSF owning
-thread, updates the same keyboard compartment, and uses the existing Core
-`SetMode` request. The transparent monochrome glyphs are drawn with GDI at the
-system small-icon size and declare `TF_LBI_STYLE_TEXTCOLORICON` for system theme
-coloring. No extra runtime icon files or Core protocol changes are required.
+is activated and removes it when deactivated. It shows the current method's
+installed PNG icon, loaded through WIC, or a compact text-label fallback such as
+"拼" or "双"; English keyboard uses "A". The tooltip shows the method's name.
+Left-clicking posts a cycle request to the TSF owning thread; the Core reply
+updates the selected method, icon and keyboard compartment. Closing the
+compartment does not remove the item. Fallback glyphs use GDI at the system
+small-icon size. The button does not declare `TF_LBI_STYLE_TEXTCOLORICON`, so
+Windows does not recolor installed method icons as monochrome glyphs.
 This is a Windows input-indicator item, not a `Shell_NotifyIcon` tray icon;
 its display is controlled by Windows and the user's language-bar settings.
 After removal, a retained language-bar object is hidden and detached from its
 message window, so late clicks cannot affect another activation. It holds an
 independent DLL reference until released.
 
-The icon reflects the system keyboard compartment, not Core connection health.
-It can show a mode while Core is unavailable. TSF activation starts Core in the
-background, and Core must remain running for Pinyin input. Registration itself
+The icon identifies the current method from Core's last snapshot; it is not a
+Core connection-health indicator and may remain visible while Core is unavailable.
+TSF activation starts Core in the background, and Core must remain running for
+engine input. Registration itself
 does not start services.
 
 The desktop TIP registers `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT` so Windows can
@@ -221,7 +233,12 @@ upstream test suite.
 - `settings_probe`: real full/Xiaohe/Ziranma candidates and Chinese commits,
   English mode preservation, invalid settings, revision conflicts, idempotence
   and the `GB Standard` configuration mapping. The UI test separately exercises
-  restart persistence and save/cancel behavior.
+  restart persistence, applying options and discarding unapplied drafts.
+- `inputmethods_probe` / `scripts/test-inputmethods.ps1`: installed method catalog,
+  ordered list changes, shared Pinyin options, real Wubi/Pinyin/Shuangpin commits,
+  cycling, removal of English keyboard or the active entry, deletion protection,
+  revision conflicts and restart persistence. The script also runs the Pinyin
+  probes and `tsf_probe <DLL> --cycles`; it is separate from default CTest.
 - `tsf_probe`: actual DLL loading/factory/interfaces, actual Windows TSF document
   contexts backed by an in-memory ITextStoreACP, composition, Chinese commit,
   synchronous-to-asynchronous edit fallback, cancellation, late edits and focus
@@ -230,8 +247,9 @@ upstream test suite.
   This does not verify Windows' registered TIP activation or OS key dispatch.
   A test-only language-bar manager captures the input mode item instead of
   publishing an unregistered service to the desktop. The probe checks add/remove,
-  Chinese/English state and notifications, explicitly invoked button clicks,
-  activation rollback and detached-item lifetime/late-click isolation; it does
+  current-method labels/tooltips, keyboard/non-keyboard state and notifications,
+  explicitly invoked cycle clicks, activation rollback and detached-item
+  lifetime/late-click isolation; it does
   not verify taskbar rendering or actual OS language-bar click dispatch.
   Mode regressions use a real thread-manager keyboard compartment, including
   open/close notifications, cancellation, focus changes and a simulated failure
@@ -239,8 +257,8 @@ upstream test suite.
   explicitly invoked; the adapter does not prove real OS hotkey dispatch.
 - Default CTest: helper functions, protocol framing/snapshots, UTF-8/UTF-16/key policy,
   real pipe timeout/cancellation followed by a successful read, and language-bar
-  COM identity, sink cookies, state notifications and nonblank/distinct monochrome
-  icon pixels.
+  COM identity, sink cookies, state notifications and nonblank/distinct fallback
+  icon pixels for different methods.
 - `test_candidate`: production DirectWrite/Direct2D rendering at five synthetic
   DPIs, color emoji and monochrome VS15, ellipsis/layout reuse, owner awareness,
   thread DPI restoration, focus, positioning, immediate paint and bounded
@@ -261,8 +279,8 @@ upstream test suite.
 
 Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers all three probes with CTest;
 a deployed Core must already be running, bringing the total to sixteen.
-`dictionaries_probe` and `service_probe` are built but invoked by their separate
-scripts, rather than registered by this option. The recorded candidate-rendering
+`dictionaries_probe`, `inputmethods_probe` and `service_probe` are built but
+invoked by their separate scripts, rather than registered by this option. The recorded candidate-rendering
 validation includes historical Pinyin probes and the then-current twelve-test
 TSF-only regression; see [the recorded scope](windows-candidate-rendering.md#verification).
 
@@ -312,7 +330,8 @@ regression script runs it with the persisted three-method list.
 Core, TSF and Settings must be rebuilt
 and deployed together; older versions do not connect to v6.
 
-Each key response contains consumption, mode, commit, preedit, UTF-8 byte cursor,
+Each key response contains consumption, mode, the actual input-method ID/name,
+icon label/path and settings-panel ID, commit, preedit, UTF-8 byte cursor,
 revision, settings epoch and the current candidate page. Reset cancels Core composition. PollState
 collects deferred engine updates on Core's event loop. TSF's 100 ms owning-thread
 timer polls while a foreground document context exists, including during pending
@@ -430,9 +449,14 @@ App SDK/Visual C++ runtime. Keep Core, TSF and the settings deployment from
 the same protocol revision; after a protocol upgrade rebuild and redeploy all
 three components.
 
-The UI supports full/double pinyin, eight built-in profiles, save/cancel,
+The UI has an ordered input-method list with add/remove/move controls and shared
+settings panels for Pinyin/Shuangpin, table methods and keyboard. List changes
+save immediately; engine-option edits save with `应用` (Apply), leaving the
+window open. Switching pages with an unapplied draft prompts to save, discard
+or cancel; closing the window discards unapplied edits. Pinyin options include
+eight built-in Shuangpin profiles and fuzzy Pinyin; an existing custom profile
+is preserved but cannot be created/imported here. The app supports
 single-instance activation, system theme resources and PerMonitorV2 DPI.
-An existing custom profile is preserved but cannot be created/imported here.
 
 ### Third-Party Dictionaries
 
@@ -487,12 +511,20 @@ folder button, and captures `dictionaries.png`.
 
 ### Input Settings
 
-`GetSettings`, `SetSettings`, and `OpenSettings` are context-independent
-requests with context ID zero. Core alone writes the authority file
-`conf/windows.conf` under the Fcitx user package configuration directory.
-The profile is also applied through the upstream addon interface; its Pinyin
-configuration file is a mirror. Switching cancels unfinished preedit, keeps
-English contexts in direct mode and applies to new/reconnected contexts.
+`GetInputMethods` / `SetInputMethods` manage the catalog and ordered enabled
+list; `GetMethodConfig` / `SetMethodConfig` expose engine-declared options.
+These requests, legacy Pinyin `GetSettings` / `SetSettings`, and `OpenSettings`
+are context-independent with context ID zero. `CycleInputMethod` and
+`SelectInputMethod` require an owned, focused context.
+
+Core alone writes the authority file `conf/windows.conf` v2 under the Fcitx user
+package configuration directory. It stores the ordered list, engine options,
+Pinyin scheme/profile and shared revision; v1 settings migrate to English
+keyboard plus the previously selected Pinyin entry. Pinyin/Shuangpin share
+engine options, while table options are stored per entry. Upstream Pinyin/table
+configuration files are mirrors. Changing methods cancels unfinished preedit;
+TSF restores the current entry in new/reconnected contexts. Legacy Pinyin scheme
+updates keep English contexts in direct mode.
 Save errors and stale-revision conflicts are reported. Timed-out writes are
 queried before retrying. Core/TSF/settings must be deployed together.
 
@@ -549,8 +581,10 @@ Registered-TIP OS menu dispatch remains unverified.
   with and without bundled runtimes. Packaging and mocked setup/uninstall paths
   have been validated; real installation, upgrades and reboot cleanup still
   need system testing. See [installer status](windows-installer-design.md).
-- Xiaohe and Ziranma Shuangpin commits are validated by probes. Other profiles,
-  Wubi, Rime and Windows Store compatibility need broader validation.
+- Xiaohe and Ziranma Shuangpin commits are validated by probes; input-method
+  probes also cover real Wubi commits. Other profiles, Wubi and other table
+  methods in real applications, Rime and Windows Store compatibility need
+  broader validation.
   `SYSTRAYSUPPORT` does not declare `IMMERSIVESUPPORT`.
 - Password/secure contexts, dead keys, AltGr/non-US layouts, forwarded keys and
   surrounding-text editing are not claimed as supported. Secure-mode and other

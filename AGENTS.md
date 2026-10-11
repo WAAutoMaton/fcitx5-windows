@@ -26,16 +26,16 @@
 - Core 主线程拥有核心状态；Pipe 服务线程通过 `EventDispatcher` 投递请求。TSF 的编辑操作必须在正确的 edit session 中执行，并校验原始 context、代次和快照，拒绝迟到请求写入新焦点。
 - IPC 使用当前用户/session 范围的 Named Pipe、ACL 和可取消 overlapped I/O。超时请求不重放，跨进程故障不提供 exactly-once 保证。
 - 服务互斥和手动停止状态按当前用户/session/login 维度管理；重启服务才解除停止状态。服务控制不得按进程名强制结束用户应用。
-- 输入模式由 `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`、Ctrl+Space 和语言栏共享；新焦点 context 与重连继承模式。预编辑按焦点创建/销毁，不跨输入框保存未提交文本。
+- Ctrl+Space 和语言栏左键按用户有序列表轮换可用输入法；指示器显示当前输入法的图标/标签和名称。`GUID_COMPARTMENT_KEYBOARD_OPENCLOSE` 的布尔值由实际条目是否为键盘推导；独立的系统开关在已选键盘/非键盘条目间切换。新焦点 context 与重连恢复当前条目，切换输入法取消旧预编辑；预编辑不跨输入框保存。
 - 按键测试回调只观察输入，不执行 IPC 或编辑副作用；实际按键是否消费以 Core 回复为准。
 - 默认关闭 X11、Wayland、DBus、server 和 keyboard engine 等上游组件；优先复用 Fcitx5/libime 抽象，不以 Linux 前端替代 Windows 实现。
 - Windows `StandardPaths` 要求宿主位于安装树的 `bin`，资源位于 `share`/`share/fcitx5`。涉及平台能力前检查上游 Windows 分支，部分进程启动和 PID 查询仍可能是降级实现。
 
 ## 已知支持范围
 
-- Core、真实 Pinyin、TSF composition、基础候选窗、语言栏输入模式、Settings 拼音/词库页和隔离部署链路已经接入。
+- Core、真实 Pinyin、TSF composition、基础候选窗、语言栏输入法轮换、Settings 有序输入法列表/共享引擎选项/拼音词库页和隔离部署链路已经接入；码表条目是否可用取决于已安装引擎与数据，probe 覆盖真实五笔提交。
 - 第三方词库使用 `%APPDATA%/Fcitx5/pinyin/dictionaries` 的 `.dict`/`.disable` 文件；加载状态通过 IPC 提供给 Settings。
-- 尚未完成或尚未全面验证：完整 Windows `InputContext`、所有双拼/五笔/Rime、死键/AltGr/复杂布局、密码 context、周边文本映射、断线提交可靠性、候选鼠标交互、TSF UIElement/无障碍、普通托盘、剪贴板、跨屏 DPI/主题、ARM64/x86 TSF，以及真实安装/升级/卸载清理。
+- 尚未完成或尚未全面验证：完整 Windows `InputContext`、全部双拼方案、五笔及其他码表的真实应用覆盖、Rime、死键/AltGr/复杂布局、密码 context、周边文本映射、断线提交可靠性、候选鼠标交互、TSF UIElement/无障碍、普通托盘、剪贴板、跨屏 DPI/主题、ARM64/x86 TSF，以及真实安装/升级/卸载清理。
 - 注册 TSF category 不代表对应能力已经实现；新增 category、profile 图标或注册元数据后需要重新注册才能生效。
 
 ## 开始任务前

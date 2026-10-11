@@ -4,28 +4,34 @@
 
 An in-progress Windows port of Fcitx5, with a basic Pinyin input path on AMD64.
 Core runs in a separate process; a TSF DLL integrates with applications, and a
-WinUI settings app provides Pinyin configuration. Unified x64 installers are
-available through the CI packaging and Nightly release workflow.
+WinUI settings app manages input methods and engine configuration. Unified x64
+installers are available through the CI packaging and Nightly release workflow.
 
 ## Features and Status
 
 - Real Pinyin preedit, candidate selection and Chinese commits. Full Pinyin and
   Xiaohe/Ziranma Shuangpin commits are verified by IPC and TSF probes.
 - Keyboard candidate selection with number keys or Space, and `Ctrl+Space`
-  switching between Chinese and direct input.
+  cycling through the enabled input methods in the order set in Settings.
 - A nonactivating candidate popup with DirectWrite layout, Direct2D color-font
   rendering and Per-Monitor V2 positioning.
-- A Windows input-mode indicator showing `中` or `A`; clicking it switches modes.
-- Settings for full/double Pinyin and eight built-in Shuangpin profiles, plus
-  third-party dictionary loading status and automatic dictionary reload.
+- A Windows input-method indicator showing the current method's icon or compact
+  label, with its name in the tooltip; English keyboard uses `A`. Left-clicking
+  cycles through the same input-method list.
+- Settings to add, remove and reorder installed input methods, with shared
+  Pinyin/Shuangpin options, eight built-in Shuangpin profiles and table-engine
+  options. Available entries include Wubi and Cangjie, depending on installed data.
+- Third-party Pinyin dictionary loading status and automatic dictionary reload.
 - Automatic background Core startup, with settings and service controls in the
   input indicator's right-click menu.
 
 The registered input indicator has been confirmed working. Automated probes use
 real Pinyin and TSF contexts but simulate key/menu callbacks. Broader application
 compatibility, OS event dispatch, themes and multiple-monitor DPI still need
-validation. Candidate mouse selection and accessibility are not implemented;
-ARM64 Pinyin/TSF, Wubi and Rime are not validated.
+validation. Candidate mouse selection and accessibility are not implemented.
+Input-method probes cover real Wubi commits and list management; broader Wubi
+and other table-method application coverage, ARM64 Pinyin/TSF and Rime still
+need validation.
 
 ## Install
 
@@ -85,13 +91,18 @@ The script requests administrator privileges when needed. Keep the complete
 Select Fcitx5 with `Win+Space`; if absent, add its keyboard in Windows' Chinese
 language options. Activation starts Core automatically.
 
-Type `nihao` in a text application and select a candidate with Space or a number
-key. Use `Ctrl+Space` or click `中`/`A` to switch input modes. Focus loss cancels
-unfinished preedit.
+Use `Ctrl+Space` or left-click the input-method indicator to cycle through the
+enabled list. The default list is English keyboard and Pinyin; Settings lets
+you add methods such as Shuangpin or Wubi and change their order. Unavailable
+entries are skipped. With Pinyin selected, type `nihao` in a text application
+and select a candidate with Space or a number key. Changing input methods or
+losing focus cancels unfinished preedit without committing it.
 
-Right-click the input-mode indicator for:
+Right-click the input-method indicator for:
 
-- `输入法设置`: choose full/double Pinyin and view third-party dictionaries.
+- `输入法设置`: manage the input-method list, edit engine options and view
+  third-party Pinyin dictionaries. List changes save immediately; option edits
+  save with `应用` (Apply).
 - `重启服务`: restart/start Core and reopen Settings if it was already open.
 - `关闭服务`: stop Core/Settings and pause automatic startup until a restart.
 - `用户数据文件夹`: open `%APPDATA%/Fcitx5`, including settings and Pinyin learning data.

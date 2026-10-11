@@ -10,15 +10,15 @@
 
 ## 实现位置
 
-- `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，左键切换模式；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
+- `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，显示当前输入法图标/标签和名称，左键轮换输入法；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
 - `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
 - `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v6 framing、输入法目录、选项描述、设置消息、词库状态及运行时代次；全局请求与 context 请求分别校验。
-- `src/main.cpp`：创建包含 `keyboard-us`、`pinyin` 和已安装的 `shuangpin` 的内存输入法组。
+- `src/main.cpp`：初始化 Core、预热拼音并创建 Windows 设置管理器；完整内存输入法组由 `src/windowsinputmethods.cpp` 按已安装可用条目建立。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置保存、真实 profile 应用、中文 entry 切换与 context 同步。
 - `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。
 - `src/windowsdictionaries.cpp`：扫描第三方词库目录，在 Core 主事件循环触发上游重载并查询实际加载状态。
-- `win32/settings/SettingsWindow.cpp`：通过 `XamlReader` 创建两个 tab，后台执行设置和词库 IPC，支持保存/取消和连接重试。
+- `win32/settings/SettingsWindow.cpp`：通过 `XamlReader` 创建有序输入法列表、共享设置面板和拼音词库 tab，后台执行 IPC，支持应用选项、草稿处理和连接重试。
 - `chinese-addons/im/pinyin/`：复用上游 `setUseShuangpin()`、`ShuangpinProfile`、`setConfig()` 和已安装的 `shuangpin.conf`。
 
 子模块版本保持固定；词库加载状态查询扩展记录在主仓库 `patches/chinese-addons-windows.patch`，不创建本地子模块提交。
@@ -53,8 +53,9 @@ WinUI 3 是 Windows App SDK 的 UI 部分，与操作系统和 Windows SDK 分�
 flowchart LR
     T[应用进程中的 TSF DLL] -->|右键菜单 / OpenSettings| C[独立 Core 进程]
     C -->|固定绝对路径启动| U[独立 WinUI 3 设置程序]
-    U -->|GetSettings / SetSettings / GetDictionaries| C
+    U -->|输入法列表 / 引擎选项 / GetDictionaries| C
     C --> P[Pinyin addon / libime]
+    C --> E[Table addon / libime]
     C --> F[用户配置文件]
     T -->|PollState / 设置代次| C
 ```
@@ -63,7 +64,7 @@ flowchart LR
 - Core 根据自己的安装树定位 `settings/Fcitx5Settings.exe`，使用固定绝对路径启动，不搜索 PATH，不接受客户端传入可执行文件路径。
 - 不修改 Core 的进程级 DLL 搜索环境。设置程序拥有自己的运行库部署目录，两端只传递协议数据，不跨进程传递引擎对象或分配器。
 - 设置程序使用用户/session 级 named mutex 和 event 保证单实例；重复点击激活已有窗口，不依赖 AppLifecycle 的额外服务包。
-- 打开设置不自动改变中英文开关。窗口是普通可激活的顶层窗口，不把用户正在编辑的应用作为模态 owner。
+- 打开设置不自动改变当前输入法。窗口是普通可激活的顶层窗口，不把用户正在编辑的应用作为模态 owner。
 - TSF 激活时在工作线程后台启动安装树的 Core，Settings 按需启动。协议不匹配、设置程序缺失或启动失败时显示错误。DLL 应部署在安装树的 `tsf` 目录，固定定位相邻 `bin/Fcitx5.exe`。
 - 重启服务正常停止并重启/启动 Core，原本打开的 Settings 在 Core 就绪后重新打开；关闭服务正常停止两者，并把当前登录会话的自动启动暂停状态保存到 `%LOCALAPPDATA%/fcitx5`。当前用户/session/logon LUID 级互斥防止重复启动，失败时共享 10 秒重试间隔。
 - Core 在主事件循环处理退出信号，Settings 在 UI 线程关闭。TSF 所在进程本身是 Settings 时，以独立的 `Fcitx5 --restart-services/--stop-services` 短暂控制进程等待其退出，避免宿主退出等待自身。正常关闭超时返回错误，不强制杀进程。
@@ -81,7 +82,7 @@ flowchart LR
 
 `LangBarItem::OnClick(TF_LBI_CLK_RIGHT, ...)` 接入右键弹出路径；`InitMenu(ITfMenu*)` 与 `OnMenuSelect()` 也提供相同菜单项和统一命令处理。命令选中后先发送消息给 dispatch window，再由后台任务执行相应服务、`OpenSettings` 或目录操作，避免在菜单循环中执行 IPC。
 
-当前 style 为 `TF_LBI_STYLE_BTN_MENU | TF_LBI_STYLE_BTN_TOGGLE | TF_LBI_STYLE_HIDDENSTATUSCONTROL | TF_LBI_STYLE_TEXTCOLORICON`。`test_langbar` 验证菜单内容、命令派发和停用后的迟到点击。Windows 11 实际输入指示器及浮动语言栏的右键回调和外观仍需实测；已有“中/A”指示器正常的用户反馈不能代替右键派发验证。
+当前 style 为 `TF_LBI_STYLE_BTN_MENU | TF_LBI_STYLE_BTN_TOGGLE | TF_LBI_STYLE_HIDDENSTATUSCONTROL`，不声明 `TF_LBI_STYLE_TEXTCOLORICON`，以保留输入法 PNG 图标的原始颜色。提示文本显示当前输入法名称。`test_langbar` 验证菜单内容、命令派发、不同输入法标签/提示文本和停用后的迟到点击。Windows 11 实际输入指示器及浮动语言栏的右键回调和外观仍需实测；已有指示器正常的用户反馈不能代替新图标外观及右键派发验证。
 
 菜单显示期间保持对象/DLL 引用；owner 窗口需满足原生菜单的焦点和取消行为；退出菜单、停用、detach 后释放资源。迟到消息必须验证当前激活绑定，不能作用于新实例。不能缓存回调参数的裸指针。
 
@@ -191,7 +192,7 @@ Core 和 TSF 使用两套独立 CMake 工程；MSBuild 设置程序由统一脚�
 - `tsf_probe`：实际 DLL 的双拼文本插入、英文放行、SetMode 幂等、多个 context、设置变更时的迟到编辑与取消。
 - 持久化：`test_settingsfile` 覆盖重复覆盖、只读失败和临时文件清理；`settings_probe --read-only-file PATH` 覆盖真实存储失败时保留预编辑，UI 自动化覆盖重启恢复。镜像不一致恢复、保存超时及设置程序崩溃的故障注入仍需补充验证。
 
-实际 Windows 11 验证：任务栏指示器右键出现单条“输入法设置”，左键仍切换；重复点击只显示一个窗口；记事本、浏览器和至少一个复杂文本应用中方案立即生效；100%/150%/200% DPI 和跨屏拖动、深浅色、高对比度、文本缩放、Explorer 重启及 Core 断连。
+实际 Windows 11 验证：任务栏指示器右键出现单条“输入法设置”，左键和 Ctrl+Space 按设置顺序轮换，图标/标签及提示名称跟随当前输入法；重复点击设置只显示一个窗口；记事本、浏览器和至少一个复杂文本应用中方案立即生效；100%/150%/200% DPI 和跨屏拖动、深浅色、高对比度、文本缩放、Explorer 重启及 Core 断连。
 
 probes 的适配器回调不能代替实际 OS 菜单派发和真实应用验证。第一阶段不宣称 Windows 10、ARM64 TSF、双拼自定义方案和全部 Windows 输入兼容性已经受支持。
 
