@@ -249,6 +249,7 @@ WindowsPipeServer::WindowsPipeServer(Instance &instance,
 ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
                                           bool consumed) {
     auto reply = context.snapshot(consumed, settings_.chineseMode(&context));
+    settings_.decorate(&context, reply);
     reply.settingsRevision = settingsEpoch_;
     return reply;
 }
@@ -415,6 +416,9 @@ void WindowsPipeServer::process(const ipc::Frame &request,
          (request.contextId || !request.payload.empty())) ||
         (ipc::globalSettingsRequest(request.type) &&
          (request.contextId || (request.type != MessageType::SetSettings &&
+                                request.type != MessageType::SetInputMethods &&
+                                request.type != MessageType::GetMethodConfig &&
+                                request.type != MessageType::SetMethodConfig &&
                                 !request.payload.empty()))) ||
         (request.type == MessageType::CreateContext && request.contextId) ||
         ((request.type == MessageType::FocusIn ||
@@ -438,6 +442,54 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     }
 
     switch (request.type) {
+    case MessageType::GetInputMethods:
+    case MessageType::SetInputMethods: {
+        auto error = ipc::SettingsError::None;
+        if (request.type == MessageType::SetInputMethods) {
+            ipc::InputMethodSelection selection;
+            const bool valid = ipc::decodeSelection(request.payload, selection);
+            error = valid ? settings_.applySelection(selection)
+                          : ipc::SettingsError::Invalid;
+            if (valid && settings_.resetRequired()) {
+                ++settingsEpoch_;
+                for (auto &[id, context] : contexts_) {
+                    context->reset();
+                    context->takeCommit();
+                    settings_.reconcile(context.get());
+                    context->takeCommit();
+                }
+            }
+        }
+        response.type = MessageType::InputMethodsReply;
+        response.payload =
+            ipc::encodeInputMethods(settings_.inputMethods(error));
+        break;
+    }
+    case MessageType::GetMethodConfig:
+    case MessageType::SetMethodConfig: {
+        ipc::MethodConfigRequest config;
+        if (!ipc::decodeMethodConfigRequest(request.payload, config) ||
+            (request.type == MessageType::GetMethodConfig &&
+             (config.revision || !config.values.empty()))) {
+            response.type = MessageType::Error;
+            break;
+        }
+        auto error = ipc::SettingsError::None;
+        if (request.type == MessageType::SetMethodConfig) {
+            error = settings_.applyMethodConfig(config);
+            if (settings_.resetRequired()) {
+                ++settingsEpoch_;
+                for (auto &[id, context] : contexts_) {
+                    context->reset();
+                    context->takeCommit();
+                }
+            }
+        }
+        response.type = MessageType::MethodConfigReply;
+        response.payload =
+            ipc::encodeMethodConfig(settings_.methodConfig(config.id, error));
+        break;
+    }
     case MessageType::GetDictionaries:
         response.type = MessageType::DictionariesReply;
         response.payload =
@@ -458,7 +510,9 @@ void WindowsPipeServer::process(const ipc::Frame &request,
                 ++settingsEpoch_;
                 std::vector<WindowsInputContext *> enabled;
                 for (auto &[id, context] : contexts_) {
-                    if (settings_.chineseMode(context.get())) {
+                    const auto *entry =
+                        instance_.inputMethodEntry(context.get());
+                    if (entry && entry->addon() == "pinyin") {
                         enabled.push_back(context.get());
                     }
                     context->resetPreedit();
@@ -571,6 +625,20 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             response.type = MessageType::Error;
             break;
         }
+        if (virtualKey == VK_SPACE &&
+            (modifiers & (kModifierControl | kModifierShift | kModifierAlt |
+                          kModifierSuper)) == kModifierControl) {
+            bool consumed = true;
+            if (request.type == MessageType::KeyDown &&
+                !(modifiers & kModifierRepeat)) {
+                context.takeCommit();
+                consumed = settings_.cycle(&context);
+                context.takeCommit();
+            }
+            response.type = MessageType::KeyReply;
+            response.payload = ipc::encodeKeyReply(snapshot(context, consumed));
+            break;
+        }
         auto key = keyFromWindows(virtualKey, scanCode, modifiers, unicode);
         KeyEvent event(&context, key, request.type == MessageType::KeyUp,
                        static_cast<int>(time));
@@ -600,14 +668,32 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             response.type = MessageType::Error;
             break;
         }
-        const bool current = settings_.chineseMode(&context);
-        if (current != (enabled != 0)) {
-            context.reset();
-            context.takeCommit();
-            instance_.setCurrentInputMethod(
-                &context, enabled ? settings_.chineseEntry() : "keyboard-us",
-                true);
+        context.takeCommit();
+        settings_.setMode(&context, enabled != 0);
+        context.takeCommit();
+        response.type = MessageType::KeyReply;
+        response.payload = ipc::encodeKeyReply(snapshot(context, false));
+        break;
+    }
+    case MessageType::CycleInputMethod:
+    case MessageType::SelectInputMethod: {
+        auto &context = *contexts_.at(request.contextId);
+        std::string id;
+        if (!context.hasFocus() ||
+            (request.type == MessageType::SelectInputMethod &&
+             (!reader.string(id) || !ipc::validMethodId(id))) ||
+            reader.remaining()) {
+            response.type = MessageType::Error;
+            break;
         }
+        context.takeCommit();
+        // A removed entry falls back to the current list on focus/reconnect.
+        if (request.type == MessageType::CycleInputMethod) {
+            settings_.cycle(&context);
+        } else if (!settings_.select(&context, id)) {
+            settings_.reconcile(&context);
+        }
+        context.takeCommit();
         response.type = MessageType::KeyReply;
         response.payload = ipc::encodeKeyReply(snapshot(context, false));
         break;

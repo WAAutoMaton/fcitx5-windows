@@ -9,8 +9,9 @@ class WindowsKeyboardEngine final : public InputMethodEngine {
   public:
     std::vector<InputMethodEntry> listInputMethods() override {
         std::vector<InputMethodEntry> entries;
-        entries.emplace_back("keyboard-us", "Windows direct input", "en",
+        entries.emplace_back("keyboard-us", "English keyboard", "en",
                              "windowskeyboard");
+        entries.back().setLabel("A").setIcon("input-keyboard");
         return entries;
     }
 

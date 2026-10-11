@@ -133,6 +133,7 @@ void Tsf::pollState() {
         !reply.candidates.empty() || candidates_.visible()) {
         submitSnapshot(std::move(reply), false);
     } else {
+        acceptInputMethod(reply);
         state_ = std::move(reply);
     }
 }

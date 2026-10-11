@@ -87,6 +87,8 @@ class Tsf : public ITfTextInputProcessorEx,
     HRESULT initLangBarItem();
     void uninitLangBarItem();
     void notifyLangBarItem();
+    bool cycleMode(bool synchronous);
+    void acceptInputMethod(const PipeClient::KeyReply &reply);
     void toggleMode();
     HRESULT setKeyboardOpen(bool enabled);
     bool applyKeyboardMode(bool synchronous);
@@ -159,6 +161,7 @@ class Tsf : public ITfTextInputProcessorEx,
     CComPtr<ITfCompartment> keyboardCompartment_;
     DWORD keyboardCompartmentCookie_ = TF_INVALID_COOKIE;
     bool keyboardOpen_ = true;
+    std::string inputMethod_;
     CComPtr<ITfLangBarItemMgr> langBarItemManager_;
     CComPtr<LangBarItem> langBarItem_;
 };

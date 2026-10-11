@@ -3,6 +3,7 @@
 #include <atlcomcli.h>
 #include <ctffunc.h>
 #include <ctfutb.h>
+#include <string>
 
 namespace fcitx {
 
@@ -43,6 +44,8 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     STDMETHODIMP UnadviseSink(DWORD dwCookie) override;
 
     void setMode(bool chineseMode);
+    void setInputMethod(bool enabled, std::wstring name, std::wstring label,
+                        std::wstring icon = {});
     void detach();
 
   private:
@@ -52,6 +55,9 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     LONG refCount_ = 1;
     HWND dispatchWindow_ = nullptr;
     bool chineseMode_ = true;
+    std::wstring methodName_;
+    std::wstring iconLabel_;
+    std::wstring iconPath_;
     CComPtr<ITfLangBarItemSink> sink_;
     DWORD sinkCookie_ = TF_INVALID_COOKIE;
     DWORD nextSinkCookie_ = 0;

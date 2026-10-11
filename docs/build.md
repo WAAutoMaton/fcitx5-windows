@@ -205,6 +205,7 @@ Settings process, use the unified build's TSF directory:
 ./scripts/test-dictionaries.ps1 -TsfBuild ./build/all/tsf
 ./scripts/test-service.ps1 -TsfBuild ./build/all/tsf -WithSettings
 ./scripts/test-settings-ui.ps1 -TsfBuild ./build/all/tsf
+./scripts/test-inputmethods.ps1 -Prefix ./dist/pinyin -TsfBuild ./build/all/tsf
 ```
 
 Supply `-Prefix` if the deployment is not `dist/pinyin`. These scripts start/stop

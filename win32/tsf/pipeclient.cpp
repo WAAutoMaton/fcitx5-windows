@@ -125,8 +125,55 @@ bool PipeClient::setMode(uint64_t contextId, bool enabled, KeyReply &reply) {
     return request(ipc::MessageType::SetMode, contextId, writer.take(),
                    response) &&
            response.type == ipc::MessageType::KeyReply &&
-           ipc::decodeKeyReply(response.payload, reply) &&
-           reply.enabled == enabled;
+           ipc::decodeKeyReply(response.payload, reply);
+}
+
+bool PipeClient::cycleInputMethod(uint64_t contextId, KeyReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::CycleInputMethod, contextId, {},
+                   response) &&
+           response.type == ipc::MessageType::KeyReply &&
+           ipc::decodeKeyReply(response.payload, reply);
+}
+bool PipeClient::selectInputMethod(uint64_t contextId, const std::string &id,
+                                   KeyReply &reply) {
+    ipc::Writer writer;
+    writer.string(id);
+    ipc::Frame response;
+    return request(ipc::MessageType::SelectInputMethod, contextId,
+                   writer.take(), response) &&
+           response.type == ipc::MessageType::KeyReply &&
+           ipc::decodeKeyReply(response.payload, reply);
+}
+bool PipeClient::getInputMethods(ipc::InputMethodsReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::GetInputMethods, 0, {}, response) &&
+           response.type == ipc::MessageType::InputMethodsReply &&
+           ipc::decodeInputMethods(response.payload, reply);
+}
+bool PipeClient::setInputMethods(const ipc::InputMethodSelection &selection,
+                                 ipc::InputMethodsReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::SetInputMethods, 0,
+                   ipc::encodeSelection(selection), response) &&
+           response.type == ipc::MessageType::InputMethodsReply &&
+           ipc::decodeInputMethods(response.payload, reply);
+}
+bool PipeClient::getMethodConfig(const std::string &id,
+                                 ipc::MethodConfigReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::GetMethodConfig, 0,
+                   ipc::encodeMethodConfigRequest({id, 0, {}}), response) &&
+           response.type == ipc::MessageType::MethodConfigReply &&
+           ipc::decodeMethodConfig(response.payload, reply);
+}
+bool PipeClient::setMethodConfig(const ipc::MethodConfigRequest &config,
+                                 ipc::MethodConfigReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::SetMethodConfig, 0,
+                   ipc::encodeMethodConfigRequest(config), response) &&
+           response.type == ipc::MessageType::MethodConfigReply &&
+           ipc::decodeMethodConfig(response.payload, reply);
 }
 
 bool PipeClient::getSettings(ipc::SettingsReply &reply) {

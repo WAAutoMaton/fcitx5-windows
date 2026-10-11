@@ -164,6 +164,7 @@ bool Tsf::submitSnapshot(PipeClient::KeyReply reply, bool synchronous) {
         (reply.revision && reply.revision <= state_.revision)) {
         return false;
     }
+    acceptInputMethod(reply);
     state_ = reply;
     state_.commit.clear();
     edits_.push_back({textEditSinkContext_, std::move(reply), generation_});

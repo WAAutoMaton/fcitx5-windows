@@ -285,18 +285,19 @@ these helpers stops Core/Settings as services; use the input indicator menu firs
 
 ## Protocol and Behavior
 
-Protocol v5 uses a pipe name scoped to the user's SID and Windows session. Its
+Protocol v6 uses a pipe name scoped to the user's SID and Windows session. Its
 ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
 overlapped I/O with a 500 ms wait limit per read/write operation; this is not a
 single 500 ms deadline for the entire request. Disconnected clients' contexts
 are destroyed. The pipe name retains the historical `fcitx5-windows-v2-` prefix;
-compatibility is checked using the framing/handshake version, which is v5.
+compatibility is checked using the framing/handshake version, which is v6.
 
-`SetMode` sets an explicit Pinyin/direct-input mode rather than replaying a
-toggle keystroke. Repeated requests are idempotent; changing modes cancels the
-current preedit. Core and TSF must both be rebuilt and deployed after this
-protocol upgrade; older versions do not connect to v5.
+`SetMode` chooses a selected keyboard/non-keyboard entry for the Windows
+open/close compartment. Ctrl+Space and indicator clicks use `CycleInputMethod`
+to cycle through the user's ordered list. Repeated mode requests are idempotent;
+changing input methods cancels preedit. Core, TSF and Settings must be rebuilt
+and deployed together; older versions do not connect to v6.
 
 Each key response contains consumption, mode, commit, preedit, UTF-8 byte cursor,
 revision, settings epoch and the current candidate page. Reset cancels Core composition. PollState
@@ -398,7 +399,7 @@ thread. A manual stop is recorded in a logon-specific `.state` file under
 `%LOCALAPPDATA%/fcitx5`, surviving unloading all TSF DLLs without applying to the
 next login. A shared 10-second retry interval prevents launch storms on failure.
 There is no forced termination by process name. A hung process yields a timeout
-instead of being killed. The current IPC protocol is v5;
+instead of being killed. The current IPC protocol is v6;
 deploy updated Core, TSF and Settings together for the new control behavior.
 
 Run only one Core process per user/session. A second Core process detects the
@@ -456,7 +457,7 @@ from loading. A file modified again is retried after it becomes stable.
 
 The small addon status-query extension is recorded in
 `patches/chinese-addons-windows.patch`; submodule revisions are unchanged. Core,
-TSF and Settings must be rebuilt and deployed together for protocol v5.
+TSF and Settings must be rebuilt and deployed together for protocol v6.
 
 With Core and Settings stopped, run:
 

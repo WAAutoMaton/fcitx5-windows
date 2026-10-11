@@ -17,7 +17,7 @@ inline bool isModeSwitchKey(uint32_t key, uint32_t modifiers) {
 }
 
 inline bool routesKey(uint32_t key, uint32_t modifiers, bool enabled,
-                      bool composing) {
+                      bool composing, bool codeInput = false) {
     if (isModeSwitchKey(key, modifiers)) {
         return true;
     }
@@ -28,7 +28,7 @@ inline bool routesKey(uint32_t key, uint32_t modifiers, bool enabled,
     if (key >= 'A' && key <= 'Z') {
         return true;
     }
-    if (composing &&
+    if ((composing || codeInput) &&
         (key >= '0' && key <= '9' || key == VK_SPACE ||
          (key >= VK_OEM_1 && key <= VK_OEM_3) ||
          (key >= VK_OEM_4 && key <= VK_OEM_8) || key == VK_OEM_102)) {

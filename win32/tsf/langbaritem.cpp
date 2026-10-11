@@ -1,5 +1,6 @@
 #include "langbaritem.h"
 #include "../dll/util.h"
+#include "inputmethodicon.h"
 
 #include <algorithm>
 #include <cwchar>
@@ -135,8 +136,7 @@ STDMETHODIMP LangBarItem::GetInfo(TF_LANGBARITEMINFO *pInfo) {
     // Declare both behaviors so the language bar routes left clicks to the
     // toggle and right clicks through InitMenu/OnMenuSelect.
     pInfo->dwStyle = TF_LBI_STYLE_BTN_MENU | TF_LBI_STYLE_BTN_TOGGLE |
-                     TF_LBI_STYLE_HIDDENSTATUSCONTROL |
-                     TF_LBI_STYLE_TEXTCOLORICON;
+                     TF_LBI_STYLE_HIDDENSTATUSCONTROL;
     pInfo->ulSort = 0;
     wcsncpy_s(pInfo->szDescription, kDescription, _TRUNCATE);
     return S_OK;
@@ -166,8 +166,9 @@ STDMETHODIMP LangBarItem::GetTooltipString(BSTR *pbstrToolTip) {
     if (!pbstrToolTip) {
         return E_INVALIDARG;
     }
-    *pbstrToolTip =
-        SysAllocString(chineseMode_ ? kTooltipChinese : kTooltipEnglish);
+    *pbstrToolTip = SysAllocString(
+        methodName_.empty() ? (chineseMode_ ? kTooltipChinese : kTooltipEnglish)
+                            : methodName_.c_str());
     return *pbstrToolTip ? S_OK : E_OUTOFMEMORY;
 }
 
@@ -250,7 +251,9 @@ STDMETHODIMP LangBarItem::GetText(BSTR *pbstrText) {
     if (!pbstrText) {
         return E_INVALIDARG;
     }
-    *pbstrText = SysAllocString(chineseMode_ ? L"\u4e2d" : L"A");
+    *pbstrText =
+        SysAllocString(iconLabel_.empty() ? (chineseMode_ ? L"\u62fc" : L"A")
+                                          : iconLabel_.c_str());
     return *pbstrText ? S_OK : E_OUTOFMEMORY;
 }
 
@@ -305,6 +308,19 @@ void LangBarItem::setMode(bool chineseMode) {
     }
 }
 
+void LangBarItem::setInputMethod(bool enabled, std::wstring name,
+                                 std::wstring label, std::wstring icon) {
+    if (chineseMode_ == enabled && methodName_ == name && iconLabel_ == label &&
+        iconPath_ == icon) {
+        return;
+    }
+    chineseMode_ = enabled;
+    methodName_ = std::move(name);
+    iconLabel_ = std::move(label);
+    iconPath_ = std::move(icon);
+    notify(TF_LBI_BTNALL | TF_LBI_STATUS);
+}
+
 void LangBarItem::detach() {
     dispatchWindow_ = nullptr;
     shown_ = false;
@@ -314,7 +330,11 @@ void LangBarItem::detach() {
 }
 
 HICON LangBarItem::createIcon() const {
-    return makeTextIcon(chineseMode_ ? L"\u4e2d" : L"A");
+    if (auto icon = loadInputMethodIcon(iconPath_)) {
+        return icon;
+    }
+    return makeTextIcon(iconLabel_.empty() ? (chineseMode_ ? L"\u62fc" : L"A")
+                                           : iconLabel_.c_str());
 }
 
 } // namespace fcitx

@@ -1,6 +1,7 @@
 #include "windowssettings.h"
 #include "../win32/ipc/atomicfile.h"
 #include "../win32/ipc/service.h"
+#include <algorithm>
 #include <charconv>
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/iniparser.h>
@@ -29,6 +30,13 @@ std::string value(const RawConfig &config, const char *key) {
     const auto node = config.get(key);
     return node ? node->value() : "";
 }
+
+void makeExplicit(RawConfig &config) {
+    config.setImplicit(false);
+    for (const auto &key : config.subItems()) {
+        makeExplicit(*config.get(key));
+    }
+}
 } // namespace
 
 WindowsSettings::WindowsSettings(Instance &instance, std::filesystem::path file)
@@ -54,13 +62,26 @@ WindowsSettings::WindowsSettings(Instance &instance, std::filesystem::path file)
         }
         readFromIni(raw, stream);
         const auto scheme = value(raw, "Scheme");
-        if (value(raw, "Version") != "1" ||
+        if ((value(raw, "Version") != "1" && value(raw, "Version") != "2") ||
             (scheme != "Full" && scheme != "Double")) {
             throw std::runtime_error("Invalid Windows input settings");
         }
         settings_.scheme = scheme == "Double" ? ipc::PinyinScheme::Double
                                               : ipc::PinyinScheme::Full;
         settings_.profile = profileFromValue(value(raw, "Profile"));
+        if (value(raw, "Version") == "2") {
+            if (auto list = raw.get("InputMethods")) {
+                for (const auto &key : list->subItems()) {
+                    enabled_.push_back(value(*list, key.c_str()));
+                }
+            }
+            if (!ipc::validSelection({1, enabled_})) {
+                throw std::runtime_error("Invalid Windows input method list");
+            }
+            if (auto overrides = raw.get("Options")) {
+                overrides_ = *overrides;
+            }
+        }
         const auto revision = value(raw, "Revision");
         const auto parsed =
             std::from_chars(revision.data(), revision.data() + revision.size(),
@@ -70,28 +91,40 @@ WindowsSettings::WindowsSettings(Instance &instance, std::filesystem::path file)
             !settings_.revision) {
             throw std::runtime_error("Invalid Windows settings revision");
         }
-        if (!applyProfile(settings_.profile)) {
+        if (snapshot().pinyinAvailable && !applyProfile(settings_.profile)) {
             throw std::runtime_error("Cannot restore Windows input settings");
         }
     }
-    if (snapshot().pinyinAvailable) {
-        if (settings_.scheme == ipc::PinyinScheme::Double &&
-            !snapshot().shuangpinAvailable) {
-            throw std::runtime_error("Saved Shuangpin entry is unavailable");
-        }
-        instance_.inputMethodManager().setDefaultInputMethod(chineseEntry());
-    }
+    initializeMethods();
+    instance_.inputMethodManager().setDefaultInputMethod(chineseEntry());
 }
 
 const char *WindowsSettings::chineseEntry() const {
-    return settings_.scheme == ipc::PinyinScheme::Double ? "shuangpin"
-                                                         : "pinyin";
+    const auto preferred =
+        settings_.scheme == ipc::PinyinScheme::Double ? "shuangpin" : "pinyin";
+    if (const auto *info = method(preferred);
+        selected(preferred) && info && info->available) {
+        return preferred;
+    }
+    for (const auto &id : enabled_) {
+        const auto *info = method(id);
+        if (info && info->available && !info->keyboard) {
+            return id.c_str();
+        }
+    }
+    for (const auto &id : enabled_) {
+        const auto *info = method(id);
+        if (info && info->available) {
+            return id.c_str();
+        }
+    }
+    return "keyboard-us";
 }
 
 bool WindowsSettings::chineseMode(InputContext *context) const {
     const auto *entry = instance_.inputMethodEntry(context);
-    return entry && (entry->uniqueName() == "pinyin" ||
-                     entry->uniqueName() == "shuangpin");
+    const auto *info = entry ? method(entry->uniqueName()) : nullptr;
+    return info && !info->keyboard;
 }
 
 ipc::SettingsReply WindowsSettings::snapshot(ipc::SettingsError error) const {
@@ -126,7 +159,13 @@ bool WindowsSettings::applyProfile(ipc::ShuangpinProfile profile) {
 
 bool WindowsSettings::save(const ipc::PinyinSettings &settings) const {
     RawConfig raw;
-    raw.setValueByPath("Version", "1");
+    raw.setValueByPath("Version", "2");
+    for (size_t i = 0; i < enabled_.size(); ++i) {
+        raw.setValueByPath("InputMethods/" + std::to_string(i), enabled_[i]);
+    }
+    raw["Options"] = overrides_;
+    // The Windows record is authoritative, including values reset to defaults.
+    makeExplicit(raw);
     raw.setValueByPath("Scheme", settings.scheme == ipc::PinyinScheme::Double
                                      ? "Double"
                                      : "Full");
@@ -163,16 +202,36 @@ WindowsSettings::apply(const ipc::PinyinSettings &requested) {
         return ipc::SettingsError::Conflict;
     }
     const auto previous = settings_;
+    const auto previousEnabled = enabled_;
+    const auto previousOverrides = overrides_;
+    if (auto config = overrides_.get("pinyin")) {
+        config->setValueByPath(
+            "ShuangpinProfile",
+            std::string(ipc::profileConfigValue(requested.profile)));
+    }
+    const auto oldEntry =
+        settings_.scheme == ipc::PinyinScheme::Double ? "shuangpin" : "pinyin";
+    const auto newEntry =
+        requested.scheme == ipc::PinyinScheme::Double ? "shuangpin" : "pinyin";
+    if (auto found = std::find(enabled_.begin(), enabled_.end(), oldEntry);
+        found != enabled_.end() && oldEntry != newEntry &&
+        !selected(newEntry)) {
+        *found = newEntry;
+    }
     auto next = requested;
     next.revision = settings_.revision + 1;
     try {
         // Updating the addon clears libime contexts. Fail storage before doing
         // that.
         if (!save(next)) {
+            enabled_ = previousEnabled;
+            overrides_ = previousOverrides;
             return ipc::SettingsError::SaveFailed;
         }
         resetRequired_ = true;
         if (!applyProfile(next.profile)) {
+            enabled_ = previousEnabled;
+            overrides_ = previousOverrides;
             applyProfile(previous.profile);
             if (!save(previous)) {
                 throw std::runtime_error(
@@ -181,6 +240,8 @@ WindowsSettings::apply(const ipc::PinyinSettings &requested) {
             return ipc::SettingsError::ApplyFailed;
         }
     } catch (const std::exception &exception) {
+        enabled_ = previousEnabled;
+        overrides_ = previousOverrides;
         FCITX_ERROR() << "Windows settings update failed: " << exception.what();
         try {
             applyProfile(previous.profile);

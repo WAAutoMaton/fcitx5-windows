@@ -1,0 +1,45 @@
+diff --git a/im/table/ime.cpp b/im/table/ime.cpp
+--- a/im/table/ime.cpp
++++ b/im/table/ime.cpp
+@@ -140,6 +140,15 @@ TableIME::requestDict(const std::string &name) {
+             auto dictFile = StandardPaths::global().open(
+                 StandardPathsType::PkgData, *root.config->file);
+             TABLE_DEBUG() << "Load table at: " << *root.config->file;
++#ifdef _WIN32
++            // Built-in table paths contain the build prefix. Prefer the
++            // deployed data tree so moved Windows installations stay usable.
++            auto deployed = StandardPaths::global().open(
++                StandardPathsType::Data,
++                std::filesystem::path("libime") /
++                    std::filesystem::path(*root.config->file).filename());
++            if (deployed.isValid()) { dictFile = std::move(deployed); }
++#endif
+             if (!dictFile.isValid()) {
+                 throw std::runtime_error("Couldn't open file");
+             }
+diff --git a/im/table/engine.cpp b/im/table/engine.cpp
+--- a/im/table/engine.cpp
++++ b/im/table/engine.cpp
+@@ -313,6 +313,10 @@ const Configuration *
+ TableEngine::getConfigForInputMethod(const InputMethodEntry &entry) const {
+     auto dict = ime_->requestDict(entry.uniqueName());
++#ifdef _WIN32
++    return std::get<0>(dict) ? std::get<2>(dict) : nullptr;
++#else
+     return std::get<2>(dict);
++#endif
+ }
+
+ void TableEngine::setConfigForInputMethod(const InputMethodEntry &entry,
+diff --git a/im/table/cangjie.conf.in.in b/im/table/cangjie.conf.in.in
+--- a/im/table/cangjie.conf.in.in
++++ b/im/table/cangjie.conf.in.in
+@@ -6,7 +6,7 @@ Label=仓
+ LangCode=zh_CN
+ Addon=table
+ Configurable=True
+-Enable=False
++Enable=True
+
+ [Table]
+ File=@LIBIME_INSTALL_PKGDATADIR@/cj.main.dict

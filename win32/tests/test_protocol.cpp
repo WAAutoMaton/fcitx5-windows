@@ -124,5 +124,59 @@ int main() {
     dictionaries.dictionaries.resize(kMaxDictionaries + 1);
     assert(!decodeDictionariesReply(encodeDictionariesReply(dictionaries),
                                     restoredDictionaries));
+    InputMethodsReply methods;
+    methods.selection = {8, {"keyboard-us", "pinyin", "wbx"}};
+    methods.methods = {
+        {"pinyin", "Pinyin", "fcitx-pinyin", "P", "pinyin", true, false}};
+    InputMethodsReply decodedMethods;
+    const auto methodsPayload = encodeInputMethods(methods);
+    assert(decodeInputMethods(methodsPayload, decodedMethods));
+    assert(decodedMethods.selection == methods.selection &&
+           decodedMethods.methods == methods.methods);
+    for (size_t n = 0; n < methodsPayload.size(); ++n) {
+        assert(!decodeInputMethods(
+            {methodsPayload.begin(), methodsPayload.begin() + n},
+            decodedMethods));
+    }
+    assert(!validSelection({1, {"pinyin", "pinyin"}}));
+    assert(!validSelection({1, {"../pinyin"}}));
+    assert(!validSelection({0, {"pinyin"}}));
+    InputMethodSelection selection;
+    assert(decodeSelection(encodeSelection({1, {}}), selection) &&
+           selection.enabled.empty());
+    MethodConfigReply config;
+    config.id = "pinyin";
+    config.panel = "pinyin";
+    config.revision = 9;
+    ConfigOption option;
+    option.path = "Fuzzy/IN_ING";
+    option.label = "in <-> ing";
+    option.kind = ConfigKind::Boolean;
+    option.value = "True";
+    option.defaultValue = "False";
+    config.options.push_back(option);
+    assert(validConfigValue(option, "False") &&
+           !validConfigValue(option, "true"));
+    option.kind = ConfigKind::Integer;
+    option.minimum = 3;
+    option.maximum = 10;
+    assert(validConfigValue(option, "7") && !validConfigValue(option, "11") &&
+           !validConfigValue(option, "7.5"));
+    MethodConfigReply decodedConfig;
+    const auto configPayload = encodeMethodConfig(config);
+    assert(decodeMethodConfig(configPayload, decodedConfig) &&
+           decodedConfig.options.front().path == "Fuzzy/IN_ING");
+    for (size_t n = 0; n < configPayload.size(); ++n) {
+        assert(!decodeMethodConfig(
+            {configPayload.begin(), configPayload.begin() + n}, decodedConfig));
+    }
+    MethodConfigRequest request{"pinyin", 9, {{"Fuzzy/IN_ING", "True"}}},
+        restoredRequest;
+    assert(decodeMethodConfigRequest(encodeMethodConfigRequest(request),
+                                     restoredRequest));
+    assert(restoredRequest.values == request.values);
+    request.values.push_back(request.values.front());
+    assert(!decodeMethodConfigRequest(encodeMethodConfigRequest(request),
+                                      restoredRequest));
     return 0;
 }

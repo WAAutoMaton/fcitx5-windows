@@ -36,9 +36,9 @@ void press(ITfKeyEventSink *keys, ITfContext *context, uint32_t key,
     BOOL handled = FALSE;
     require(SUCCEEDED(keys->OnTestKeyDown(context, key, 0, &handled)) &&
                 handled,
-            "key routing failed");
+            ("key routing failed: " + std::to_string(key)).c_str());
     require(SUCCEEDED(keys->OnKeyDown(context, key, 0, &handled)) && handled,
-            "key processing failed");
+            ("key processing failed: " + std::to_string(key)).c_str());
     if (runPump)
         pump();
 }
@@ -177,13 +177,22 @@ int wmain(int count, wchar_t **arguments) {
             CComBSTR text;
             DWORD status = 0;
             require(SUCCEEDED(modeButton->GetText(&text)) && text &&
-                        std::wstring(text) == (chinese ? L"\u4e2d" : L"A") &&
+                        std::wstring(text) == (chinese ? L"\u62fc" : L"A") &&
                         SUCCEEDED(modeButton->GetStatus(&status)) &&
                         !(status & TF_LBI_STATUS_HIDDEN) &&
                         ((status & TF_LBI_STATUS_BTN_TOGGLED) != 0) == chinese,
                     "input mode text/status is out of sync");
         };
         requireMode(true);
+        HICON methodIcon = nullptr;
+        ICONINFO methodIconInfo{};
+        require(SUCCEEDED(modeButton->GetIcon(&methodIcon)) && methodIcon &&
+                    GetIconInfo(methodIcon, &methodIconInfo) &&
+                    methodIconInfo.hbmColor,
+                "deployed input method PNG icon did not render");
+        DeleteObject(methodIconInfo.hbmColor);
+        DeleteObject(methodIconInfo.hbmMask);
+        DestroyIcon(methodIcon);
         require(SUCCEEDED(modeButton->OnClick(TF_LBI_CLK_LEFT, {}, nullptr)),
                 "input mode click failed");
         pump(200);
@@ -382,6 +391,70 @@ int wmain(int count, wchar_t **arguments) {
         require(configuration.setSettings(newSettings, appliedSettings) &&
                     appliedSettings.error == fcitx::ipc::SettingsError::None,
                 "TSF settings restoration failed");
+        pump(200);
+        fcitx::ipc::InputMethodsReply originalMethods, methods;
+        require(configuration.getInputMethods(originalMethods),
+                "method catalog failed");
+        auto selection = originalMethods.selection;
+        selection.enabled = {"keyboard-us", "pinyin", "shuangpin", "wbx", "db"};
+        require(configuration.setInputMethods(selection, methods) &&
+                    methods.error == fcitx::ipc::SettingsError::None,
+                "multi-method TSF setup failed");
+        pump(200);
+        for (const auto *expected :
+             {L"\u53cc", L"\u4e94", L"\u7535", L"A", L"\u62fc"}) {
+            require(SUCCEEDED(keys->OnPreservedKey(
+                        context, adapter->preservedGuid, &handled)) &&
+                        handled,
+                    "multi-method preserved key failed");
+            pump(200);
+            CComBSTR label;
+            require(SUCCEEDED(modeButton->GetText(&label)) && label == expected,
+                    "multi-method indicator did not follow cycle");
+            if (std::wstring(expected) == L"\u4e94") {
+                const auto previousText = store->text;
+                press(keys, context, 'W');
+                press(keys, context, 'Q');
+                press(keys, context, '1');
+                require(store->text == previousText + L"\u4f60",
+                        "real Wubi commit did not reach the TSF text store");
+            }
+            if (std::wstring(expected) == L"\u7535") {
+                const auto previousText = store->text;
+                for (const auto key : std::string("0132")) {
+                    press(keys, context, key);
+                }
+                if (store->text == previousText) {
+                    press(keys, context, VK_SPACE);
+                }
+                require(store->text == previousText + L"\u4f60",
+                        "numeric table input did not reach the TSF text store");
+            }
+        }
+        require(SUCCEEDED(modeButton->OnClick(TF_LBI_CLK_LEFT, {}, nullptr)),
+                "multi-method click failed");
+        pump(200);
+        CComBSTR shuangpinLabel;
+        require(SUCCEEDED(modeButton->GetText(&shuangpinLabel)) &&
+                    shuangpinLabel == L"\u53cc",
+                "click did not cycle to shuangpin");
+        require(SUCCEEDED(manager->SetFocus(otherDocument)) &&
+                    SUCCEEDED(events->OnSetFocus(otherDocument, document)),
+                "multi-method focus switch failed");
+        pump(200);
+        CComBSTR focusedLabel;
+        require(SUCCEEDED(modeButton->GetText(&focusedLabel)) &&
+                    focusedLabel == L"\u53cc",
+                "focus lost selected shuangpin");
+        selection = originalMethods.selection;
+        selection.revision = methods.selection.revision;
+        require(configuration.setInputMethods(selection, methods) &&
+                    methods.error == fcitx::ipc::SettingsError::None,
+                "method list restore failed");
+        pump(200);
+        require(SUCCEEDED(manager->SetFocus(document)) &&
+                    SUCCEEDED(events->OnSetFocus(document, otherDocument)),
+                "restore focus after multi-method test failed");
         pump(200);
         require(SUCCEEDED(service->Deactivate()), "TIP deactivation failed");
         require(adapter->removeItemCalls == 1 && !adapter->langBarItem,

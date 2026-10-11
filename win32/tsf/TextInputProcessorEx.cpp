@@ -1,4 +1,5 @@
 #include "displayattribute.h"
+#include "textutil.h"
 #include "tsf.h"
 
 #include <new>
@@ -42,6 +43,21 @@ void Tsf::uninitLangBarItem() {
 void Tsf::notifyLangBarItem() {
     if (langBarItem_) {
         langBarItem_.p->setMode(keyboardOpen_);
+    }
+}
+
+void Tsf::acceptInputMethod(const PipeClient::KeyReply &reply) {
+    inputMethod_ = reply.inputMethod;
+    if (reply.enabled != keyboardOpen_) {
+        setKeyboardOpen(reply.enabled);
+    }
+    if (langBarItem_) {
+        std::wstring name, label, icon;
+        utf8ToWide(reply.inputMethodName, name);
+        utf8ToWide(reply.iconLabel, label);
+        utf8ToWide(reply.inputMethodIcon, icon);
+        langBarItem_.p->setInputMethod(reply.enabled, std::move(name),
+                                       std::move(label), std::move(icon));
     }
 }
 

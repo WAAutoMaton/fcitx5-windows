@@ -1,21 +1,22 @@
 # Windows 输入法设置设计与实现
 
-更新日期：2026-10-11。菜单、Core 方案切换、服务控制、关于窗口和独立 WinUI 窗口已实现，当前协议为 v5。设置窗口包含“拼音”和只读“词库”tab；词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
+更新日期：2026-10-11。当前协议为 v6。设置窗口使用左侧有序输入法列表、右侧共享设置面板；拼音页还包含只读“词库”tab。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
 
 ## 当前方案
 
 使用语言栏输入模式项提供右键菜单，包含“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。设置界面使用独立的 `Fcitx5Settings.exe`，采用 WinUI 3、C++/WinRT 和 XAML；通过用户/session 级 Named Pipe 与 Core 通信。当前目标是 Windows 11 和已验证的 AMD64 部署。
 
-设置包含全拼/双拼和内置双拼键位。Core 是配置的唯一写入者和运行时状态的管理者，设置程序只保存尚未确认的界面草稿。用户点击确定，Core 确认保存并应用成功后关闭窗口。
+默认列表为英文键盘和拼音。用户可以添加已安装的 chinese-addons 输入法、删除和上下调整顺序，至少保留一个可用输入法。列表修改即时保存；页面选项在“应用”时保存，成功后窗口保持打开。切换页面时有未应用草稿会询问保存、放弃或取消；关闭窗口放弃未应用草稿。Core 是配置的唯一写入者和运行时状态的管理者。
 
 ## 实现位置
 
 - `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，左键切换模式；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
 - `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
-- `win32/ipc/protocol.h`：v5 framing、设置消息、词库状态及运行时代次；全局请求与 context 请求分别校验。
+- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v6 framing、输入法目录、选项描述、设置消息、词库状态及运行时代次；全局请求与 context 请求分别校验。
 - `src/main.cpp`：创建包含 `keyboard-us`、`pinyin` 和已安装的 `shuangpin` 的内存输入法组。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置保存、真实 profile 应用、中文 entry 切换与 context 同步。
+- `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。
 - `src/windowsdictionaries.cpp`：扫描第三方词库目录，在 Core 主事件循环触发上游重载并查询实际加载状态。
 - `win32/settings/SettingsWindow.cpp`：通过 `XamlReader` 创建两个 tab，后台执行设置和词库 IPC，支持保存/取消和连接重试。
 - `chinese-addons/im/pinyin/`：复用上游 `setUseShuangpin()`、`ShuangpinProfile`、`setConfig()` 和已安装的 `shuangpin.conf`。
@@ -70,7 +71,7 @@ flowchart LR
 
 ## 右键菜单
 
-菜单使用原生 `HMENU` / `TrackPopupMenuEx`，由 TSF 所在线程显示，内容为“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。左键继续切换中英文模式，右键不触发模式切换。
+菜单使用原生 `HMENU` / `TrackPopupMenuEx`，由 TSF 所在线程显示，内容为“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。左键与 Ctrl+Space 按用户列表顺序循环切换，右键不触发切换。指示栏通过 WIC 加载已安装的输入法 PNG 图标，加载失败时使用该输入法的紧凑标签图标；英文键盘使用 A。
 
 “用户数据文件夹”在后台任务中通过 Windows Roaming AppData known folder 定位 `%APPDATA%/Fcitx5`，目录不存在时创建，再通过 Shell 打开。该目录同时包含 `config/fcitx5` 设置和 `pinyin` 用户词典、学习历史；服务关闭时仍可打开，不启动 Core 或 Settings，不涉及 IPC 协议变更。
 
@@ -88,16 +89,17 @@ flowchart LR
 
 ## 设置窗口
 
-默认窗口为 560 × 480 个有效像素，最小跟踪尺寸为 440 × 360，创建/缩放时按窗口 DPI 转为 HWND 物理像素。拼音内容可纵向滚动，词库列表随布局伸缩。
+默认窗口为 980 × 720 个有效像素，最小跟踪尺寸为 720 × 480，创建/缩放时按窗口 DPI 转为 HWND 物理像素。选项可纵向滚动，词库列表随布局伸缩。
 
 | 内容 | 控件与行为 |
 | --- | --- |
 | 标题 | “输入法设置”，使用系统标题栏 |
-| 页面 | `TabView`：“拼音”“词库”；不可关闭、添加或重排 tab |
-| 输入方案 | `RadioButtons`：全拼、双拼 |
+| 输入法列表 | `ListView`：按用户顺序显示图标和名称；添加、删除、上移、下移 |
+| 页面 | 根据 entry 的 panel 标识显示拼音、码表或键盘设置；拼音/双拼共用拼音面板，码表共用控件布局但选项值按各自 entry 保存 |
+| 选项 | 通过上游 `Configuration::dumpDescription()` 生成布尔开关、整数步进框、枚举菜单、文本/按键列表控件；递归展示模糊拼音等子配置 |
 | 双拼键位 | `ComboBox`：小鹤、自然码、微软、紫光、智能 ABC、中文之星、拼音加加、国标 |
-| 全拼时的键位 | 保留选项但禁用，重新选择双拼时恢复 |
-| 底部操作 | “取消”“确定”；取消/关闭不写配置 |
+| 全拼时的键位 | 上游拼音 entry 隐藏双拼专用选项；双拼 entry 显示这些选项 |
+| 底部操作 | “重置为默认值”“关闭”“应用”；重置先更新草稿，应用后保存 |
 | 状态 | 加载中、正在保存、连接失败、保存失败、配置冲突 |
 | 连接重试 | 连接失败后显示“重试”，重新读取 Core 设置 |
 | 词库页 | 展示目录及加载中/已加载/失败/停用状态，显示期间每两秒查询 Core |
@@ -105,7 +107,7 @@ flowchart LR
 
 窗口打开后读取 Core 的实际设置；不使用 UI 本地默认值覆盖已有配置。第一次没有 Windows 设置文件时，默认全拼，键位从当前 Pinyin 配置继承。自定义双拼暂不提供编辑或导入；如果检测到已有 Custom 配置，应保留并明确显示现有自定义方案，不能静默覆盖为内置键位。
 
-确定按钮在加载/保存期间禁用。保存失败保留用户选择并显示错误；成功后关闭。配置冲突时更新草稿的 revision，用户再次确定才提交当前选择。使用原生键盘导航、Automation 属性、系统主题资源和 `MicaBackdrop`；深浅色、高对比度、文本缩放及背景回退仍需全面实测。
+加载/保存期间禁用输入法和选项操作。保存失败保留草稿并显示错误；冲突要求重新加载，以免旧草稿覆盖其他客户端。使用原生键盘导航、Automation 属性、系统主题资源和 `MicaBackdrop`；深浅色、高对比度、文本缩放及背景回退仍需全面实测。
 
 HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗口初始大小/位置涉及 HWND 物理坐标时显式换算。验证不同 DPI 显示器之间拖动、任务栏位置、屏幕工作区和放大文本，不在 TSF DLL 内修改宿主进程的 DPI awareness。
 
@@ -113,7 +115,7 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 
 ## IPC 与配置所有权
 
-设置功能最初升级协议至 v4；当前 v5 另增加 `GetDictionaries`。同步构建 Core、TSF DLL 和设置程序。以下 context-independent 消息强制 `contextId=0`，单独验证请求长度、枚举和请求关联。旧的 context 请求仍保留连接归属校验。
+v6 增加输入法目录、有序选择、配置描述和循环/指定切换，并在 `KeyReply` 返回实际 entry、名称、标签及图标路径。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 则验证 context 归属和焦点。
 
 | 请求 | 内容 / 回复 |
 | --- | --- |
@@ -121,6 +123,8 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 | `GetSettings` | 返回 `PinyinSettings`（scheme、profile、revision）及 `pinyinAvailable` / `shuangpinAvailable` |
 | `SetSettings` | 提交 scheme、profile、revision（草稿读取时的版本）；返回实际配置、新 revision 或错误 |
 | `GetDictionaries` | 返回第三方词库目录、实际发现的扩展词库路径和加载状态 |
+| `GetInputMethods` / `SetInputMethods` | 目录及有序选择，字段包含 id、name、icon、iconLabel、panel、available、keyboard；写入使用共享 revision，拒绝空列表和重复 id |
+| `GetMethodConfig` / `SetMethodConfig` | 获取引擎声明的可编辑选项或提交 path/value；校验声明、类型、范围、枚举、按键语法及 revision |
 
 scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串标识，不依赖 ComboBox 索引。映射到 `Xiaohe`、`Ziranma`、`MS`、`Ziguang`、`ABC`、`Zhongwenzhixing`、`PinyinJiajia`、`GB`，服务器严格校验。
 
@@ -130,25 +134,31 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 
 错误返回区分引擎缺失、非法设置、版本冲突、持久化失败和应用失败。保存超时可能已经在服务端生效，因此重连后先 `GetSettings` 核对结果，不盲目重放写请求。重复提交同一已生效配置幂等成功；请求的 `revision` 防止独立客户端的旧草稿覆盖新配置。
 
-全局设置允许当前用户的独立连接访问，沿用 SID/session 命名、当前用户 ACL 和拒绝远程访问。仅暴露这两项设置，不开放任意 addon 配置或文件路径操作。
+全局设置允许当前用户的独立连接访问，沿用 SID/session 命名、当前用户 ACL 和拒绝远程访问。仅接受已枚举的输入法及其公开选项，不提供任意文件写入、执行路径或任意 addon 调用。
 
 ## 真正切换引擎
 
-1. 启动时确认 `shuangpin` entry、Pinyin addon 和数据均存在，将 `shuangpin` 加入内存 Windows 输入法组。
-2. Core 保存全局的中文方案，选中的中文 entry 为 `pinyin` 或 `shuangpin`；中英文 enabled 仍是每个 TSF 实例通过 compartment 设置的状态。
-3. 通过 addon 的公开配置接口读取完整 `RawConfig`，只修改 `ShuangpinProfile`，保留词库、模糊音和其他设置；调用 `setConfig()` 更新真实 libime profile。
+1. 启动时枚举已安装的 entry 和 addon。拼音、双拼、五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风、自然码可加入用户列表；缺失引擎或码表时标为不可用，不允许新添加。
+2. Core 保存有序列表，每个 TSF 实例保存当前 entry 并在焦点切换和重连时恢复。Windows compartment 的布尔值由实际 entry 是否为键盘推导；外部开关只在用户已选择的键盘/非键盘条目之间切换，没有对应条目时保持当前输入法。
+3. 通过 addon 的 `getConfigForInputMethod` / `setConfigForInputMethod` 读写公开配置。拼音/双拼共用上游配置，码表按各自输入法保存。引擎未声明或隐藏的选项不能通过协议修改。
 4. 在 Core 主事件循环内执行设置操作。Pipe worker 不直接操作 Instance、addon 或 context。
-5. 中文 context 切换到选定 entry；英文 context 保持 `keyboard-us`，下一次打开中文时使用新方案。新的焦点和重连也使用新方案。
+5. 移除当前条目时回退到仍选中的可用条目。列表顺序和 Core 的内部组顺序分开：内部组第一项保留 Fcitx 的键盘槽位，但它不强迫用户保留英文键盘。
 6. scheme 或双拼键位改变时，取消旧方案尚未提交的预编辑和候选，不自动选词提交；已经提交的文本保持有效。相同设置不重复 reset。
-7. 全部 `SetMode`、`FocusIn`、按键回复、PollState 和 Reset 的 enabled 判断都使用“当前 entry 是否为支持的中文 entry”，不能继续只判断 `pinyin`。
+7. Ctrl+Space 在实际按键回调中向 Core 请求轮换，自动重复和释放不再次轮换；测试回调仍只观察状态。循环切换和删除当前条目会丢弃旧预编辑，不自动提交。
+
+## 扩展约定
+
+复用 Fcitx addon loader 和输入法 entry 枚举，不维护封闭的协议输入法枚举。entry 默认以 addon 名声明 panel；键盘为 `keyboard`，拼音/双拼为 `pinyin`，码表为 `table`。entry 的 `inputmethod/*.conf` 可通过 `InputMethod/WindowsSettingsPanel` 和 `WindowsIconLabel` 覆盖共享面板标识和图标后备标签。Settings 对未知 panel 仍使用引擎公开描述生成通用页。未来插件仍需遵循对应 Core 工具链/ABI，不把插件对象传到 TSF 或 Settings。
+
+`patches/chinese-addons-windows-table.patch` 在 Windows 中启用已带数据的仓颉条目，并将内置码表路径优先解析到部署树 `share/libime`；码表不存在时配置接口返回不可用。兼容补丁由 `apply-pinyin-patches.ps1` 按固定版本幂等应用。
 
 设置全局生效，不要求重启 Core、重新注册 DLL 或重启应用。只增加设置入口的正常功能更新不应被设计成必须重新注册的操作；若同时修改注册元数据，仍按项目现有规则单独处理。
 
 ## 持久化与状态一致性
 
-主仓库的 `WindowsSettings` 通过 Fcitx `StandardPaths` 保存用户级 `conf/windows.conf`，将 scheme、profile 和 revision 放在一个版本化记录内。默认实际路径为 `%APPDATA%/Fcitx5/config/fcitx5/conf/windows.conf`；此文件是这两项设置的权威来源，设置程序不直接写文件。
+`WindowsSettings` 保存用户级 `conf/windows.conf` v2，包含 scheme、profile、共享 revision、`InputMethods` 有序列表和 `Options` 引擎配置。默认路径为 `%APPDATA%/Fcitx5/config/fcitx5/conf/windows.conf`。v1 文件按原全拼/双拼方案迁移为英文键盘加对应拼音条目；下次成功保存写 v2。此文件是 Windows 设置的权威来源，设置程序不直接写文件。
 
-Pinyin 的 `setConfig()` 还会保存 `conf/pinyin.conf`，但现有实现不向调用方返回保存失败。这份文件只作为上游配置的兼容镜像；不能把一次 `setConfig()` 返回视为完整持久化成功。Core 每次启动读取 Windows 权威记录，并重新应用其中的 profile，使中断造成的镜像差异不会改变已确认的 Windows 设置。
+引擎还会保存上游 `conf/pinyin.conf` 或 `table/<id>.conf`，其接口不返回存储结果。这些文件是兼容镜像；Core 先原子保存 Windows 权威记录，再调用引擎并核对结果，启动时重新应用权威配置。
 
 保存流程先校验能力和 revision，保留旧配置快照，安全写入 Windows 权威记录，再更新引擎配置并核对读取结果，最后发布新设置代次并切换 contexts。此顺序来自实际代码约束：libime 的 profile 更新会发出 `optionChanged` 并清空解码上下文，回滚配置不能恢复已经清空的预编辑。存储失败必须在调用 addon 前返回。引擎应用失败恢复旧配置和旧权威记录，同时 reset contexts 并更新独立的运行时代次；此异常路径会取消预编辑。启动时以最后一个完整权威记录为准，不能合并两个文件中的半次更新。保存过程中进程被终止时，重启可能应用已写入但尚未回复的设置；UI 超时后查询实际结果。
 
@@ -174,6 +184,8 @@ Core 和 TSF 使用两套独立 CMake 工程；MSBuild 设置程序由统一脚�
 关键自动验证：
 
 - `test_langbar`：菜单项文字和 ID、空指针、未知命令、左键行为、detach 后命令、菜单与 DLL 引用生命周期。
+- `inputmethods_probe` / `scripts/test-inputmethods.ps1`：目录、共享面板/选项、真实五笔/拼音/双拼提交、轮换/重复/释放、删除保护、去掉英文键盘、活跃输入法删除、版本冲突和重启持久化。
+- `scripts/test-settings-ui.ps1`：实际 WinUI 控件的添加、删除、排序、模糊拼音/双拼配置、词库状态和目录、最小窗口、最后一个输入法提示、重启和单实例；输出截图供检查。
 - `test_protocol`：设置/词库消息往返、非法枚举、截断/额外字段、冲突错误编码和全局请求分类；真实 context 连接归属校验由 `ipc_probe` 覆盖，设置 revision 冲突由 `settings_probe` 覆盖。
 - `ipc_probe`：基础全拼按键、候选、提交、模式和连接归属；`settings_probe` 验证全拼 `nihao`、小鹤 `nihc`、自然码 `nihk` 的真实“你好”候选/提交及方案切换。其他内置 profile 仍需选择键位差异明确的音节验证，不能只检查配置字段。
 - `tsf_probe`：实际 DLL 的双拼文本插入、英文放行、SetMode 幂等、多个 context、设置变更时的迟到编辑与取消。

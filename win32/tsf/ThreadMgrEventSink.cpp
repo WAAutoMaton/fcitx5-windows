@@ -48,13 +48,24 @@ bool Tsf::initRemoteContext() {
         return false;
     }
     PipeClient::KeyReply reply;
+    if (!inputMethod_.empty() &&
+        !pipe_.selectInputMethod(remoteContextId_, inputMethod_, reply)) {
+        pipe_.disconnect();
+        remoteContextId_ = 0;
+        return false;
+    }
     if (!pipe_.poll(remoteContextId_, reply)) {
         pipe_.disconnect();
         remoteContextId_ = 0;
         return false;
     }
     state_ = std::move(reply);
-    return applyKeyboardMode(false);
+    inputMethod_ = state_.inputMethod;
+    if (!applyKeyboardMode(false)) {
+        return false;
+    }
+    acceptInputMethod(state_);
+    return true;
 }
 
 void Tsf::clearRemoteContext() {

@@ -30,6 +30,15 @@ class PipeClient {
     bool poll(uint64_t contextId, KeyReply &reply);
     bool reset(uint64_t contextId, KeyReply &reply);
     bool setMode(uint64_t contextId, bool enabled, KeyReply &reply);
+    bool cycleInputMethod(uint64_t contextId, KeyReply &reply);
+    bool selectInputMethod(uint64_t contextId, const std::string &id,
+                           KeyReply &reply);
+    bool getInputMethods(ipc::InputMethodsReply &reply);
+    bool setInputMethods(const ipc::InputMethodSelection &selection,
+                         ipc::InputMethodsReply &reply);
+    bool getMethodConfig(const std::string &id, ipc::MethodConfigReply &reply);
+    bool setMethodConfig(const ipc::MethodConfigRequest &config,
+                         ipc::MethodConfigReply &reply);
     bool getSettings(ipc::SettingsReply &reply);
     bool getDictionaries(ipc::DictionariesReply &reply);
     bool setSettings(const ipc::PinyinSettings &settings,

@@ -24,6 +24,10 @@ int main() {
     assert(routesKey(VK_BACK, 0, true, true));
     assert(routesKey(VK_ESCAPE, 0, true, true));
     assert(!routesKey(VK_F5, 0, true, true));
+    assert(routesKey('0', 0, true, false, true));
+    assert(routesKey(VK_OEM_1, 0, true, false, true));
+    assert(!routesKey('0', 0, false, false, true));
+    assert(!routesKey('0', kModifierControl, true, false, true));
     std::wstring text;
     ULONG cursor = 0;
     const std::string input = "\xe4\xbd\xa0\xf0\x9f\x98\x80";

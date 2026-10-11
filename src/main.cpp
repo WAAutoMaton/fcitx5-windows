@@ -1,6 +1,7 @@
 #include "../win32/ipc/service.h"
 #include "windowsfrontend.h"
 #include "windowskeyboard.h"
+#include <clocale>
 #include <fcitx-utils/environ.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
@@ -48,6 +49,7 @@ void start(const ::fs::path &settingsFile,
            win32::ipc::ServiceProcess &service) {
     Log::setLogRule("*=3,notimedate");
     setupEnv();
+    std::setlocale(LC_ALL, "");
     instance = std::make_unique<Instance>(0, nullptr);
     auto &addonMgr = instance->addonManager();
     win32::WindowsKeyboardFactory keyboardFactory;

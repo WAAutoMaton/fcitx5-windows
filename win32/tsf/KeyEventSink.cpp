@@ -117,17 +117,18 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
     }
     if (!release && isModeSwitchKey(static_cast<uint32_t>(wParam), modifiers)) {
         if (!(modifiers & kModifierRepeat)) {
-            if (FAILED(setKeyboardOpen(!keyboardOpen_))) {
+            if (!cycleMode(true)) {
                 return FALSE;
             }
-            applyKeyboardMode(true);
         }
         handledKeys_.set(VK_SPACE);
         return TRUE;
     }
     if (!release &&
         !routesKey(static_cast<uint32_t>(wParam), modifiers, keyboardOpen_,
-                   !state_.preedit.empty() || !state_.candidates.empty())) {
+                   !state_.preedit.empty() || !state_.candidates.empty(),
+                   state_.inputMethodPanel != "pinyin" &&
+                       !state_.inputMethodPanel.empty())) {
         return FALSE;
     }
     if (state_.enabled != keyboardOpen_ && !applyKeyboardMode(true)) {
@@ -176,7 +177,9 @@ STDMETHODIMP Tsf::OnTestKeyDown(ITfContext *context, WPARAM key, LPARAM details,
                remoteContextId_ && pipe_.connected() &&
                routesKey(static_cast<uint32_t>(key), currentModifiers(details),
                          keyboardOpen_,
-                         !state_.preedit.empty() || !state_.candidates.empty());
+                         !state_.preedit.empty() || !state_.candidates.empty(),
+                         state_.inputMethodPanel != "pinyin" &&
+                             !state_.inputMethodPanel.empty());
     return S_OK;
 }
 

@@ -177,6 +177,9 @@ jobs:
       - name: Verify real Pinyin and unregistered TSF text contexts
         run: ./scripts/test-pinyin.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
 
+      - name: Verify input method selection, settings and real Wubi commits
+        run: ./scripts/test-inputmethods.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
+
       - name: Verify third-party dictionary loading
         run: ./scripts/test-dictionaries.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
 
@@ -188,6 +191,7 @@ jobs:
           path: |
             build/pinyin-test/*.log
             build/dictionaries-test/*.log
+            build/inputmethods-test/**/*.log
             build/ci-tests/Testing/Temporary/*.log
 
   package-installer-x64:

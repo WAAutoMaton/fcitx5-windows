@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 5;
+constexpr uint16_t kVersion = 6;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -36,6 +36,14 @@ enum class MessageType : uint16_t {
     SettingsReply = 19,
     GetDictionaries = 20,
     DictionariesReply = 21,
+    GetInputMethods = 22,
+    SetInputMethods = 23,
+    InputMethodsReply = 24,
+    GetMethodConfig = 25,
+    SetMethodConfig = 26,
+    MethodConfigReply = 27,
+    CycleInputMethod = 28,
+    SelectInputMethod = 29,
 };
 
 enum class PinyinScheme : uint8_t { Full = 0, Double = 1 };
@@ -58,6 +66,7 @@ enum class SettingsError : uint8_t {
     SaveFailed,
     ApplyFailed,
     LaunchFailed,
+    LastInputMethod,
 };
 
 struct PinyinSettings {
@@ -91,7 +100,11 @@ constexpr bool globalSettingsRequest(MessageType type) {
     return type == MessageType::OpenSettings ||
            type == MessageType::GetSettings ||
            type == MessageType::SetSettings ||
-           type == MessageType::GetDictionaries;
+           type == MessageType::GetDictionaries ||
+           type == MessageType::GetInputMethods ||
+           type == MessageType::SetInputMethods ||
+           type == MessageType::GetMethodConfig ||
+           type == MessageType::SetMethodConfig;
 }
 
 constexpr uint32_t kMaxDictionaries = 4096;
@@ -123,6 +136,11 @@ struct Candidate {
 struct KeyReply {
     bool consumed = false;
     bool enabled = true;
+    std::string inputMethod;
+    std::string inputMethodName;
+    std::string iconLabel;
+    std::string inputMethodIcon;
+    std::string inputMethodPanel;
     std::string commit;
     std::string preedit;
     uint32_t preeditCursor = 0;
@@ -289,7 +307,7 @@ inline bool decodeSettingsReply(const std::vector<uint8_t> &payload,
     SettingsReply result;
     uint8_t error = 0, pinyin = 0, shuangpin = 0;
     if (!reader.u8(error) ||
-        error > static_cast<uint8_t>(SettingsError::LaunchFailed) ||
+        error > static_cast<uint8_t>(SettingsError::LastInputMethod) ||
         !reader.u8(pinyin) || pinyin > 1 || !reader.u8(shuangpin) ||
         shuangpin > 1 || !readSettings(reader, result.settings) ||
         reader.remaining()) {
@@ -352,6 +370,11 @@ inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
     Writer writer;
     writer.u8(reply.consumed);
     writer.u8(reply.enabled);
+    writer.string(reply.inputMethod);
+    writer.string(reply.inputMethodName);
+    writer.string(reply.iconLabel);
+    writer.string(reply.inputMethodIcon);
+    writer.string(reply.inputMethodPanel);
     writer.string(reply.commit);
     writer.string(reply.preedit);
     writer.u32(reply.preeditCursor);
@@ -376,8 +399,13 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
     uint8_t consumed = 0, enabled = 0, hasPrev = 0, hasNext = 0;
     uint32_t count = 0;
     if (!reader.u8(consumed) || consumed > 1 || !reader.u8(enabled) ||
-        enabled > 1 || !reader.string(result.commit) ||
-        !reader.string(result.preedit) || !reader.u32(result.preeditCursor) ||
+        enabled > 1 || !reader.string(result.inputMethod) ||
+        !reader.string(result.inputMethodName) ||
+        !reader.string(result.iconLabel) ||
+        !reader.string(result.inputMethodIcon) ||
+        !reader.string(result.inputMethodPanel) ||
+        !reader.string(result.commit) || !reader.string(result.preedit) ||
+        !reader.u32(result.preeditCursor) ||
         result.preeditCursor > result.preedit.size() ||
         !reader.u64(result.revision) || !reader.u64(result.settingsRevision) ||
         !reader.u32(result.selected) || !reader.u8(hasPrev) || hasPrev > 1 ||
@@ -438,3 +466,5 @@ inline bool decodeFrame(const std::vector<uint8_t> &data, Frame &frame) {
 }
 
 } // namespace fcitx::win32::ipc
+
+#include "inputmethodprotocol.h"

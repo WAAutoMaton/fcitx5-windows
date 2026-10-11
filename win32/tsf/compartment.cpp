@@ -82,11 +82,21 @@ STDMETHODIMP Tsf::OnChange(REFGUID guid) {
     return S_OK;
 }
 
-void Tsf::toggleMode() {
-    if (FAILED(setKeyboardOpen(!keyboardOpen_))) {
-        return;
+void Tsf::toggleMode() { cycleMode(false); }
+
+bool Tsf::cycleMode(bool synchronous) {
+    if (!remoteContextId_ || !pipe_.connected() || !foreground_ ||
+        !textEditSinkContext_) {
+        return false;
     }
-    applyKeyboardMode(false);
+    PipeClient::KeyReply reply;
+    if (!pipe_.cycleInputMethod(remoteContextId_, reply)) {
+        clearRemoteContext();
+        pipe_.disconnect();
+        return false;
+    }
+    submitSnapshot(std::move(reply), synchronous);
+    return true;
 }
 
 bool Tsf::applyKeyboardMode(bool synchronous) {
@@ -103,7 +113,8 @@ bool Tsf::applyKeyboardMode(bool synchronous) {
         pipe_.disconnect();
         return false;
     }
-    return submitSnapshot(std::move(reply), synchronous);
+    submitSnapshot(std::move(reply), synchronous);
+    return true;
 }
 
 } // namespace fcitx

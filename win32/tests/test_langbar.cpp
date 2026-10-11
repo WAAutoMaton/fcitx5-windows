@@ -182,7 +182,7 @@ int main() {
     assert(info.guidItem == GUID_LBI_INPUTMODE);
     assert((info.dwStyle & TF_LBI_STYLE_BTN_MENU) != 0);
     assert((info.dwStyle & TF_LBI_STYLE_BTN_TOGGLE) != 0);
-    assert(info.dwStyle & TF_LBI_STYLE_TEXTCOLORICON);
+    assert(!(info.dwStyle & TF_LBI_STYLE_TEXTCOLORICON));
     UpdateSink sink;
     DWORD cookie = 0, duplicate = 0;
     assert(source->AdviseSink(IID_ITfLangBarItemSink, &sink, &cookie) == S_OK);
@@ -201,6 +201,14 @@ int main() {
     assert(chineseIcon != iconPixels(item));
     item.p->setMode(false);
     assert(sink.updates == 1);
+    item.p->setInputMethod(true, L"Wubi", L"\u4e94");
+    CComBSTR wubiText, wubiTooltip;
+    assert(item->GetText(&wubiText) == S_OK && wubiText == L"\u4e94");
+    assert(item->GetTooltipString(&wubiTooltip) == S_OK &&
+           wubiTooltip == L"Wubi");
+    const auto wubiIcon = iconPixels(item);
+    item.p->setInputMethod(true, L"Shuangpin", L"\u53cc");
+    assert(wubiIcon != iconPixels(item));
     assert(item->Show(FALSE) == S_OK);
     DWORD status = 0;
     assert(item->GetStatus(&status) == S_OK && (status & TF_LBI_STATUS_HIDDEN));
