@@ -1,5 +1,6 @@
 #pragma once
 
+#include "aboutwindow.h"
 #include "candidatewindow.h"
 #include "langbaritem.h"
 #include "pipeclient.h"
@@ -119,6 +120,7 @@ class Tsf : public ITfTextInputProcessorEx,
     uint32_t displayedCursor_ = 0;
     std::bitset<256> handledKeys_;
     CandidateWindow candidates_;
+    AboutWindow about_;
     HWND messageWindow_ = nullptr;
     ULONGLONG nextReconnect_ = 0;
     bool foreground_ = true;

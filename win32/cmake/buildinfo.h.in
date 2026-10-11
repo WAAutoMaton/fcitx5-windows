@@ -1,0 +1,9 @@
+#pragma once
+
+namespace fcitx::buildinfo {
+inline constexpr wchar_t origin[] = L"@FCITX_BUILD_ORIGIN@";
+inline constexpr wchar_t homepage[] = L"@FCITX_BUILD_HOMEPAGE@";
+inline constexpr wchar_t commit[] = L"@FCITX_BUILD_COMMIT@";
+inline constexpr wchar_t commitTime[] = L"@FCITX_BUILD_COMMIT_TIME@";
+inline constexpr wchar_t ci[] = L"@FCITX_BUILD_CI@";
+} // namespace fcitx::buildinfo

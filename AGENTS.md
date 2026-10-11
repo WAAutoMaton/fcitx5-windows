@@ -68,6 +68,7 @@
 - `test_register` 加载实际 DLL 检查内嵌品牌图标和 Shell 图标提取，使用模拟 COM 管理器验证 profile 字符长度、DLL 路径、类别和失败返回；不执行系统注册或修改输入法设置。
 - 语言栏右键通过原生 popup menu 提供“输入法设置”“重启服务”“关闭服务”。重启会重启/启动 Core，只有原本打开的 Settings 才重新打开；关闭会停止两者并暂停自动拉起。TSF 在 Settings 自身进程内时，由短暂运行的 `Fcitx5 --restart-services/--stop-services` 控制进程等待宿主退出，避免等待自身。真实已注册指示器右键派发尚未验证；左键仍切换中英文。
 - 语言栏右键另提供“用户数据文件夹”，后台通过 Windows Roaming AppData known folder 打开 `%APPDATA%/Fcitx5`（含 `config/fcitx5` 设置和 `pinyin` 用户词典、学习历史），不存在时创建目录。服务关闭时仍可使用，不启动 Core/Settings，不变更 IPC 协议。
+- 语言栏右键另提供“关于”，在 TSF 所属线程打开原生非模态窗口，显示 `Fcitx5 for Windows`、DLL 目标架构、CI 编号、commit 和 commit 时间、构建时 origin 及 GPL-3.0/仓库主页链接。每次 TSF 构建重新读取元数据；GitHub Actions 使用 `GITHUB_RUN_NUMBER`，本地 CI 编号显示占位说明；SSH origin 转为 HTTPS 主页。重复打开激活已有窗口，停用/析构关闭；不依赖 Core/Settings 或新运行时，不改变 IPC 和注册元数据。
 - `scripts/deploy-tsf.ps1 -Prefix -TsfBuild` 将 DLL 复制到隔离安装树的 `tsf`；部署后的 TSF 在激活时固定定位并后台启动相邻 `bin/Fcitx5.exe`，Settings 位于 `settings/Fcitx5Settings.exe`。部署脚本本身不启动服务、不注册或注销，旧构建目录 DLL 不能自动推断 Core 安装路径。
 - `win32/settings` 是第三套独立 MSBuild 工程，使用框架依赖的 Windows App SDK 1.8；要求当前用户有 x64 Framework/DDLM >= 8000.994.2142.0 和 Visual C++ 运行库。`scripts/build-settings.ps1 -Prefix` 部署到隔离安装树的 `settings`，不安装系统运行时。
 - 设置窗口提供全拼/双拼及八种内置键位；Core 在主事件循环切换 `pinyin`/`shuangpin` entry 和真实 `ShuangpinProfile`，保存用户 `conf/windows.conf` 并在重启恢复。存储失败先返回，不清空解码上下文；成功切换取消预编辑，英文 context 保持关闭。设置运行时代次拒绝旧预编辑但保留已经接收的提交。
@@ -189,6 +190,8 @@
 
 ## 当前验证记录
 
+- “关于”菜单及原生窗口已通过 `win32/build/about-tsf` AMD64 TSF Release 构建和 11 项默认 CTest。`test_langbar` 验证五项菜单和停用后的迟到点击；`test_about` 验证内容、单实例重复打开、无模态 owner、DPI awareness 恢复、控件边界、Tab/Escape/关闭及销毁后重开。模拟 GitHub Actions 编号的构建/窗口测试和回到本地占位说明已通过，200% 原生窗口截图位于 `build/about-preview`。未替换默认部署 DLL、注册/注销或启动/停止 Core/Settings；真实系统右键派发、浏览器打开和物理跨屏/主题仍需验证。
+
 - 安装 helper 的 `%LOCALAPPDATA%/fcitx5/installer-helper.log` 已增加本地时间、PID/TID、命令开始和安装根，以及 Settings runtime-check、用户 profile 启用/默认设置、COM 创建、`ChangeCurrentLanguage` 和 `ActivateProfile` 原始 HRESULT、语言切换前后当前语言及启用状态、Core 重启/就绪步骤。日志失败不改变安装返回码并恢复 `GetLastError()`，保留现有安装/回滚行为。`build/all/tsf` 的 Release helper 和 `test_setup` 构建、该测试、修改文件格式检查及 `git diff --check` 通过；只读 `preflight-machine` 确认实际日志格式。未执行真实安装、注册/注销、用户配置或服务重启，CI 安装包需重新构建后复现以定位本机 `configure-user` 的 `0x80004005`。
 
 - CI 已拆分为 `build-core-arm64`、`build-x64`、`test-x64`、`package-installer-x64` 和 `release`。x64 Core/libime/addons/TSF/Settings 统一 Release 构建一次，构建 job 跳过测试；测试与打包同时依赖该构建，下载同一运行树。默认 CTest 导出相对路径 JSON 清单，由测试 runner 按下载目录恢复绝对命令及工作目录，保留图标校验、脚本回归和拼音/词库 probes；原独立 Debug TSF 构建不再执行。x64 开发包单独安装已经构建的 Core，不混入拼音依赖。多文件 artifact 使用默认 ZIP 模式，修复安装包六文件上传与 `archive: false` 冲突；release 只下载开发包及安装包，并等待测试和打包全部成功。本机 YAML/job 依赖及 artifact 对应检查、全部 Windows run 块的 PowerShell 语法检查、两个脚本回归通过；已有 Release 测试包经 ZIP 解包至含空格/单引号的新目录后 10 项 CTest 和图标校验通过，Core 实际安装/开发包的 125 项内容及无拼音依赖验证、现有双安装包六文件 ZIP 和元数据检查通过，验证文件在 `build/ci-workflow-validation`。当次 Core 已运行，未停止服务或重跑拼音/词库 probes；GitHub runner 上完整产物传递及发布仍需重跑确认。
@@ -197,7 +200,7 @@
 
 - 安装包 CI 同时打包并发布含 VC++/Windows App Runtime 的 `Fcitx5-<run>-x64-setup.exe` 和不含它们的 `Fcitx5-<run>-x64-no-runtime-setup.exe`，共享完整暂存运行树，各自生成 manifest 和 SHA256。`scripts/build-installer.ps1 -SkipRuntimes` 不要求外部运行库安装程序存在；使用者须预先满足运行库要求，用户阶段仍检查 Settings runtime。`scripts/test-build-installer.ps1` 已通过模拟编译器回归，覆盖双版本开关、缺失依赖、独立清单/校验值、失败返回和无副作用预览；PowerShell 解析、发布附件模式及 `git diff --check` 已通过。本机当前用户目录的 Inno Setup 7.1.0 已实际编译两个版本，无警告/错误，产物位于 `dist/installer-variants`（含运行库约 172.69 MiB，不含约 48.87 MiB），依赖锁哈希及 EXE 校验值核对通过。实际 ISPP 及编译日志确认不含版无运行库文件条目或安装步骤，日志在 `build/installer-variants`；未运行安装器、注册/注销或修改输入法设置，双版本系统安装仍需 CI/干净 VM 验证。
 
-以下保留各功能落地时的验证结果；历史记录中的 8 项或更少测试是当时的集合。当前默认 CTest 为 10 项，`ENABLE_PINYIN_INTEGRATION_TESTS=ON` 另增加三个拼音 probes，共 13 项；词库和服务 probes 由各自脚本运行，不在该选项的 CTest 集合内。
+以下保留各功能落地时的验证结果；历史记录中的 10 项或更少测试是当时的集合。当前默认 CTest 为 11 项（新增 `test_about`），`ENABLE_PINYIN_INTEGRATION_TESTS=ON` 另增加三个拼音 probes，共 14 项；词库和服务 probes 由各自脚本运行，不在该选项的 CTest 集合内。
 
 - DirectWrite/Direct2D 候选窗已通过 `win32/build/candidate-d2d` AMD64 TSF Release 构建、9 项默认 CTest 和修改文件格式检查。`test_candidate` 验证 96/120/144/192/288 DPI 同一绘制函数的彩色像素、单色 VS15 心形、长文本省略，三种 owner DPI awareness、线程状态恢复、不抢焦点、边缘定位及 owner 销毁/资源重建；192 DPI 原生 HWND 截图及五种 DPI 离屏图片位于 `build/candidate-d2d-preview`。本机 100 次暖启动选中项更新的 show + UpdateWindow 调用耗时 P50 2.086 ms、P95 3.323 ms，不等同于输入端到端延迟或 GDI 对比。用户关闭 Core 后，`scripts/test-pinyin.ps1 -Prefix ./dist/pinyin -TsfBuild ./win32/build/candidate-d2d` 已通过真实 Core 的 `ipc_probe`、`settings_probe`、加载新 DLL 的 `tsf_probe` 及 9 项 CTest，覆盖全拼/小鹤/自然码中文提交、异步编辑与焦点隔离；测试使用独立设置文件，结束后 Core/Settings 均未运行，Core 日志无错误。未注册/注销或替换默认部署 DLL；probes 使用按键/语言栏适配器，真实应用、物理跨屏 DPI、主题/高对比度及系统文本缩放仍需验证；尚无 TSF 布局变化订阅或超高候选页滚动。
 - 统一构建脚本已从干净 `build/all` 构建 Core/libime/chinese-addons、TSF Release、WinUI Release 并部署至 `dist/one-click-test`，8 项 CTest 通过；重复增量构建、重复部署、任意工作目录及完整环境恢复（含空值环境变量）均已验证，386 个部署文件与暂存文件 SHA256 一致。`scripts/test-build-and-deploy.ps1` 覆盖解析、空格/单引号路径、无副作用 `-WhatIf`、非法路径/Jobs 及独占/只读文件拒绝。未更新默认部署、注册/注销或启动服务；Source 数据生成仍未在本地完整验证。
@@ -209,7 +212,7 @@
 - 用户实测确认重新注册后的“中/A”输入指示器功能正常；测试应用和完整 Windows 版本矩阵未记录。普通应用输入、候选窗口视觉效果、主题、Explorer 重启、多显示器 DPI 和 ARM64 拼音/TSF 仍未完成全面验证。
 - `scripts/test-pinyin.ps1` 默认使用 `dist/pinyin` 和 `win32/build/pinyin-tsf`，可通过 `-Prefix` / `-TsfBuild` 指定隔离路径；已有 Core 运行时拒绝执行。脚本使用独立 Windows 设置文件启动 Core、运行三个 probes 和 CTest，再停止自身启动的进程，日志在 `build/pinyin-test`；不执行注册、注销或修改系统输入法设置。
 - `scripts/test-dictionaries.ps1` 使用独立 Windows 设置文件和唯一命名的临时词库，验证实际 Core 启动加载、动态新增/替换/重命名/删除、中文路径、坏文件、停用标记、全拼/小鹤/自然码候选及重载期间保留预编辑。要求已有 Core/Settings 关闭；只停止自身启动的 Core，清理临时文件并恢复输入设置，不执行注册/注销。词库转换及加载状态以真实插件为准，文件扩展名不表示其他输入法的词库格式可直接兼容。
-- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将 ipc_probe、tsf_probe、settings_probe 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 10 项（含 `test_service`、`test_candidate`、`test_setup`），不等同于真实应用输入或上游全套测试。
+- `ENABLE_PINYIN_INTEGRATION_TESTS=ON` 才会将 ipc_probe、tsf_probe、settings_probe 加入 CTest，此时需事先运行已部署 Core；默认 CTest 为 11 项（含 `test_service`、`test_candidate`、`test_setup`、`test_about`），不等同于真实应用输入或上游全套测试。
 - `scripts/test-service.ps1 -Prefix -TsfBuild [-WithSettings]` 加载部署树中的实际 DLL，以测试适配器激活 TSF 并模拟菜单命令，验证真实 Core 自动启动、关闭、重启、暂停自动启动及 DLL 生命周期；`-WithSettings` 额外验证实际 WinUI 窗口重新打开和 Settings 宿主的委托退出。拒绝已有 Core/Settings，结束恢复原有服务控制状态，不执行系统注册或修改输入法设置。
 - 本次使用 `win32/build/service-tsf` 和 `dist/pinyin/tsf` 通过上述服务控制 probe（含实际 WinUI、Settings 宿主委托及手动停止后的迟到启动拒绝），并重新通过 `scripts/test-pinyin.ps1` 的三个 probes 和 8 项 CTest。`scripts/test-settings-ui.ps1` 重新通过保存/取消、双拼键位、重启恢复和单实例，截图位于 `build/service-settings-ui-test`。未执行注册/注销，真实 OS 右键派发仍未验证。
 - 注册/释放脚本更新通过 `win32/tests/test_scripts.ps1` 的模拟回归及三个管理脚本的真实 `-WhatIf` 预览，覆盖任意工作目录、含空格/单引号路径、失败退出码、参数错误、精确路径筛选和 ctfmon 预览无副作用；未执行真实注册/注销、UAC 提权或终止应用。

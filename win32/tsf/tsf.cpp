@@ -8,6 +8,7 @@ namespace fcitx {
 Tsf::Tsf() { DllAddRef(); }
 
 Tsf::~Tsf() {
+    about_.close();
     if (serviceTask_.valid()) {
         serviceTask_.wait();
     }

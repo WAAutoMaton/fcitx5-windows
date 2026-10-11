@@ -54,11 +54,13 @@ class TestMenu : public ITfMenu {
         const UINT ids[] = {fcitx::LangBarItem::kSettingsMenuId,
                             fcitx::LangBarItem::kUserDataMenuId,
                             fcitx::LangBarItem::kRestartMenuId,
-                            fcitx::LangBarItem::kStopMenuId};
+                            fcitx::LangBarItem::kStopMenuId,
+                            fcitx::LangBarItem::kAboutMenuId};
         const wchar_t *labels[] = {
             L"\u8f93\u5165\u6cd5\u8bbe\u7f6e",
             L"\u7528\u6237\u6570\u636e\u6587\u4ef6\u5939",
-            L"\u91cd\u542f\u670d\u52a1", L"\u5173\u95ed\u670d\u52a1"};
+            L"\u91cd\u542f\u670d\u52a1", L"\u5173\u95ed\u670d\u52a1",
+            L"\u5173\u4e8e"};
         assert(items < std::size(labels));
         assert(id == ids[items]);
         assert(std::wstring(text, length) == labels[items]);
@@ -136,7 +138,7 @@ int main() {
     assert(item->GetIcon(nullptr) == E_INVALIDARG);
     assert(item->InitMenu(nullptr) == E_INVALIDARG);
     TestMenu menu;
-    assert(item->InitMenu(&menu) == S_OK && menu.items == 4);
+    assert(item->InitMenu(&menu) == S_OK && menu.items == 5);
     assert(item->OnMenuSelect(999) == E_INVALIDARG);
     const auto dispatch =
         CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
@@ -152,7 +154,8 @@ int main() {
          {std::pair{LangBarItem::kRestartMenuId, LangBarItem::kRestartMessage},
           std::pair{LangBarItem::kStopMenuId, LangBarItem::kStopMessage},
           std::pair{LangBarItem::kUserDataMenuId,
-                    LangBarItem::kUserDataMessage}}) {
+                    LangBarItem::kUserDataMessage},
+          std::pair{LangBarItem::kAboutMenuId, LangBarItem::kAboutMessage}}) {
         assert(bound->OnMenuSelect(entry.first) == S_OK);
         assert(PeekMessageW(&message, dispatch, entry.second, entry.second,
                             PM_REMOVE));
@@ -168,6 +171,9 @@ int main() {
     assert(bound->OnMenuSelect(LangBarItem::kUserDataMenuId) == S_OK);
     assert(!PeekMessageW(&message, dispatch, LangBarItem::kUserDataMessage,
                          LangBarItem::kUserDataMessage, PM_REMOVE));
+    assert(bound->OnMenuSelect(LangBarItem::kAboutMenuId) == S_OK);
+    assert(!PeekMessageW(&message, dispatch, LangBarItem::kAboutMessage,
+                         LangBarItem::kAboutMessage, PM_REMOVE));
     bound.Release();
     DestroyWindow(dispatch);
     TF_LANGBARITEMINFO info{};

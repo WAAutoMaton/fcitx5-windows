@@ -1,16 +1,17 @@
 # Windows 输入法设置设计与实现
 
-更新日期：2026-10-10。菜单、Core 方案切换、服务控制和独立 WinUI 窗口已实现，当前协议为 v5。设置窗口包含“拼音”和只读“词库”tab；词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
+更新日期：2026-10-11。菜单、Core 方案切换、服务控制、关于窗口和独立 WinUI 窗口已实现，当前协议为 v5。设置窗口包含“拼音”和只读“词库”tab；词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
 
 ## 当前方案
 
-使用语言栏输入模式项提供右键菜单，包含“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”。设置界面使用独立的 `Fcitx5Settings.exe`，采用 WinUI 3、C++/WinRT 和 XAML；通过用户/session 级 Named Pipe 与 Core 通信。当前目标是 Windows 11 和已验证的 AMD64 部署。
+使用语言栏输入模式项提供右键菜单，包含“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。设置界面使用独立的 `Fcitx5Settings.exe`，采用 WinUI 3、C++/WinRT 和 XAML；通过用户/session 级 Named Pipe 与 Core 通信。当前目标是 Windows 11 和已验证的 AMD64 部署。
 
 设置包含全拼/双拼和内置双拼键位。Core 是配置的唯一写入者和运行时状态的管理者，设置程序只保存尚未确认的界面草稿。用户点击确定，Core 确认保存并应用成功后关闭窗口。
 
 ## 实现位置
 
-- `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，左键切换模式；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用四项命令。
+- `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，左键切换模式；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
+- `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
 - `win32/ipc/protocol.h`：v5 framing、设置消息、词库状态及运行时代次；全局请求与 context 请求分别校验。
 - `src/main.cpp`：创建包含 `keyboard-us`、`pinyin` 和已安装的 `shuangpin` 的内存输入法组。
@@ -67,9 +68,13 @@ flowchart LR
 
 ## 右键菜单
 
-菜单使用原生 `HMENU` / `TrackPopupMenuEx`，由 TSF 所在线程显示，内容为“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”。左键继续切换中英文模式，右键不触发模式切换。
+菜单使用原生 `HMENU` / `TrackPopupMenuEx`，由 TSF 所在线程显示，内容为“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。左键继续切换中英文模式，右键不触发模式切换。
 
 “用户数据文件夹”在后台任务中通过 Windows Roaming AppData known folder 定位 `%APPDATA%/Fcitx5`，目录不存在时创建，再通过 Shell 打开。该目录同时包含 `config/fcitx5` 设置和 `pinyin` 用户词典、学习历史；服务关闭时仍可打开，不启动 Core 或 Settings，不涉及 IPC 协议变更。
+
+“关于”由 TSF 的消息窗口在所属线程打开原生非模态窗口，不需要 Core、Settings 或 Windows App SDK runtime。显示 `Fcitx5 for Windows`、DLL 编译目标架构、CI 编号、commit 与带时区的 commit 时间，以及构建时的 `origin` 地址。GPL-3.0 许可证和仓库主页按钮调用系统浏览器；Git SSH 地址转换为 HTTPS 主页，原始地址和主页均可复制。非 HTTP(S) 的 origin 仍展示，但不启用主页按钮。
+
+`win32/cmake/buildinfo.cmake` 在每次 TSF 构建时读取 Git 元数据，生成内容未改变时不触发重新编译。GitHub Actions 读取 `GITHUB_RUN_NUMBER`；本地构建显示“本地编译（无 CI 信息）”，缺失 Git/origin/commit 时显示不可用说明。每个 TSF 实例只保留一个关于窗口，重复点击激活已有窗口；停用和析构均关闭窗口。窗口按自身 PMv2 DPI 缩放并恢复调用线程的 awareness，提供 Tab、Enter、Escape 和关闭按钮；不修改协议或注册元数据。
 
 `LangBarItem::OnClick(TF_LBI_CLK_RIGHT, ...)` 接入右键弹出路径；`InitMenu(ITfMenu*)` 与 `OnMenuSelect()` 也提供相同菜单项和统一命令处理。命令选中后先发送消息给 dispatch window，再由后台任务执行相应服务、`OpenSettings` 或目录操作，避免在菜单循环中执行 IPC。
 

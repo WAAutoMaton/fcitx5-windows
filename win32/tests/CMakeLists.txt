@@ -24,6 +24,11 @@ target_link_libraries(test_setup PRIVATE advapi32 secur32 user32 shell32 ole32 o
 add_test_target(test_langbar test_langbar.cpp ../tsf/langbaritem.cpp ../dll/util.cpp)
 target_compile_definitions(test_langbar PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(test_langbar PRIVATE user32 gdi32 oleaut32 uuid)
+add_test_target(test_about test_about.cpp ../tsf/aboutwindow.cpp)
+add_dependencies(test_about tsf_buildinfo)
+target_include_directories(test_about PRIVATE "${PROJECT_BINARY_DIR}/tsf/generated")
+target_compile_definitions(test_about PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(test_about PRIVATE user32 gdi32 shell32 comctl32)
 
 add_executable(test_register test_register.cpp ../dll/register.cpp ../dll/util.cpp)
 target_compile_options(test_register PRIVATE -UNDEBUG)

@@ -50,6 +50,7 @@ STDAPI Tsf::Activate(ITfThreadMgr *pThreadMgr, TfClientId tfClientId) {
 }
 
 STDAPI Tsf::Deactivate() {
+    about_.close();
     if (serviceTask_.valid()) {
         serviceTask_.get();
     }

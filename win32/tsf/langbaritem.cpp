@@ -26,7 +26,8 @@ constexpr MenuCommand kCommands[] = {
     {LangBarItem::kRestartMenuId, LangBarItem::kRestartMessage,
      L"\u91cd\u542f\u670d\u52a1"},
     {LangBarItem::kStopMenuId, LangBarItem::kStopMessage,
-     L"\u5173\u95ed\u670d\u52a1"}};
+     L"\u5173\u95ed\u670d\u52a1"},
+    {LangBarItem::kAboutMenuId, LangBarItem::kAboutMessage, L"\u5173\u4e8e"}};
 
 HICON makeTextIcon(const wchar_t *text) {
     const auto baseSize = GetSystemMetrics(SM_CXSMICON);
