@@ -92,12 +92,11 @@ run in separate jobs:
 
 | Job | Responsibility |
 | --- | --- |
-| `build-core-arm64` | Validate ARM64 Core compilation; no ARM64 TSF or Pinyin integration validation |
 | `build-x64` | Run the unified build with `-SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
 | `test-x64` | Download the x64 runtime and tests; run build-script regressions, the existing icon checksum, Pinyin/TSF/settings probes, default CTest and dictionary integration checks |
 | `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
 | `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install and uninstall, and upload the installer log |
-| `release` | Wait for both architectures, x64 tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
+| `release` | Wait for the x64 build, tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
 
 `test-x64` and `package-installer-x64` both depend only on `build-x64`, so they
 can start in parallel as soon as that job finishes. Packaging can succeed even

@@ -8,43 +8,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-core-arm64:
-    runs-on: windows-2025
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: |
-          C:/msys64/usr/bin/pacman -Syu --noconfirm
-          C:/msys64/usr/bin/pacman -S --noconfirm `
-            mingw-w64-clang-aarch64-extra-cmake-modules `
-            mingw-w64-clang-aarch64-dlfcn `
-            mingw-w64-clang-aarch64-libuv `
-            mingw-w64-clang-aarch64-clang `
-            mingw-w64-clang-x86_64-clang `
-            mingw-w64-clang-x86_64-cmake `
-            mingw-w64-clang-x86_64-ninja `
-            mingw-w64-clang-x86_64-pkgconf `
-            mingw-w64-clang-x86_64-gettext-tools
-          Add-Content $env:GITHUB_PATH "C:/msys64/clang64/bin"
-
-      - name: Apply Windows compatibility patches
-        run: ./scripts/apply-pinyin-patches.ps1
-
-      - name: Build
-        run: |
-          cmake -B build/arm64 -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DARCH=ARM64
-          cmake --build build/arm64
-
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-
   build-x64:
     runs-on: windows-2025
     steps:
@@ -297,7 +260,7 @@ jobs:
           path: build/installer-smoke
 
   release:
-    needs: [build-core-arm64, build-x64, test-x64, package-installer-x64, installer-smoke-x64]
+    needs: [build-x64, test-x64, package-installer-x64, installer-smoke-x64]
     if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
     runs-on: ubuntu-latest
     permissions:
