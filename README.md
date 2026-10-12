@@ -77,7 +77,7 @@ and deploys to `dist/pinyin`. It uses checksum-verified precompiled dictionary/m
 reuses the build cache on subsequent runs.
 
 The script does not install tools/runtimes or register the input method. Before
-updating an existing deployment, choose `关闭服务` and close applications loading
+updating an existing deployment, choose `Stop Services` and close applications loading
 its DLL. See [build options and deployment details](docs/build.md) for custom
 paths, individual builds and integration checks.
 
@@ -104,19 +104,19 @@ input methods or losing focus cancels unfinished preedit without committing it.
 
 Right-click the input-method indicator for:
 
-- `输入法设置`: manage the input-method list, edit engine options and view
+- `Input Method Settings`: manage the input-method list, edit engine options and view
   third-party Pinyin dictionaries. List changes save immediately; option edits
-  save with `应用` (Apply).
-- `重启服务`: restart/start Core and reopen Settings if it was already open.
-- `关闭服务`: stop Core/Settings and pause automatic startup until a restart.
-- `用户数据文件夹`: open `%APPDATA%/Fcitx5`, including settings and Pinyin learning data.
-- `关于`: show architecture, CI build number, commit and project/license links.
+  save with `Apply`.
+- `Restart Services`: restart/start Core and reopen Settings if it was already open.
+- `Stop Services`: stop Core/Settings and pause automatic startup until a restart.
+- `User Data Folder`: open `%APPDATA%/Fcitx5`, including settings and Pinyin learning data.
+- `About`: show architecture, CI build number, commit and project/license links.
 
 Compatible Fcitx5/libime binary `.dict` files placed in
 `%APPDATA%/Fcitx5/pinyin/dictionaries` are loaded automatically. See
 [dictionary details](docs/pinyin.md#third-party-dictionaries) for formats and conversion.
 
-To unregister a development deployment, choose `关闭服务`, then run:
+To unregister a development deployment, choose `Stop Services`, then run:
 
 ```powershell
 ./win32/scripts/uninstall.ps1
