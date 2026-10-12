@@ -49,6 +49,58 @@ int main(int argc, char **argv) {
         InputMethodsReply catalog;
         require(client.connect() && client.getInputMethods(catalog),
                 "catalog unavailable");
+        if (argc == 3 && std::string(argv[1]) == "--localization") {
+            const std::string language = argv[2];
+            GlobalSettingsReply global;
+            require(client.getGlobalSettings(global) &&
+                        global.error == SettingsError::None,
+                    "language retrieval failed");
+            const auto expected =
+                language == "zh_CN"   ? UiLanguage::SimplifiedChinese
+                : language == "zh_TW" ? UiLanguage::TraditionalChinese
+                                      : UiLanguage::English;
+            require((language == "zh_CN" || language == "zh_TW" ||
+                     language == "en_US") &&
+                        global.coreActiveLanguage == expected,
+                    "unexpected active language");
+            const struct {
+                const char *method;
+                const char *path;
+                const char *english;
+                const char *simplified;
+                const char *traditional;
+            } labels[] = {
+                {"pinyin", "CurrentCandidate", "Select Current Candidate",
+                 "\u9009\u62e9\u5f53\u524d\u5019\u9009\u8bcd",
+                 "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e"},
+                {"shuangpin", "CommitRawInput", "Commit Raw Input",
+                 "\u63d0\u4ea4\u539f\u59cb\u5b57\u7b26\u4e32",
+                 "\u63d0\u4ea4\u539f\u59cb\u5b57\u4e32"},
+                {"wbx", "DefaultCandidate", "Select Current Candidate",
+                 "\u9009\u62e9\u5f53\u524d\u5019\u9009\u8bcd",
+                 "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e"},
+                {"wbx", "SecondCandidate", "Select Second Candidate",
+                 "\u9009\u62e9\u7b2c\u4e8c\u4e2a\u5019\u9009\u8bcd",
+                 "\u9078\u64c7\u7b2c\u4e8c\u500b\u5019\u9078\u8a5e"}};
+            for (const auto &label : labels) {
+                MethodConfigReply config;
+                require(client.getMethodConfig(label.method, config) &&
+                            config.error == SettingsError::None,
+                        "localized config retrieval failed");
+                const auto &actual = option(config, label.path).label;
+                std::cout << label.method << "/" << label.path << "=" << actual
+                          << "\n";
+                require(actual == (expected == UiLanguage::SimplifiedChinese
+                                       ? label.simplified
+                                   : expected == UiLanguage::TraditionalChinese
+                                       ? label.traditional
+                                       : label.english),
+                        "engine config translation missing");
+            }
+            std::cout
+                << "PASS: localized Pinyin/Shuangpin/table descriptions\n";
+            return 0;
+        }
         if (argc == 2 && std::string(argv[1]) == "--inspect") {
             for (const auto &method : catalog.methods) {
                 std::cout << method.id << " panel=" << method.panel

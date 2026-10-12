@@ -766,6 +766,9 @@ void SettingsWindow::renderConfig() {
         {"NextPage", tr("settings", "Next Page")},
         {"PrevCandidate", tr("settings", "Previous Candidate")},
         {"NextCandidate", tr("settings", "Next Candidate")},
+        {"CurrentCandidate", tr("settings", "Select Current Candidate")},
+        {"ChooseLastCharFromPhrase",
+         tr("settings", "Choose Last Character from Phrase")},
         {"DefaultCandidate", tr("settings", "Select Current Candidate")}};
     std::string group;
     for (const auto &option : config_.options) {

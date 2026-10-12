@@ -21,6 +21,10 @@ int main() {
            L"\u5168\u5c40\u8bbe\u7f6e");
     assert(traditional.wide("settings", "Global Settings") ==
            L"\u5168\u57df\u8a2d\u5b9a");
+    assert(simplified.wide("settings", "Choose Last Character from Phrase") ==
+           L"\u9009\u8bcd\u672b\u5b57");
+    assert(traditional.wide("settings", "Choose Last Character from Phrase") ==
+           L"\u9078\u8a5e\u672b\u5b57");
     assert(simplified.text("unknown-context", "Global Settings") ==
            "Global Settings");
     assert(traditional.text("settings", "Missing message") ==

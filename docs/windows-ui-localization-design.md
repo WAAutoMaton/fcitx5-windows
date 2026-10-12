@@ -132,6 +132,10 @@ share/locale/zh_TW/LC_MESSAGES/fcitx5-windows.mo
 
 英文原文嵌入代码，不要求英文 `.mo`。上游 `fcitx5.mo`、`fcitx5-chinese-addons.mo` 与 Windows domain 同处 `share/locale`，分别维护。汉字候选、用户文本、文件名、URL、commit、配置键值和协议标识不作为 UI 词条翻译。紧凑的输入法图标标签按输入法身份处理，不由英文名称截取字节生成。
 
+Core 将进程内的 `LANGUAGE`、`FCITX_LOCALE` 和 UTF-8 `LC_ALL` 设置为选定语言，再通过 libintl 的 `setlocale` 初始化 locale（包括 Windows CRT 没有的 `LC_MESSAGES`），避免继承 `C` / `C.UTF-8` 时 gettext 忽略 `LANGUAGE`。创建 `Instance` 和加载引擎前，用 `StandardPaths::fcitxPath("localedir")` 注册 `fcitx5-chinese-addons` domain。上游插件工厂后续的重复注册沿用该目录，避免构建时的绝对安装前缀进入运行时资源查找。部署树移动后，拼音、双拼和码表的配置描述仍从当前安装树加载。Settings 分别匹配拼音的 `CurrentCandidate` 和码表的 `DefaultCandidate`；上游繁体译文缺失的“选词末字”使用 Windows domain 补充。
+
+`scripts/test-engine-localization.ps1 -Prefix <runtime> -TsfBuild <tsf-build>` 启动临时 Core，依次验证简体、繁体和英文的真实引擎配置描述，测试中跳过用户配置目录。与已运行的输入法并行验证时，Core 和 probes 必须都以 `FCITX5_UI_TEST` 构建，使用独立的 Pipe 和服务互斥；普通构建需要空闲服务端点。将运行树复制到与构建前缀不同的位置后执行此测试，可覆盖部署路径迁移。
+
 接口：`Translator::text(context, english)` 返回 UTF-8 `std::string`，`Translator::wide(context, english)` 返回 UTF-16 `std::wstring`；`format(context, english, args...)` 翻译后格式化编号参数。Settings 使用同样带显式 context 的 `tr` 封装，动态表格中的原文用 `i18n::mark` 标记。首版没有数量型 UI 文案，未来新增时使用 Boost.Locale 的复数查询，并同步扩展提取关键字。
 
 ```cpp

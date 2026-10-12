@@ -144,6 +144,9 @@ jobs:
       - name: Verify input method selection, settings and real Wubi commits
         run: ./scripts/test-inputmethods.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
 
+      - name: Verify relocated engine translations in Chinese and English
+        run: ./scripts/test-engine-localization.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
+
       - name: Verify third-party dictionary loading
         run: ./scripts/test-dictionaries.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-tests
 
@@ -156,6 +159,7 @@ jobs:
             build/pinyin-test/*.log
             build/dictionaries-test/*.log
             build/inputmethods-test/**/*.log
+            build/engine-localization-test/**/*.log
             build/ci-tests/Testing/Temporary/*.log
 
   package-installer-x64:

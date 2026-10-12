@@ -431,6 +431,11 @@ msgctxt "settings"
 msgid "Select Current Candidate"
 msgstr ""
 
+#: win32/settings/SettingsWindow.cpp:771
+msgctxt "settings"
+msgid "Choose Last Character from Phrase"
+msgstr ""
+
 #: win32/settings/SettingsWindow.cpp:781
 msgctxt "settings"
 msgid "Fuzzy Pinyin"

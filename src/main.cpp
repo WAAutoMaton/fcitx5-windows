@@ -2,15 +2,17 @@
 #include "../win32/ipc/service.h"
 #include "windowsfrontend.h"
 #include "windowskeyboard.h"
-#include <clocale>
 #include <fcitx-utils/environ.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
+#include <fcitx-utils/i18n.h>
 #include <fcitx-utils/key.h>
+#include <fcitx-utils/standardpaths.h>
 #include <fcitx/addonmanager.h>
 #include <fcitx/inputmethodmanager.h>
 #include <fcitx/instance.h>
 #include <filesystem>
+#include <libintl.h>
 #include <stdexcept>
 #include <windows.h>
 
@@ -50,12 +52,6 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
            win32::ipc::ServiceProcess &service) {
     Log::setLogRule("*=3,notimedate");
     setupEnv();
-    const auto *locale = std::setlocale(LC_ALL, "");
-    if (!locale || std::string_view(locale) == "C") {
-        if (!std::setlocale(LC_ALL, ".UTF-8")) {
-            FCITX_WARN() << "Cannot initialize a non-C locale for gettext";
-        }
-    }
     win32::ipc::GlobalSettings uiSettings;
     if (!win32::i18n::readSettings(uiSettingsFile, uiSettings)) {
         FCITX_WARN()
@@ -66,6 +62,18 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
     const auto language = win32::i18n::localeName(activeLanguage);
     setenv("LANGUAGE", language);
     setenv("FCITX_LOCALE", language);
+    // An inherited C/C.UTF-8 locale makes gettext ignore LANGUAGE.
+    setenv("LC_ALL", std::string(language) + ".UTF-8");
+    // libintl's setlocale also initializes LC_MESSAGES on Windows.
+    const auto *locale = ::setlocale(LC_ALL, "");
+    if (!locale || std::string_view(locale) == "C") {
+        if (!::setlocale(LC_ALL, ".UTF-8")) {
+            FCITX_WARN() << "Cannot initialize a non-C locale for gettext";
+        }
+    }
+    // Bind before addon factories register their build-time locale directory.
+    registerDomain("fcitx5-chinese-addons",
+                   StandardPaths::fcitxPath("localedir"));
     instance = std::make_unique<Instance>(0, nullptr);
     auto &addonMgr = instance->addonManager();
     win32::WindowsKeyboardFactory keyboardFactory;
