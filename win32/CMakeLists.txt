@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.27)
 
+# Keep the in-process TIP independent of runtimes already loaded by its host.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 if(NOT DEFINED CMAKE_C_COMPILER)
     set(CMAKE_C_COMPILER clang)
 endif()
@@ -9,6 +12,13 @@ endif()
 
 project(fcitx5-win32 VERSION 0.1.0)
 enable_language(RC)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+   AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC"
+   AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+    add_compile_options(
+        "$<$<COMPILE_LANGUAGE:C,CXX>:-fms-runtime-lib=static$<$<CONFIG:Debug>:_dbg>>")
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

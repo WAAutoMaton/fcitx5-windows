@@ -44,6 +44,44 @@ target_link_libraries(test_register PRIVATE advapi32 user32 shell32 ole32 oleaut
 add_dependencies(test_register fcitx5-x86_64)
 add_test(NAME test_register COMMAND test_register $<TARGET_FILE:fcitx5-x86_64>)
 
+configure_file("${CMAKE_SOURCE_DIR}/scripts/check-tsf-runtime.ps1"
+    "${CMAKE_CURRENT_BINARY_DIR}/check-tsf-runtime.ps1" COPYONLY)
+add_test(NAME test_tsf_runtime_imports COMMAND powershell.exe -NoProfile
+    -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_BINARY_DIR}/check-tsf-runtime.ps1"
+    -DllPath $<TARGET_FILE:fcitx5-x86_64>)
+
+add_executable(test_tsf_runtime_host test_tsf_runtime_host.cpp ../dll/util.cpp)
+target_compile_definitions(test_tsf_runtime_host PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(test_tsf_runtime_host PRIVATE ole32 oleaut32 uuid user32)
+add_dependencies(test_tsf_runtime_host fcitx5-x86_64)
+add_test(NAME test_tsf_runtime_host COMMAND test_tsf_runtime_host $<TARGET_FILE:fcitx5-x86_64>)
+set(TSF_PRELOAD_RUNTIME "" CACHE FILEPATH "Optional old MSVCP140.dll for the isolated TSF host regression")
+if(TSF_PRELOAD_RUNTIME)
+    add_test(NAME test_tsf_old_runtime_host COMMAND test_tsf_runtime_host
+        $<TARGET_FILE:fcitx5-x86_64> "${TSF_PRELOAD_RUNTIME}")
+endif()
+
+# Intentionally unsafe fixtures verify rejection of both PE import tables.
+foreach(fixture runtime_import_fixture runtime_delay_import_fixture)
+    add_library(${fixture} SHARED runtime_import_fixture.cpp)
+    set_property(TARGET ${fixture} PROPERTY MSVC_RUNTIME_LIBRARY
+        "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+       AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+        target_compile_options(${fixture} PRIVATE
+            "-fms-runtime-lib=dll$<$<CONFIG:Debug>:_dbg>")
+    endif()
+endforeach()
+target_link_options(runtime_delay_import_fixture PRIVATE
+    "LINKER:/DELAYLOAD:MSVCP140$<$<CONFIG:Debug>:D>.dll")
+target_link_libraries(runtime_delay_import_fixture PRIVATE delayimp)
+configure_file(test_runtime_audit.ps1 test_runtime_audit.ps1 COPYONLY)
+add_test(NAME test_tsf_runtime_audit COMMAND powershell.exe -NoProfile
+    -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_BINARY_DIR}/test_runtime_audit.ps1"
+    -StaticDllPath $<TARGET_FILE:fcitx5-x86_64>
+    -DynamicDllPath $<TARGET_FILE:runtime_import_fixture>
+    -DelayDllPath $<TARGET_FILE:runtime_delay_import_fixture>)
+
 add_executable(ipc_probe ipc_probe.cpp ../tsf/pipeclient.cpp)
 target_include_directories(ipc_probe PRIVATE "${CMAKE_SOURCE_DIR}/ipc")
 target_link_libraries(ipc_probe PRIVATE advapi32 user32)

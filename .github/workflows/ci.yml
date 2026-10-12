@@ -47,12 +47,15 @@ jobs:
           $bundle = 'build/ci-x64/test-bundle'
           New-Item -ItemType Directory -Force "$bundle/tests", "$bundle/dll" | Out-Null
           Copy-Item "$build/tests/*.exe" "$bundle/tests"
+          Copy-Item "$build/tests/*.dll", "$build/tests/check-tsf-runtime.ps1", "$build/tests/test_runtime_audit.ps1" "$bundle/tests"
           Copy-Item "$build/share" "$bundle/share" -Recurse
           Copy-Item "$build/dll/fcitx5-x86_64.dll", "$build/dll/penguin.ico" "$bundle/dll"
           function Convert-TestArgument([string]$Value) {
             $value = $Value.Replace('\', '/')
             if ($value.StartsWith("$build/", [StringComparison]::OrdinalIgnoreCase)) {
               return @{ path = $value.Substring($build.Length + 1) }
+            } elseif ($value -ieq "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe".Replace('\', '/')) {
+              return @{ value = 'powershell.exe' }
             } elseif ([IO.Path]::IsPathRooted($value)) {
               throw "Test argument is outside the TSF build: $Value"
             }

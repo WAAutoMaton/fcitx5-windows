@@ -32,6 +32,11 @@ MSYS2's Ninja and initializes the Visual Studio x64 development environment
 itself, so a normal PowerShell terminal is sufficient.
 
 Core uses the MSYS2 Windows GNU runtime; TSF uses the Windows SDK/ATL toolchain.
+The standalone `win32` project uses static MSVC CRT (`/MT`, `/MTd` for Debug)
+throughout the TIP, i18n/Boost.Locale libraries, Setup Helper and test hosts.
+Settings builds its own i18n library with its existing dynamic CRT configuration.
+TSF deployment checks normal and delayed PE imports using `llvm-readobj` and
+rejects dynamic MSVC/UCRT dependencies even when `-SkipTests` is supplied.
 Boost/iostreams and zstd must match the clang64 target/runtime. These environments
 are separate and cannot be substituted for each other. Scripts do not install
 or upgrade tools or system runtimes.
@@ -239,8 +244,22 @@ Default CTest includes `test_candidate` and `test_candidate_tsf`, which exercise
 DirectWrite/Direct2D draw function and popup lifecycle without Core or TIP
 registration. See [candidate rendering validation](windows-candidate-rendering.md#verification)
 for preview images and the remaining physical-monitor/application checks.
-Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes to the thirteen
-default tests, for sixteen total; it requires a running deployed Core.
+Default CTest also checks the TSF runtime imports and verifies that the audit
+rejects fixtures with normal and delayed MSVCP140 imports. The portable runtime
+host loads the actual DLL, creates/activates the TIP, exercises pipe mutexes,
+translated COM text and translation worker exit, and deactivates/unloads it three
+times without registering the TIP or dispatching its Core-start message. LLVM must be installed for the
+import checks; it is found in PATH or `C:/Program Files/LLVM`.
+Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes and requires a
+running deployed Core.
+
+To test coexistence with an older host runtime, configure a fresh TSF build with
+`-DTSF_PRELOAD_RUNTIME="C:/path/to/jbr/bin/MSVCP140.dll"`. This adds
+`test_tsf_old_runtime_host`, which verifies the requested DLL was preloaded before
+COM/TIP initialization and exercises the same lifecycle. The runtime and its
+matching dependencies must already exist; no runtime is downloaded or installed.
+This test covers activation and pipe locking, not full Core input or real IDE
+keyboard dispatch. Keep fresh Release and Debug build directories separate.
 
 The following script regressions do not perform real registration or terminate
 applications:
