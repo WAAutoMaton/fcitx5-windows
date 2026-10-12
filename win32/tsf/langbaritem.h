@@ -14,8 +14,11 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     static constexpr UINT kSettingsMessage = WM_APP + 4;
     static constexpr UINT kRestartMessage = WM_APP + 5;
     static constexpr UINT kStopMessage = WM_APP + 6;
-    static constexpr UINT kUserDataMessage = WM_APP + 8;
-    static constexpr UINT kAboutMessage = WM_APP + 9;
+    // WM_APP + 7..9 are owned by Tsf's service/candidate/mode dispatch.
+    // Keep language-bar commands in a separate range so messageWindowProc
+    // cannot mistake them for internal notifications.
+    static constexpr UINT kUserDataMessage = WM_APP + 10;
+    static constexpr UINT kAboutMessage = WM_APP + 11;
     static constexpr UINT kSettingsMenuId = 1;
     static constexpr UINT kRestartMenuId = 2;
     static constexpr UINT kStopMenuId = 3;

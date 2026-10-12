@@ -162,6 +162,10 @@ class Tsf : public ITfTextInputProcessorEx,
     bool modeSwitchKeyDown_ = false;
     bool modeSwitchPending_ = false;
     static constexpr UINT kModeSwitchMessage = WM_APP + 9;
+    static_assert(LangBarItem::kUserDataMessage != kRefreshCandidateMessage);
+    static_assert(LangBarItem::kUserDataMessage != kModeSwitchMessage);
+    static_assert(LangBarItem::kAboutMessage != kRefreshCandidateMessage);
+    static_assert(LangBarItem::kAboutMessage != kModeSwitchMessage);
     CComPtr<ITfCompartment> keyboardCompartment_;
     DWORD keyboardCompartmentCookie_ = TF_INVALID_COOKIE;
     bool keyboardOpen_ = true;
