@@ -159,6 +159,16 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 
 输入引擎设置即时生效，不要求重启 Core、重新注册 DLL 或重启应用。UI 语言是独立的全局设置，Core / Settings 在重启服务后生效；菜单在后台刷新后下次打开生效，已有关于窗口在再次点击时刷新。语言设置不触发预编辑重置，也不要求重新注册。
 
+## 快捷键录制
+
+引擎的 `KeyList` 选项保留多行文本编辑，并提供录制按钮。点击后打开独立的录制对话框，预览当前组合；确认时替换原文本选区，没有选区时追加一行。取消不改变草稿，确认录制后仍需点击页面的应用按钮才能保存配置。
+
+录制区域获得焦点时临时安装 `WH_KEYBOARD_LL` hook，在系统输入法快捷键、TSF 和文本编辑处理前消费按键。回调只在 Settings 窗口位于前台时录制和消费事件；失焦、关闭对话框或异常退出时释放 hook。每次按下更新预览，自动重复和释放修饰键不会覆盖已录制的完整组合，左右修饰键分别编码。
+
+结果遵循 Core 的 Windows 按键映射及 Fcitx portable 格式和 normalization。Core 尚未映射为符号的按键（例如 F1、带 Control/Alt 的 OEM 标点键）使用已有的 `<scanCode>` 语法按位置匹配，包含扩展键标记。Settings 不链接 Core 的 GNU 引擎库；协议不变，Core 继续负责校验配置和保存。系统保留组合、死键、AltGr 和复杂布局仍受现有 Windows 输入支持范围限制。
+
+`test_keycapture` 验证编码、normalization、左右修饰键、重复/释放状态；`scripts/test-settings-keycapture.ps1` 使用 `-UiTest` Settings 与 `ui_fixture` 的隔离端点验证实际录制、追加/替换、取消和应用后重新加载，不需要注册 TSF。
+
 ## 持久化与状态一致性
 
 `WindowsSettings` 保存用户级 `conf/windows.conf` v2，包含 scheme、profile、共享 revision、`InputMethods` 有序列表和 `Options` 引擎配置。默认路径为 `%APPDATA%/Fcitx5/config/fcitx5/conf/windows.conf`。v1 文件按原全拼/双拼方案迁移为英文键盘加对应拼音条目；下次成功保存写 v2。此文件是 Windows 设置的权威来源，设置程序不直接写文件。

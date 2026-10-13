@@ -1,11 +1,13 @@
 #include "SettingsWindow.h"
 #include "../ipc/transport.h"
+#include "keycapture.h"
 #include <commctrl.h>
 #undef GetCurrentTime
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <functional>
 #include <microsoft.ui.xaml.window.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -119,6 +121,105 @@ LRESULT CALLBACK sizing(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
     }
     return DefSubclassProc(window, message, wParam, lParam);
 }
+
+class RecordingKeyboard {
+  public:
+    RecordingKeyboard(HWND owner,
+                      std::function<void(const std::string &)> changed)
+        : owner_(owner), changed_(std::move(changed)) {}
+    ~RecordingKeyboard() { stop(); }
+    bool start() {
+        stop();
+        capture_.reset();
+        if (!GetKeyboardState(keyboard_))
+            return false;
+        hook_ = SetWindowsHookExW(WH_KEYBOARD_LL, process,
+                                  GetModuleHandleW(nullptr), 0);
+        if (hook_)
+            active_ = this;
+        return hook_ != nullptr;
+    }
+    void stop() {
+        if (hook_)
+            UnhookWindowsHookEx(hook_);
+        hook_ = nullptr;
+        if (active_ == this)
+            active_ = nullptr;
+    }
+
+  private:
+    static LRESULT CALLBACK process(int code, WPARAM message, LPARAM details) {
+        auto *self = active_;
+        if (code != HC_ACTION || !self || GetForegroundWindow() != self->owner_)
+            return CallNextHookEx(nullptr, code, message, details);
+        const auto &event = *reinterpret_cast<const KBDLLHOOKSTRUCT *>(details);
+        const auto key = event.vkCode;
+        auto *keyboard = self->keyboard_;
+        const bool release = message == WM_KEYUP || message == WM_SYSKEYUP;
+        if (key >= 256)
+            return CallNextHookEx(nullptr, code, message, details);
+        if (release)
+            keyboard[key] &= ~0x80;
+        else
+            keyboard[key] |= 0x80;
+        keyboard[VK_SHIFT] = (keyboard[VK_LSHIFT] | keyboard[VK_RSHIFT]) & 0x80;
+        keyboard[VK_CONTROL] =
+            (keyboard[VK_LCONTROL] | keyboard[VK_RCONTROL]) & 0x80;
+        keyboard[VK_MENU] = (keyboard[VK_LMENU] | keyboard[VK_RMENU]) & 0x80;
+        if (release) {
+            self->capture_.release(key);
+            return 1;
+        }
+        try {
+            const auto down = [&](int value) {
+                return (keyboard[value] & 0x80) != 0;
+            };
+            unsigned modifiers = 0;
+            if (down(VK_SHIFT) || down(VK_LSHIFT) || down(VK_RSHIFT))
+                modifiers |= settings::Shift;
+            if (down(VK_CONTROL) || down(VK_LCONTROL) || down(VK_RCONTROL))
+                modifiers |= settings::Control;
+            if (down(VK_MENU) || down(VK_LMENU) || down(VK_RMENU))
+                modifiers |= settings::Alt;
+            if (down(VK_LWIN) || down(VK_RWIN))
+                modifiers |= settings::Super;
+            modifiers |= settings::modifierForKey(static_cast<UINT>(key));
+            if (keyboard[VK_CAPITAL] & 1)
+                modifiers |= settings::Caps;
+            auto scan = event.scanCode;
+            if (event.flags & LLKHF_EXTENDED)
+                scan |= 0x100;
+            std::string unicode;
+            if (!(modifiers & (settings::Control | settings::Alt)) &&
+                !settings::modifierForKey(static_cast<UINT>(key))) {
+                WCHAR text[4]{};
+                const auto count =
+                    ToUnicodeEx(static_cast<UINT>(key), scan & 0xff, keyboard,
+                                text, 4, 4, GetKeyboardLayout(0));
+                if ((count == 1 && text[0] >= 0x20 && text[0] != 0x7f &&
+                     !(text[0] >= 0xd800 && text[0] <= 0xdfff)) ||
+                    (count == 2 && text[0] >= 0xd800 && text[0] <= 0xdbff &&
+                     text[1] >= 0xdc00 && text[1] <= 0xdfff)) {
+                    unicode =
+                        to_string(hstring(text, static_cast<uint32_t>(count)));
+                }
+            }
+            const auto value = self->capture_.press(static_cast<UINT>(key),
+                                                    scan, modifiers, unicode);
+            if (!value.empty())
+                self->changed_(value);
+        } catch (...) {
+            // Exceptions must not escape the Windows hook callback.
+        }
+        return 1;
+    }
+    inline static thread_local RecordingKeyboard *active_ = nullptr;
+    HWND owner_ = nullptr;
+    HHOOK hook_ = nullptr;
+    BYTE keyboard_[256]{};
+    settings::KeyCapture capture_;
+    std::function<void(const std::string &)> changed_;
+};
 } // namespace
 
 std::wstring SettingsWindow::tr(const char *context,
@@ -809,6 +910,7 @@ void SettingsWindow::renderConfig() {
         label.TextWrapping(TextWrapping::Wrap);
         label.VerticalAlignment(VerticalAlignment::Center);
         FrameworkElement editor{nullptr};
+        FrameworkElement layout{nullptr};
         if (option.kind == ipc::ConfigKind::Boolean) {
             ToggleSwitch toggle;
             toggle.IsOn(option.value == "True");
@@ -852,24 +954,140 @@ void SettingsWindow::renderConfig() {
             editor = combo;
         } else {
             TextBox text;
+            text.AcceptsReturn(option.kind == ipc::ConfigKind::KeyList);
             text.Text(to_hstring(option.value));
             text.Width(210);
             if (option.kind == ipc::ConfigKind::KeyList) {
-                text.AcceptsReturn(true);
                 text.TextWrapping(TextWrapping::Wrap);
                 text.MaxHeight(100);
+
+                Button record;
+                record.Content(SymbolIcon(Symbol::Keyboard));
+                record.Width(32);
+                record.Height(32);
+                record.Padding({0, 0, 0, 0});
+                record.Click(
+                    [weak = weak_from_this(), target = make_weak(text),
+                     caption = std::wstring(label.Text())](auto &&, auto &&) {
+                        if (auto self = weak.lock()) {
+                            if (auto editor = target.get())
+                                self->recordShortcut(editor, caption);
+                        }
+                    });
+                ToolTipService::SetToolTip(
+                    record, box_value(tr("settings", "Record shortcut")));
+                Automation::AutomationProperties::SetName(
+                    record, tr("settings", "Record shortcut"));
+                Automation::AutomationProperties::SetAutomationId(
+                    record, to_hstring(option.path + "/record"));
+                StackPanel panel;
+                panel.Orientation(Orientation::Horizontal);
+                panel.Spacing(8);
+                panel.Children().Append(text);
+                panel.Children().Append(record);
+                layout = panel;
             }
             editor = text;
         }
         Automation::AutomationProperties::SetName(editor, label.Text());
         Automation::AutomationProperties::SetAutomationId(
             editor, to_hstring(option.path));
-        Grid::SetColumn(editor, 1);
+        if (!layout)
+            layout = editor;
+        Grid::SetColumn(layout, 1);
         editor.VerticalAlignment(VerticalAlignment::Center);
+        layout.VerticalAlignment(VerticalAlignment::Center);
         row.Children().Append(label);
-        row.Children().Append(editor);
+        row.Children().Append(layout);
         editors_.push_back(editor);
         options_.Children().Append(row);
+    }
+}
+
+fire_and_forget SettingsWindow::recordShortcut(TextBox text,
+                                               std::wstring label) {
+    const auto lifetime = shared_from_this();
+    if (working_ || closed_)
+        co_return;
+    const auto selectionStart = text.SelectionStart();
+    const auto selectionLength = text.SelectionLength();
+    ContentDialog dialog;
+    dialog.XamlRoot(window_.Content().as<FrameworkElement>().XamlRoot());
+    dialog.Title(box_value(label));
+    dialog.PrimaryButtonText(tr("settings", "Use shortcut"));
+    dialog.CloseButtonText(tr("settings", "Cancel"));
+    dialog.IsPrimaryButtonEnabled(false);
+    TextBox preview;
+    preview.Width(280);
+    preview.IsReadOnly(true);
+    preview.PlaceholderText(tr("settings", "Recording..."));
+    Automation::AutomationProperties::SetName(
+        preview, tr("settings", "Recorded shortcut"));
+    Automation::AutomationProperties::SetAutomationId(preview,
+                                                      L"ShortcutPreview");
+    dialog.Content(preview);
+    auto recorder = std::make_shared<RecordingKeyboard>(
+        handle_, [target = make_weak(preview),
+                  owner = make_weak(dialog)](const auto &value) {
+            if (auto box = target.get())
+                box.Text(to_hstring(value));
+            if (auto popup = owner.get())
+                popup.IsPrimaryButtonEnabled(true);
+        });
+    preview.GotFocus(
+        [weak = std::weak_ptr(recorder), target = make_weak(preview),
+         error = tr("settings", "Cannot record shortcut.")](auto &&, auto &&) {
+            if (auto capture = weak.lock(); capture && !capture->start()) {
+                if (auto box = target.get())
+                    box.PlaceholderText(error);
+            }
+        });
+    preview.LostFocus([weak = std::weak_ptr(recorder)](auto &&, auto &&) {
+        if (auto capture = weak.lock())
+            capture->stop();
+    });
+    dialog.Opened([target = make_weak(preview)](auto &&, auto &&) {
+        if (auto box = target.get())
+            box.Focus(FocusState::Programmatic);
+    });
+    const auto activation = window_.Activated(
+        auto_revoke,
+        [weak = std::weak_ptr(recorder), target = make_weak(preview)](
+            auto &&, const WindowActivatedEventArgs &args) {
+            if (auto capture = weak.lock()) {
+                capture->stop();
+                if (args.WindowActivationState() !=
+                    WindowActivationState::Deactivated) {
+                    if (auto box = target.get();
+                        box && box.FocusState() != FocusState::Unfocused)
+                        capture->start();
+                }
+            }
+        });
+    try {
+        const auto result = co_await dialog.ShowAsync();
+        recorder->stop();
+        if (closed_ || result != ContentDialogResult::Primary)
+            co_return;
+        const std::wstring key(preview.Text());
+        if (key.empty())
+            co_return;
+        if (selectionLength) {
+            text.Select(selectionStart, selectionLength);
+            text.SelectedText(key);
+        } else {
+            std::wstring value(text.Text());
+            if (!value.empty() && value.back() != L'\n' &&
+                value.back() != L'\r')
+                value += L'\n';
+            text.Text(value + key);
+        }
+    } catch (const hresult_error &) {
+        recorder->stop();
+        if (!closed_) {
+            status_.Text(tr("settings", "Cannot record shortcut."));
+            status_.Visibility(Visibility::Visible);
+        }
     }
 }
 

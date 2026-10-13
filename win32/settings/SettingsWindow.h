@@ -35,6 +35,9 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     loadConfig(const std::string &id);
     std::vector<ipc::ConfigValue> configValues() const;
     void renderConfig();
+    winrt::fire_and_forget
+    recordShortcut(winrt::Microsoft::UI::Xaml::Controls::TextBox text,
+                   std::wstring label);
     void renderMethods(const std::string &selected = {});
     winrt::fire_and_forget
     loadIcon(winrt::Microsoft::UI::Xaml::Controls::Image image,

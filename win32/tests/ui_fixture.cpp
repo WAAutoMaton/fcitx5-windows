@@ -22,6 +22,7 @@ int wmain(int argc, wchar_t **argv) {
                         "P", "pinyin", true, false},
                        {"wbx", "Wubi", "", "W", "table", true, false}};
     bool prediction = false;
+    std::string prevPage = "Up\nminus";
     ipc::ServiceSecurity security;
     for (;;) {
         HANDLE pipe = CreateNamedPipeW(
@@ -99,9 +100,12 @@ int wmain(int argc, wchar_t **argv) {
                 if (!ipc::decodeMethodConfigRequest(request.payload, config))
                     break;
                 if (request.type == ipc::MessageType::SetMethodConfig) {
-                    for (const auto &value : config.values)
+                    for (const auto &value : config.values) {
                         if (value.path == "Prediction")
                             prediction = value.value == "True";
+                        else if (value.path == "PrevPage")
+                            prevPage = value.value;
+                    }
                     ++catalog.selection.revision;
                 }
                 ipc::MethodConfigReply description;
@@ -109,11 +113,15 @@ int wmain(int argc, wchar_t **argv) {
                 description.panel =
                     config.id == "keyboard-us" ? "keyboard" : "pinyin";
                 description.revision = catalog.selection.revision;
-                if (description.panel == "pinyin")
+                if (description.panel == "pinyin") {
                     description.options.push_back(
                         {"Prediction", "Prediction",
                          prediction ? "True" : "False", "False",
                          ipc::ConfigKind::Boolean});
+                    description.options.push_back({"PrevPage", "Previous Page",
+                                                   prevPage, "Up\nminus",
+                                                   ipc::ConfigKind::KeyList});
+                }
                 reply.type = ipc::MessageType::MethodConfigReply;
                 reply.payload = ipc::encodeMethodConfig(description);
                 break;
