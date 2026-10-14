@@ -106,7 +106,7 @@ void Tsf::uninitKeyEventSink() {
 
 BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
                      bool release, uint32_t modifiers) {
-    if (!win32::ipc::currentInstallationAllowsStart() || context == nullptr ||
+    if (!win32::ipc::clientInstallationAllowsUse() || context == nullptr ||
         context != textEditSinkContext_ || remoteContextId_ == 0 ||
         !pipe_.connected() || !foreground_) {
         return FALSE;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ipc/protocol.h"
+#include "../ipc/sandbox.h"
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -13,12 +14,14 @@ class PipeClient {
   public:
     using KeyReply = ipc::KeyReply;
 
-    PipeClient() = default;
+    explicit PipeClient(std::wstring name = {}, ipc::SandboxieApi sandbox = {})
+        : name_(std::move(name)), sandbox_(sandbox) {}
     ~PipeClient();
 
     bool connect();
     void disconnect();
     bool connected() const { return pipe_ != INVALID_HANDLE_VALUE; }
+    DWORD connectionError() const { return connectionError_; }
 
     bool createContext(uint64_t capabilities, uint64_t &contextId);
     bool focusIn(uint64_t contextId);
@@ -47,6 +50,7 @@ class PipeClient {
     bool setSettings(const ipc::PinyinSettings &settings,
                      ipc::SettingsReply &reply);
     bool openSettings(ipc::SettingsReply &reply);
+    bool hostCommand(ipc::MessageType command, DWORD &error);
 
   private:
     bool request(ipc::MessageType type, uint64_t contextId,
@@ -55,6 +59,9 @@ class PipeClient {
     bool writeFrame(const ipc::Frame &frame);
 
     HANDLE pipe_ = INVALID_HANDLE_VALUE;
+    std::wstring name_;
+    ipc::SandboxieApi sandbox_;
+    DWORD connectionError_ = ERROR_SUCCESS;
     uint64_t nextRequestId_ = 1;
     mutable std::mutex mutex_;
 };

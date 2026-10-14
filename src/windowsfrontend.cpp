@@ -1,10 +1,12 @@
 #include "windowsfrontend.h"
 #include "../win32/i18n/settings.h"
+#include "../win32/ipc/service.h"
 #include "../win32/ipc/transport.h"
 #include <algorithm>
 #include <chrono>
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/log.h>
+#include <fcitx-utils/standardpaths.h>
 #include <fcitx/candidatelist.h>
 #include <fcitx/inputmethodentry.h>
 #include <fcitx/inputmethodmanager.h>
@@ -392,8 +394,14 @@ void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId) {
             break;
         }
         auto response = std::move(pending->frame);
+        auto afterReply = std::move(pending->afterReply);
         lock.unlock();
-        if (!writeFrame(pipe, response)) {
+        const auto written = writeFrame(pipe, response);
+        if (afterReply) {
+            dispatcher_.schedule(
+                [action = std::move(afterReply), written] { action(written); });
+        }
+        if (!written) {
             break;
         }
     }
@@ -418,7 +426,9 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     auto response = makeResponse(request, MessageType::Ack);
     ipc::Reader reader(request.payload.data(), request.payload.size());
     ipc::Writer writer;
-    if ((request.type == MessageType::Hello &&
+    if ((ipc::hostCommand(request.type) &&
+         !ipc::validHostCommandRequest(request)) ||
+        (request.type == MessageType::Hello &&
          (request.contextId || !request.payload.empty())) ||
         (ipc::globalSettingsRequest(request.type) &&
          (request.contextId ||
@@ -450,6 +460,31 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     }
 
     switch (request.type) {
+    case MessageType::OpenUserDataFolder:
+    case MessageType::RestartServices:
+    case MessageType::StopServices: {
+        const auto error = hostCommands_.reserve(request.type);
+        writer.u32(error);
+        response.type = MessageType::ServiceReply;
+        response.payload = writer.take();
+        if (error == ERROR_SUCCESS) {
+            pending->afterReply = [this, type = request.type](bool delivered) {
+                try {
+                    hostCommands_.afterReply(
+                        type, delivered, [](const wchar_t *arguments) {
+                            const auto core =
+                                StandardPaths::fcitxPath("bindir") /
+                                "Fcitx5.exe";
+                            ipc::launchServiceExecutable(core, true, arguments);
+                        });
+                } catch (const std::exception &error) {
+                    FCITX_ERROR()
+                        << "Host service command failed: " << error.what();
+                }
+            };
+        }
+        break;
+    }
     case MessageType::GetGlobalSettings:
     case MessageType::SetGlobalSettings: {
         ipc::GlobalSettingsReply reply;

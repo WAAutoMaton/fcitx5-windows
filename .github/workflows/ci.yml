@@ -47,7 +47,7 @@ jobs:
           $bundle = 'build/ci-x64/test-bundle'
           New-Item -ItemType Directory -Force "$bundle/tests", "$bundle/dll" | Out-Null
           Copy-Item "$build/tests/*.exe" "$bundle/tests"
-          Copy-Item "$build/tests/*.dll", "$build/tests/check-tsf-runtime.ps1", "$build/tests/test_runtime_audit.ps1" "$bundle/tests"
+          Copy-Item "$build/tests/*.dll", "$build/tests/check-tsf-runtime.ps1", "$build/tests/test_runtime_audit.ps1", "$build/tests/test_sandboxie_template.ps1", "$build/tests/sandboxie-template.ps1" "$bundle/tests"
           Copy-Item "$build/share" "$bundle/share" -Recurse
           Copy-Item "$build/dll/fcitx5-x86_64.dll", "$build/dll/penguin.ico" "$bundle/dll"
           function Convert-TestArgument([string]$Value) {

@@ -86,7 +86,15 @@ static int runSettings() {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int) {
+    if (fcitx::ipc::hostOnlyClient()) {
+        OutputDebugStringW(L"Fcitx5: Settings must run outside Sandboxie.\n");
+        if (std::wstring_view(arguments) != L"--runtime-check")
+            MessageBoxW(nullptr, L"Open Fcitx5 settings outside Sandboxie.",
+                        L"Fcitx5 settings", MB_OK | MB_ICONERROR);
+        return ERROR_ACCESS_DENIED;
+    }
     try {
+        fcitx::ipc::requireHostServices();
         if (std::wstring_view(arguments) == L"--runtime-check") {
             const PACKAGE_VERSION minimum{WINDOWSAPPSDK_RUNTIME_VERSION_UINT64};
             const auto result = MddBootstrapInitialize2(

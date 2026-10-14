@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 7;
+constexpr uint16_t kVersion = 8;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -47,6 +47,10 @@ enum class MessageType : uint16_t {
     GetGlobalSettings = 30,
     SetGlobalSettings = 31,
     GlobalSettingsReply = 32,
+    OpenUserDataFolder = 33,
+    RestartServices = 34,
+    StopServices = 35,
+    ServiceReply = 36,
 };
 
 enum class PinyinScheme : uint8_t { Full = 0, Double = 1 };
@@ -135,7 +139,16 @@ constexpr bool globalSettingsRequest(MessageType type) {
            type == MessageType::GetMethodConfig ||
            type == MessageType::SetMethodConfig ||
            type == MessageType::GetGlobalSettings ||
-           type == MessageType::SetGlobalSettings;
+           type == MessageType::SetGlobalSettings ||
+           type == MessageType::OpenUserDataFolder ||
+           type == MessageType::RestartServices ||
+           type == MessageType::StopServices;
+}
+
+constexpr bool hostCommand(MessageType type) {
+    return type == MessageType::OpenUserDataFolder ||
+           type == MessageType::RestartServices ||
+           type == MessageType::StopServices;
 }
 
 constexpr uint32_t kMaxDictionaries = 4096;

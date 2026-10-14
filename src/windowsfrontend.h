@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../win32/ipc/hostcommands.h"
 #include "../win32/ipc/protocol.h"
 #include "windowsdictionaries.h"
 #include "windowssettings.h"
@@ -10,6 +11,7 @@
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputcontextmanager.h>
 #include <fcitx/instance.h>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -64,6 +66,7 @@ class WindowsPipeServer {
         std::condition_variable condition;
         bool ready = false;
         ipc::Frame frame;
+        std::function<void(bool)> afterReply;
     };
 
     void run();
@@ -83,6 +86,7 @@ class WindowsPipeServer {
     std::filesystem::path uiSettingsFile_;
     ipc::UiLanguage activeLanguage_;
     uint64_t settingsEpoch_ = 1;
+    ipc::HostCommands hostCommands_;
     std::atomic_bool stopping_ = false;
     std::thread thread_;
     HANDLE stopEvent_ = nullptr;

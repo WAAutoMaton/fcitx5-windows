@@ -1,4 +1,5 @@
 #include "../ipc/service.h"
+#include "../ipc/userdata.h"
 #include "tsf.h"
 #include <chrono>
 #include <filesystem>
@@ -7,39 +8,6 @@
 #include <shlobj.h>
 
 namespace fcitx {
-namespace {
-DWORD openUserDataFolder() {
-    const auto initialized = CoInitializeEx(
-        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    if (FAILED(initialized)) {
-        return HRESULT_CODE(initialized);
-    }
-    struct ComLifetime {
-        ~ComLifetime() { CoUninitialize(); }
-    } lifetime;
-    PWSTR roaming = nullptr;
-    const auto result =
-        SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming);
-    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> directory(
-        roaming, &CoTaskMemFree);
-    if (FAILED(result)) {
-        return HRESULT_CODE(result);
-    }
-    const auto path = std::filesystem::path(directory.get()) / L"Fcitx5";
-    std::error_code error;
-    std::filesystem::create_directories(path, error);
-    if (error) {
-        return static_cast<DWORD>(error.value());
-    }
-    SHELLEXECUTEINFOW execute{sizeof(execute)};
-    execute.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-    execute.lpVerb = L"open";
-    execute.lpFile = path.c_str();
-    execute.nShow = SW_SHOWNORMAL;
-    return ShellExecuteExW(&execute) ? ERROR_SUCCESS : GetLastError();
-}
-} // namespace
-
 void Tsf::requestService(UINT command) {
     if (serviceTask_.valid()) {
         if (command != kEnsureServiceMessage) {
@@ -74,8 +42,37 @@ void Tsf::requestService(UINT command) {
         serviceTask_ =
             std::async(std::launch::async, [core, command]() -> ServiceResult {
                 try {
+                    if (ipc::hostOnlyClient()) {
+                        PipeClient connection;
+                        if (!connection.connect()) {
+                            OutputDebugStringW(
+                                L"Fcitx5: host Core unavailable; check "
+                                L"Sandboxie OpenPipePath and start Core "
+                                L"outside the sandbox.\n");
+                            return {connection.connectionError()};
+                        }
+                        if (command == kEnsureServiceMessage)
+                            return {ERROR_SUCCESS};
+                        if (command == LangBarItem::kSettingsMessage) {
+                            ipc::SettingsReply reply;
+                            if (!connection.openSettings(reply) ||
+                                reply.error != ipc::SettingsError::None)
+                                return {ERROR_OPEN_FAILED};
+                            return {ERROR_SUCCESS};
+                        }
+                        const auto operation =
+                            command == LangBarItem::kUserDataMessage
+                                ? ipc::MessageType::OpenUserDataFolder
+                            : command == LangBarItem::kRestartMessage
+                                ? ipc::MessageType::RestartServices
+                                : ipc::MessageType::StopServices;
+                        DWORD error = ERROR_SUCCESS;
+                        return {connection.hostCommand(operation, error)
+                                    ? error
+                                    : ERROR_OPEN_FAILED};
+                    }
                     if (command == LangBarItem::kUserDataMessage) {
-                        return {openUserDataFolder()};
+                        return {ipc::openUserDataFolder()};
                     }
                     if ((command == LangBarItem::kRestartMessage ||
                          command == LangBarItem::kStopMessage) &&
@@ -162,6 +159,11 @@ void Tsf::pollServiceTask() {
                                 "If services are stopped, restart services. "
                                 "Check that the DLL, Core and Settings are in "
                                 "the same installation directory.");
+        if (ipc::hostOnlyClient())
+            text += L"\n" +
+                    translation->wide("settings",
+                                      "Start Core outside Sandboxie and allow "
+                                      "its named pipe in the sandbox.");
         text += L"\n" +
                 translation->format("settings", "Windows error: {0}", error);
         MessageBoxW(nullptr, text.c_str(), L"Fcitx5", MB_OK | MB_ICONERROR);

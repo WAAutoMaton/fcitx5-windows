@@ -1,5 +1,6 @@
 #pragma once
 #include "translator.h"
+#include <functional>
 #include <mutex>
 #include <windows.h>
 
@@ -10,6 +11,7 @@ class TranslationMonitor {
                                 std::filesystem::path resources = {});
     Translation poll();
     void reset();
+    void setLanguageReader(std::function<bool(ipc::UiLanguage &)> reader);
     Translation snapshot() const { return latest_; }
 
   private:
@@ -25,6 +27,7 @@ class TranslationMonitor {
         HMODULE module;
         std::filesystem::path settings;
         std::filesystem::path resources;
+        std::function<bool(ipc::UiLanguage &)> reader;
     };
     static DWORD WINAPI run(void *argument);
     std::shared_ptr<State> state_;
@@ -32,5 +35,6 @@ class TranslationMonitor {
     ULONGLONG nextCheck_ = 0;
     std::filesystem::path settings_;
     std::filesystem::path resources_;
+    std::function<bool(ipc::UiLanguage &)> reader_;
 };
 } // namespace fcitx::win32::i18n

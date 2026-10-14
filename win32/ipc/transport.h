@@ -58,15 +58,24 @@ inline bool transfer(HANDLE pipe, bool write, void *data, DWORD size,
         const auto wait =
             WaitForMultipleObjects(stopEvent ? 2 : 1, events, FALSE, timeout);
         if (wait != WAIT_OBJECT_0) {
+            const auto error = wait == WAIT_TIMEOUT  ? ERROR_SEM_TIMEOUT
+                               : wait == WAIT_FAILED ? GetLastError()
+                                                     : ERROR_OPERATION_ABORTED;
             CancelIoEx(pipe, &operation);
             GetOverlappedResult(pipe, &operation, &transferred, TRUE);
             CloseHandle(operation.hEvent);
+            SetLastError(error);
             return false;
         }
         success = GetOverlappedResult(pipe, &operation, &transferred, FALSE);
     }
+    const auto error = !success ? GetLastError() : ERROR_INVALID_DATA;
     CloseHandle(operation.hEvent);
-    return success && (!write || transferred == size);
+    if (!success || (write && transferred != size)) {
+        SetLastError(error);
+        return false;
+    }
+    return true;
 }
 
 inline bool readFrame(HANDLE pipe, Frame &frame, DWORD timeout,
@@ -82,21 +91,38 @@ inline bool readFrame(HANDLE pipe, Frame &frame, DWORD timeout,
                             &size, &operation);
     if (!success && GetLastError() == ERROR_IO_PENDING) {
         HANDLE events[] = {operation.hEvent, stopEvent};
-        if (WaitForMultipleObjects(stopEvent ? 2 : 1, events, FALSE, timeout) ==
-            WAIT_OBJECT_0) {
+        const auto wait =
+            WaitForMultipleObjects(stopEvent ? 2 : 1, events, FALSE, timeout);
+        if (wait == WAIT_OBJECT_0) {
             success = GetOverlappedResult(pipe, &operation, &size, FALSE);
         } else {
+            const auto error = wait == WAIT_TIMEOUT  ? ERROR_SEM_TIMEOUT
+                               : wait == WAIT_FAILED ? GetLastError()
+                                                     : ERROR_OPERATION_ABORTED;
             CancelIoEx(pipe, &operation);
             GetOverlappedResult(pipe, &operation, &size, TRUE);
-            success = FALSE;
+            CloseHandle(operation.hEvent);
+            SetLastError(error);
+            return false;
         }
     }
+    const auto error = GetLastError();
     CloseHandle(operation.hEvent);
     if (!success) {
+        SetLastError(error);
         return false;
     }
     data.resize(size);
-    return decodeFrame(data, frame);
+    if (decodeFrame(data, frame))
+        return true;
+    uint32_t magic = 0;
+    uint16_t version = 0;
+    Reader header(data.data(), data.size());
+    SetLastError(header.u32(magic) && header.u16(version) && magic == kMagic &&
+                         version != kVersion
+                     ? ERROR_REVISION_MISMATCH
+                     : ERROR_INVALID_DATA);
+    return false;
 }
 
 inline bool writeFrame(HANDLE pipe, const Frame &frame, DWORD timeout,

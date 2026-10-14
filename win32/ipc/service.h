@@ -2,6 +2,7 @@
 
 #include "atomicfile.h"
 #include "installation.h"
+#include "sandbox.h"
 #include "transport.h"
 #include <exception>
 #include <filesystem>
@@ -210,6 +211,7 @@ class ServiceProcess {
 
   private:
     static HANDLE createMutex(const std::wstring &name) {
+        requireHostServices();
         ServiceSecurity security;
         const auto mutex = CreateMutexW(security.get(), FALSE, name.c_str());
         if (!mutex) {
@@ -244,6 +246,7 @@ inline bool isServiceProcess(const wchar_t *role) {
 inline void launchServiceExecutable(const std::filesystem::path &path,
                                     bool background,
                                     const wchar_t *arguments = L"") {
+    requireHostServices();
     auto command = L"\"" + path.wstring() + L"\"";
     if (*arguments) {
         command += L" ";
@@ -360,6 +363,7 @@ class ServiceController {
         return L"Local\\" + identity_ + L"-" + role + suffix;
     }
     HANDLE createControlMutex() {
+        requireHostServices();
         ServiceSecurity security;
         const auto mutex =
             CreateMutexW(security.get(), FALSE,

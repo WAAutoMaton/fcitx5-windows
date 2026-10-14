@@ -12,15 +12,26 @@ void TranslationMonitor::reset() {
     nextCheck_ = 0;
 }
 
+void TranslationMonitor::setLanguageReader(
+    std::function<bool(ipc::UiLanguage &)> reader) {
+    reset();
+    reader_ = std::move(reader);
+}
+
 DWORD WINAPI TranslationMonitor::run(void *argument) {
     auto *task = static_cast<Task *>(argument);
     Translation result;
     try {
         ipc::GlobalSettings settings;
-        if (readSettings(task->settings.empty() ? settingsPath()
-                                                : task->settings,
-                         settings)) {
-            const auto language = resolveLanguage(settings.language);
+        ipc::UiLanguage language = ipc::UiLanguage::System;
+        const bool loaded =
+            task->reader ? task->reader(language)
+                         : readSettings(task->settings.empty() ? settingsPath()
+                                                               : task->settings,
+                                        settings);
+        if (loaded) {
+            if (!task->reader)
+                language = resolveLanguage(settings.language);
             if (language != task->previous->language())
                 result =
                     std::make_shared<Translator>(language, task->resources);
@@ -62,8 +73,8 @@ Translation TranslationMonitor::poll() {
         state_->running = false;
         return updated;
     }
-    auto *task =
-        new (std::nothrow) Task{state_, latest_, module, settings_, resources_};
+    auto *task = new (std::nothrow)
+        Task{state_, latest_, module, settings_, resources_, reader_};
     HANDLE thread =
         task ? CreateThread(nullptr, 0, run, task, 0, nullptr) : nullptr;
     if (thread)

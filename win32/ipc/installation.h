@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sandbox.h"
 #include <Windows.h>
 #include <filesystem>
 #include <fstream>
@@ -79,6 +80,12 @@ inline bool currentInstallationAllowsStart() {
                installationRootForAddress(reinterpret_cast<const void *>(
                    &currentInstallationAllowsStart)))
         .allowsStart();
+}
+
+inline bool clientInstallationAllowsUse() {
+    // The host Core enforces its own install/stop state; a sandbox view can be
+    // stale.
+    return hostOnlyClient() || currentInstallationAllowsStart();
 }
 
 } // namespace fcitx::win32::ipc

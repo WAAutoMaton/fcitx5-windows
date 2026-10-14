@@ -10,34 +10,52 @@ bool PipeClient::connect() {
     if (connected()) {
         return true;
     }
-    const auto name = ipc::pipeName();
+    const auto name = name_.empty() ? ipc::pipeName() : name_;
     if (name.empty() || !WaitNamedPipeW(name.c_str(), 50)) {
+        connectionError_ = name.empty() ? ERROR_INVALID_NAME : GetLastError();
         return false;
     }
     pipe_ = CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                         OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
     if (!connected()) {
+        connectionError_ = GetLastError();
+        return false;
+    }
+    ULONG server = 0;
+    if (sandbox_.hostOnly() && (!GetNamedPipeServerProcessId(pipe_, &server) ||
+                                !sandbox_.acceptsServer(server))) {
+        connectionError_ = ERROR_ACCESS_DENIED;
+        CloseHandle(pipe_);
+        pipe_ = INVALID_HANDLE_VALUE;
+        OutputDebugStringW(
+            L"Fcitx5: refusing sandboxed or unknown Pipe server.\n");
         return false;
     }
     DWORD mode = PIPE_READMODE_MESSAGE;
+    const auto fail = [this](DWORD error) {
+        CloseHandle(pipe_);
+        pipe_ = INVALID_HANDLE_VALUE;
+        connectionError_ = error;
+        return false;
+    };
     ipc::Frame request;
     request.type = ipc::MessageType::Hello;
     request.requestId = nextRequestId_++;
     ipc::Frame response;
     uint16_t version = 0;
-    if (SetNamedPipeHandleState(pipe_, &mode, nullptr, nullptr) &&
-        writeFrame(request) && readFrame(response) &&
-        response.type == ipc::MessageType::HelloReply &&
-        response.requestId == request.requestId && response.contextId == 0) {
-        ipc::Reader reader(response.payload.data(), response.payload.size());
-        if (reader.u16(version) && version == ipc::kVersion &&
-            !reader.remaining()) {
-            return true;
-        }
-    }
-    CloseHandle(pipe_);
-    pipe_ = INVALID_HANDLE_VALUE;
-    return false;
+    if (!SetNamedPipeHandleState(pipe_, &mode, nullptr, nullptr) ||
+        !writeFrame(request) || !readFrame(response))
+        return fail(GetLastError());
+    if (response.type != ipc::MessageType::HelloReply ||
+        response.requestId != request.requestId || response.contextId != 0)
+        return fail(ERROR_INVALID_DATA);
+    ipc::Reader reader(response.payload.data(), response.payload.size());
+    if (!reader.u16(version) || reader.remaining())
+        return fail(ERROR_INVALID_DATA);
+    if (version != ipc::kVersion)
+        return fail(ERROR_REVISION_MISMATCH);
+    connectionError_ = ERROR_SUCCESS;
+    return true;
 }
 
 void PipeClient::disconnect() {
@@ -224,6 +242,25 @@ bool PipeClient::openSettings(ipc::SettingsReply &reply) {
     return request(ipc::MessageType::OpenSettings, 0, {}, response) &&
            response.type == ipc::MessageType::SettingsReply &&
            ipc::decodeSettingsReply(response.payload, reply);
+}
+
+bool PipeClient::hostCommand(ipc::MessageType command, DWORD &error) {
+    error = ERROR_INVALID_PARAMETER;
+    if (!ipc::hostCommand(command))
+        return false;
+    ULONG server = 0;
+    if (connected() && GetNamedPipeServerProcessId(pipe_, &server))
+        AllowSetForegroundWindow(server);
+    ipc::Frame response;
+    if (!request(command, 0, {}, response) ||
+        response.type != ipc::MessageType::ServiceReply)
+        return false;
+    ipc::Reader reader(response.payload.data(), response.payload.size());
+    uint32_t result = 0;
+    if (!reader.u32(result) || reader.remaining())
+        return false;
+    error = result;
+    return true;
 }
 
 bool PipeClient::request(ipc::MessageType type, uint64_t contextId,

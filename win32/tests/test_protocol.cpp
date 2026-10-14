@@ -5,6 +5,13 @@
 using namespace fcitx::win32::ipc;
 
 int main() {
+    assert(hostCommand(MessageType::OpenUserDataFolder));
+    assert(hostCommand(MessageType::RestartServices));
+    assert(hostCommand(MessageType::StopServices));
+    assert(!hostCommand(MessageType::OpenSettings));
+    assert(globalSettingsRequest(MessageType::OpenUserDataFolder));
+    assert(globalSettingsRequest(MessageType::RestartServices));
+    assert(globalSettingsRequest(MessageType::StopServices));
     assert(globalSettingsRequest(MessageType::GetGlobalSettings));
     assert(globalSettingsRequest(MessageType::SetGlobalSettings));
     GlobalSettings global{UiLanguage::TraditionalChinese, 42};

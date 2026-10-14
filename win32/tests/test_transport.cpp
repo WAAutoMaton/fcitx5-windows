@@ -24,6 +24,7 @@ int main() {
     Frame reply;
     const auto start = GetTickCount64();
     assert(!readFrame(client, reply, 25));
+    assert(GetLastError() == ERROR_SEM_TIMEOUT);
     assert(GetTickCount64() - start < 1000);
 
     Frame source;
@@ -36,9 +37,17 @@ int main() {
     assert(readFrame(client, reply, 1000));
     assert(reply.requestId == 3 && reply.type == MessageType::Ack);
 
+    auto oldVersion = bytes;
+    oldVersion[4] = kVersion - 1;
+    assert(WriteFile(server, oldVersion.data(),
+                     static_cast<DWORD>(oldVersion.size()), &written, nullptr));
+    assert(!readFrame(client, reply, 1000));
+    assert(GetLastError() == ERROR_REVISION_MISMATCH);
+
     HANDLE stop = CreateEventW(nullptr, TRUE, TRUE, nullptr);
     assert(stop);
     assert(!readFrame(client, reply, INFINITE, stop));
+    assert(GetLastError() == ERROR_OPERATION_ABORTED);
     CloseHandle(stop);
     source.payload.resize(kMaxPayloadSize + 1);
     assert(!writeFrame(client, source, 1000));

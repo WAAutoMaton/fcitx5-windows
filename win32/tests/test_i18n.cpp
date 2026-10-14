@@ -67,6 +67,27 @@ int main() {
     assert(i18n::saveSettings(file, request, actual) ==
                ipc::SettingsError::None &&
            actual.revision == 2);
+    {
+        i18n::TranslationMonitor monitor(file);
+        monitor.setLanguageReader([](UiLanguage &language) {
+            language = UiLanguage::SimplifiedChinese;
+            return true;
+        });
+        const auto deadline = GetTickCount64() + 5000;
+        while (monitor.snapshot()->language() !=
+                   UiLanguage::SimplifiedChinese &&
+               GetTickCount64() < deadline) {
+            monitor.poll();
+            Sleep(10);
+        }
+        assert(monitor.snapshot()->language() == UiLanguage::SimplifiedChinese);
+        monitor.setLanguageReader([](UiLanguage &) { return false; });
+        monitor.poll();
+        Sleep(50);
+        monitor.poll();
+        assert(monitor.snapshot()->language() == UiLanguage::SimplifiedChinese);
+        monitor.reset();
+    }
     request.language = UiLanguage::English;
     assert(i18n::saveSettings(file, request, actual) ==
            ipc::SettingsError::Conflict);

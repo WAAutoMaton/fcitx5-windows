@@ -113,6 +113,17 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD) {
     threadMgr_ = pThreadMgr;
     foreground_ = true;
     clientId_ = tfClientId;
+    if (ipc::hostOnlyClient()) {
+        translationMonitor_.setLanguageReader([](ipc::UiLanguage &language) {
+            PipeClient client;
+            ipc::GlobalSettingsReply reply;
+            if (!client.connect() || !client.getGlobalSettings(reply) ||
+                reply.error != ipc::SettingsError::None)
+                return false;
+            language = reply.resolvedLanguage;
+            return true;
+        });
+    }
     pipe_.connect();
     if (!initMessageWindow()) {
         goto ActivateExError;

@@ -1,5 +1,6 @@
 #include "../win32/i18n/translator.h"
 #include "../win32/ipc/service.h"
+#include "../win32/ipc/userdata.h"
 #include "windowsfrontend.h"
 #include "windowskeyboard.h"
 #include <fcitx-utils/environ.h>
@@ -137,8 +138,12 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
 
 int main(int argc, char **argv) {
     try {
+        fcitx::win32::ipc::requireHostServices();
         if (!fcitx::win32::ipc::currentInstallationAllowsStart()) {
             return 0;
+        }
+        if (argc == 2 && std::string_view(argv[1]) == "--open-user-data") {
+            return static_cast<int>(fcitx::win32::ipc::openUserDataFolder());
         }
         if (argc == 2 && (std::string_view(argv[1]) == "--stop-services" ||
                           std::string_view(argv[1]) == "--restart-services")) {

@@ -593,6 +593,10 @@ msgctxt "settings"
 msgid "Service operation failed."
 msgstr "服務操作失敗。"
 
+msgctxt "settings"
+msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
+msgstr "請在 Sandboxie 外啟動 Core，並在沙箱中允許存取其具名管道。"
+
 #: win32/tsf/servicecontrol.cpp:162
 msgctxt "settings"
 msgid "If services are stopped, restart services. Check that the DLL, Core and Settings are in the same installation directory."

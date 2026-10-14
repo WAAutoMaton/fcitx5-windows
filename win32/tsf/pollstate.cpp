@@ -103,7 +103,7 @@ void Tsf::pollState() {
         modeSwitchKeyDown_ = false;
     }
     pollServiceTask();
-    if (!win32::ipc::currentInstallationAllowsStart()) {
+    if (!win32::ipc::clientInstallationAllowsUse()) {
         pipe_.disconnect();
         clearRemoteContext();
         hideCandidates();
