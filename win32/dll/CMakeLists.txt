@@ -14,3 +14,8 @@ target_include_directories(fcitx5-x86_64 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(fcitx5-x86_64 PRIVATE "-Wno-dll-attribute-on-redeclaration")
 
 target_link_libraries(fcitx5-x86_64 tsf)
+
+option(ENABLE_MODERN_TSF_CATEGORIES "Declare UIElement/immersive support for explicit system acceptance" OFF)
+if(ENABLE_MODERN_TSF_CATEGORIES)
+    target_compile_definitions(fcitx5-x86_64 PRIVATE FCITX5_MODERN_TSF_CATEGORIES)
+endif()

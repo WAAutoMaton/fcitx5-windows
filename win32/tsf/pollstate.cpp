@@ -68,6 +68,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
+    if (self && message == kCandidateActionMessage) {
+        self->AddRef();
+        self->processCandidateActions();
+        self->Release();
+        return 0;
+    }
     if (self && message == LangBarItem::kToggleMessage) {
         self->AddRef();
         self->toggleMode();
@@ -86,7 +92,17 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
     }
     if (self && message == LangBarItem::kAboutMessage) {
         self->AddRef();
-        self->about_.show();
+        self->about_.close();
+        if (!self->modernUi_ && self->inputAllowed_ &&
+            self->aboutUi_.begin(self->uiElementMgr_, L"Fcitx5 About", [self] {
+                self->about_.close();
+                self->aboutUi_.reset();
+            })) {
+            if (self->about_.show())
+                self->aboutUi_.setVisible(true);
+            else
+                self->aboutUi_.reset();
+        }
         self->Release();
         return 0;
     }
@@ -94,6 +110,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
 }
 
 void Tsf::pollState() {
+    if (!inputAllowed_)
+        return;
+    if (restrictedInput_ && langBarItem_)
+        langBarItem_->setAvailable(pipe_.connected());
+    if (aboutUi_.active() && !about_.handle())
+        aboutUi_.reset();
     if (const auto translation = translationMonitor_.poll()) {
         if (langBarItem_)
             langBarItem_.p->setTranslation(translation);
@@ -115,6 +137,10 @@ void Tsf::pollState() {
         return;
     }
     if (!textEditSinkContext_ || !foreground_) {
+        return;
+    }
+    if (!refreshContextPolicy()) {
+        clearRemoteContext();
         return;
     }
     if (candidateLayoutPending_) {

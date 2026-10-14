@@ -87,10 +87,8 @@ static int runSettings() {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int) {
     if (fcitx::ipc::hostOnlyClient()) {
-        OutputDebugStringW(L"Fcitx5: Settings must run outside Sandboxie.\n");
-        if (std::wstring_view(arguments) != L"--runtime-check")
-            MessageBoxW(nullptr, L"Open Fcitx5 settings outside Sandboxie.",
-                        L"Fcitx5 settings", MB_OK | MB_ICONERROR);
+        OutputDebugStringW(
+            L"Fcitx5: Settings requires an unrestricted host process.\n");
         return ERROR_ACCESS_DENIED;
     }
     try {

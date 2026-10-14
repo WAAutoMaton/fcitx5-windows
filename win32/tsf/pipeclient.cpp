@@ -1,5 +1,7 @@
 #include "pipeclient.h"
+#include "../ipc/pipeidentity.h"
 #include "../ipc/transport.h"
+#include <filesystem>
 
 namespace fcitx {
 
@@ -10,7 +12,17 @@ bool PipeClient::connect() {
     if (connected()) {
         return true;
     }
-    const auto name = name_.empty() ? ipc::pipeName() : name_;
+    const auto environment = ipc::clientEnvironment(sandbox_);
+    const auto policy = ipc::isolationPolicy(environment);
+    const bool restricted = policy == ipc::IsolationPolicy::RestrictedInput;
+    if (policy == ipc::IsolationPolicy::Refuse || !environment.tokenKnown) {
+        connectionError_ = ERROR_ACCESS_DENIED;
+        connectionStage_ = "client environment";
+        return false;
+    }
+    const auto name =
+        name_.empty() ? (restricted ? ipc::inputPipeName() : ipc::pipeName())
+                      : name_;
     serverProcessId_ = 0;
     connectionStage_ = "WaitNamedPipe";
     if (name.empty() || !WaitNamedPipeW(name.c_str(), 50)) {
@@ -18,8 +30,10 @@ bool PipeClient::connect() {
         return false;
     }
     connectionStage_ = "CreateFile";
-    pipe_ = CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                        OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+    pipe_ = CreateFileW(
+        name.c_str(),
+        restricted ? ipc::kInputPipeAccess : GENERIC_READ | GENERIC_WRITE, 0,
+        nullptr, OPEN_EXISTING, ipc::kPipeClientFlags, nullptr);
     if (!connected()) {
         connectionError_ = GetLastError();
         return false;
@@ -65,6 +79,47 @@ bool PipeClient::connect() {
         return fail(ERROR_INVALID_DATA);
     if (version != ipc::kVersion)
         return fail(ERROR_REVISION_MISMATCH);
+    if (restricted) {
+        connectionStage_ = "server identity handshake";
+        request.type = ipc::MessageType::AuthenticateServer;
+        request.requestId = nextRequestId_++;
+        if (!writeFrame(request) || !readFrame(response))
+            return fail(GetLastError());
+        uint64_t value = 0;
+        ipc::Reader identity(response.payload.data(), response.payload.size());
+        if (response.type != ipc::MessageType::ServerIdentityReply ||
+            response.requestId != request.requestId || response.contextId ||
+            !identity.u64(value) || !value || identity.remaining() ||
+            value >= UINTPTR_MAX - 1)
+            return fail(ERROR_INVALID_DATA);
+        const auto process =
+            reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(value));
+        HMODULE module = nullptr;
+        WCHAR modulePath[32768]{};
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&ipc::inputPipeName),
+                           &module);
+        const auto length = GetModuleFileNameW(module, modulePath, 32768);
+        const auto expected = length && length < 32768
+                                  ? (std::filesystem::path(modulePath)
+                                         .parent_path()
+                                         .parent_path() /
+                                     L"bin" / L"Fcitx5.exe")
+                                        .lexically_normal()
+                                        .wstring()
+                                  : std::wstring{};
+        ULONG peerId = 0;
+        const bool bound = GetNamedPipeServerProcessId(pipe_, &peerId) &&
+                           GetProcessId(process) == peerId;
+        const bool verified =
+            bound &&
+            ipc::verifiedServerHandle(pipe_, process, environment, expected);
+        if (bound)
+            CloseHandle(process);
+        if (!verified)
+            return fail(ERROR_ACCESS_DENIED);
+    }
     connectionError_ = ERROR_SUCCESS;
     if (GetNamedPipeServerProcessId(pipe_, &server))
         serverProcessId_ = server;
@@ -139,6 +194,21 @@ bool PipeClient::key(uint64_t contextId, bool release, uint32_t virtualKey,
 bool PipeClient::poll(uint64_t contextId, KeyReply &reply) {
     ipc::Frame response;
     return request(ipc::MessageType::PollState, contextId, {}, response) &&
+           response.type == ipc::MessageType::KeyReply &&
+           ipc::decodeKeyReply(response.payload, reply);
+}
+
+bool PipeClient::candidateAction(uint64_t contextId,
+                                 uint64_t candidateGeneration,
+                                 ipc::CandidateAction action, uint32_t index,
+                                 KeyReply &reply) {
+    ipc::Writer writer;
+    writer.u64(candidateGeneration);
+    writer.u8(static_cast<uint8_t>(action));
+    writer.u32(index);
+    ipc::Frame response;
+    return request(ipc::MessageType::CandidateAction, contextId, writer.take(),
+                   response) &&
            response.type == ipc::MessageType::KeyReply &&
            ipc::decodeKeyReply(response.payload, reply);
 }

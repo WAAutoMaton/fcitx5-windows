@@ -21,6 +21,7 @@ param(
     [ValidateSet('Source', 'Prebuilt')][string]$DataMode = 'Prebuilt',
     [string]$DataArchive = '',
     [ValidateRange(1, 256)][int]$Jobs = 6,
+    [switch]$ModernApps,
     [switch]$SkipTests
 )
 
@@ -164,7 +165,7 @@ try {
     Invoke-BuildCommand $cmake (@('-S', "$root/win32", '-B', $tsfBuild, '-G', 'Ninja',
         '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_C_COMPILER=$clang", "-DCMAKE_CXX_COMPILER=$clangxx",
         "-DCMAKE_RC_COMPILER=$resourceCompiler", "-DCMAKE_MAKE_PROGRAM=$ninja",
-        '-DENABLE_PINYIN_INTEGRATION_TESTS=OFF') + $localeOptions)
+        '-DENABLE_PINYIN_INTEGRATION_TESTS=OFF', "-DENABLE_MODERN_TSF_CATEGORIES=$($ModernApps.IsPresent.ToString().ToUpperInvariant())") + $localeOptions)
     Invoke-BuildCommand $cmake @('--build', $tsfBuild, '-j', "$Jobs")
 
     Write-Host '[3/5] Build WinUI Settings and stage TSF/Settings.'

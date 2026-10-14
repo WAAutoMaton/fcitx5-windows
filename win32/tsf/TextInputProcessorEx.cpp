@@ -1,3 +1,5 @@
+#include "buildinfo.h"
+#include "diagnostics.h"
 #include "displayattribute.h"
 #include "textutil.h"
 #include "tsf.h"
@@ -23,6 +25,10 @@ HRESULT Tsf::initLangBarItem() {
     }
     langBarItemManager_ = std::move(manager);
     langBarItem_.Attach(item);
+    item->setUiPolicy(modernUi_, restrictedInput_);
+    if (restrictedInput_)
+        item->setAvailable(pipe_.connected());
+    item->setUiManager(uiElementMgr_);
     item->setTranslation(translationMonitor_.snapshot());
     about_.setTranslation(translationMonitor_.snapshot());
     return S_OK;
@@ -70,6 +76,7 @@ STDAPI Tsf::Activate(ITfThreadMgr *pThreadMgr, TfClientId tfClientId) {
 STDAPI Tsf::Deactivate() {
     translationMonitor_.reset();
     about_.close();
+    aboutUi_.reset();
     if (serviceTask_.valid()) {
         serviceTask_.get();
     }
@@ -91,6 +98,8 @@ STDAPI Tsf::Deactivate() {
         return S_OK;
     }
     initTextEditSink(CComPtr<ITfDocumentMgr>());
+    hideCandidates();
+    uiElementMgr_.Release();
     uninitKeyboardCompartment();
     uninitThreadMgrEventSink();
     uninitKeyEventSink();
@@ -100,19 +109,57 @@ STDAPI Tsf::Deactivate() {
     return S_OK;
 }
 
-STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD) {
+STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId,
+                       DWORD flags) {
     if (pThreadMgr == nullptr || tfClientId == TF_CLIENTID_NULL || threadMgr_) {
         return E_INVALIDARG;
     }
     CComPtr<ITfDocumentMgr> documentMgr;
     CComPtr<ITfCategoryMgr> categories;
     HRESULT activationResult = E_FAIL;
-    if (SUCCEEDED(categories.CoCreateInstance(CLSID_TF_CategoryMgr))) {
-        categories->RegisterGUID(kPreeditAttribute, &attributeAtom_);
+    activationFlags_ = flags;
+    activeFlags_ = flags;
+    CComPtr<ITfThreadMgrEx> extended;
+    HRESULT flagsResult = pThreadMgr->QueryInterface(IID_PPV_ARGS(&extended));
+    if (SUCCEEDED(flagsResult)) {
+        DWORD active = 0;
+        flagsResult = extended->GetActiveFlags(&active);
+        if (SUCCEEDED(flagsResult))
+            activeFlags_ |= active;
     }
+    const auto environment = ipc::clientEnvironment();
+    const auto policy = ipc::isolationPolicy(environment);
+    restrictedInput_ = policy == ipc::IsolationPolicy::RestrictedInput;
+    modernUi_ =
+        environment.appContainer || restrictedInput_ ||
+        (activeFlags_ & (TF_TMF_IMMERSIVEMODE | TF_TMF_UIELEMENTENABLEDONLY));
+    inputAllowed_ =
+        policy != ipc::IsolationPolicy::Refuse &&
+        !(activeFlags_ & (TF_TMF_SECUREMODE | TF_TMF_COMLESS | TF_TMF_WOW16));
+    WCHAR diagnostic[384]{};
+    swprintf_s(
+        diagnostic,
+        L"Fcitx5: ActivateEx pid=%lu tid=%lu bits=%u flags=0x%lx active=0x%lx "
+        L"query=0x%lx isolation=%u token=%u package=%u input=%u\n",
+        GetCurrentProcessId(), GetCurrentThreadId(),
+        static_cast<unsigned>(sizeof(void *) * 8), flags, activeFlags_,
+        static_cast<unsigned long>(flagsResult),
+        static_cast<unsigned>(environment.isolation), environment.tokenKnown,
+        environment.hasPackageIdentity, inputAllowed_);
+    OutputDebugStringW(diagnostic);
+    OutputDebugStringW(L"Fcitx5: build=");
+    OutputDebugStringW(buildinfo::commit);
+    OutputDebugStringW(L"\n");
     threadMgr_ = pThreadMgr;
     foreground_ = true;
     clientId_ = tfClientId;
+    if (!inputAllowed_)
+        return S_OK;
+    if (SUCCEEDED(categories.CoCreateInstance(CLSID_TF_CategoryMgr))) {
+        categories->RegisterGUID(kPreeditAttribute, &attributeAtom_);
+    }
+    diagnosticResult(L"UIElement manager",
+                     threadMgr_->QueryInterface(IID_PPV_ARGS(&uiElementMgr_)));
     if (ipc::hostOnlyClient()) {
         translationMonitor_.setLanguageReader([](ipc::UiLanguage &language) {
             PipeClient client;
@@ -125,28 +172,37 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD) {
         });
     }
     pipe_.connect();
+    diagnosticResult(L"Pipe connect",
+                     HRESULT_FROM_WIN32(pipe_.connectionError()));
     if (!initMessageWindow()) {
         goto ActivateExError;
     }
     activationResult = initKeyboardCompartment();
+    diagnosticResult(L"keyboard compartment", activationResult);
     if (FAILED(activationResult)) {
         goto ActivateExError;
     }
     activationResult = initLangBarItem();
+    diagnosticResult(L"language bar", activationResult);
     if (FAILED(activationResult)) {
-        goto ActivateExError;
+        OutputDebugStringW(L"Fcitx5: optional language bar unavailable.\n");
     }
     activationResult = initThreadMgrEventSink();
+    diagnosticResult(L"thread manager sink", activationResult);
     if (FAILED(activationResult)) {
         goto ActivateExError;
     }
 
     if ((threadMgr_->GetFocus(&documentMgr) == S_OK) &&
         (documentMgr != nullptr)) {
-        initTextEditSink(documentMgr);
+        if (!initTextEditSink(documentMgr)) {
+            activationResult = E_FAIL;
+            goto ActivateExError;
+        }
     }
 
     activationResult = initKeyEventSink();
+    diagnosticResult(L"key sink", activationResult);
     if (FAILED(activationResult)) {
         goto ActivateExError;
     }

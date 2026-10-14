@@ -41,7 +41,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-<当前用户SID>-*
 
 ### 1. 准备宿主输入法与目标沙箱
 
-1. 先在沙箱外确认 Fcitx5 已安装、已注册，并能在普通 x64 应用中输入中文。Core、TSF DLL 和 Settings 应来自同一套构建，使用一致的协议 v8；仅添加 Sandboxie 规则不能代替输入法安装或注册。
+1. 先在沙箱外确认 Fcitx5 已安装、已注册，并能在普通 x64 应用中输入中文。Core、TSF DLL 和 Settings 应来自同一套构建，使用一致的协议 v9；仅添加 Sandboxie 规则不能代替输入法安装或注册。
 2. 在 Sandboxie 管理器中确认要配置的沙箱已启用，并记下它在 `Sandboxie.ini` 中的节名，例如 `[DefaultBox]` 对应 `DefaultBox`。下文命令中的 `DefaultBox` 都要替换为实际节名，而非自定义显示名称。多个沙箱需要分别配置。
 3. 在沙箱外，以平时使用输入法的 Windows 用户启动已部署的 `bin/Fcitx5.exe`。例如安装目录为 `C:\Fcitx5` 时，在沙箱外 PowerShell 中运行：
 
@@ -153,7 +153,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 
 ## 验证与交付
 
-代码已接入 HostOnly 策略、服务端归属检查、UI 语言 IPC 和协议 v8 的宿主操作。生成规则：
+代码已接入 HostOnly 策略、服务端归属检查、UI 语言 IPC 和宿主操作。现代应用支持将协议统一升级至 v9，Sandboxie endpoint 名和管理行为保持不变。生成规则：
 
 ```powershell
 ./scripts/sandboxie-template.ps1 -BoxName DefaultBox -SessionOnly
@@ -161,7 +161,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 ./scripts/sandboxie-template.ps1 -BoxName DefaultBox -Apply
 ```
 
-前两个命令只向标准输出写入片段；最后一个命令通过 Sandboxie 的 `SbieIni.exe append` 将规则写入指定沙箱。`-Apply` 是显式配置操作，必须提供 `-BoxName`。应用规则后重新打开应用。首次使用需先在沙箱外启动 Core；手动关闭后同样需在沙箱外重启。Core、TSF、Settings 必须使用一致的协议 v8 构建。
+前两个命令只向标准输出写入片段；最后一个命令通过 Sandboxie 的 `SbieIni.exe append` 将规则写入指定沙箱。`-Apply` 是显式配置操作，必须提供 `-BoxName`。应用规则后重新打开应用。首次使用需先在沙箱外启动 Core；手动关闭后同样需在沙箱外重启。Core、TSF、Settings 必须使用一致的协议 v9 构建。
 
 `-Apply -WhatIf` 不执行 Sandboxie 命令；应用前检查目标沙箱已启用，写入后确认规则存在，已有相同规则时不重复追加。脚本不会关闭应用或终止进程。
 

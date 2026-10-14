@@ -106,6 +106,12 @@ void Tsf::uninitKeyEventSink() {
 
 BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
                      bool release, uint32_t modifiers) {
+    if (!inputAllowed_ || context != textEditSinkContext_)
+        return FALSE;
+    if (!refreshContextPolicy()) {
+        clearRemoteContext();
+        return FALSE;
+    }
     if (!win32::ipc::clientInstallationAllowsUse() || context == nullptr ||
         context != textEditSinkContext_ || remoteContextId_ == 0 ||
         !pipe_.connected() || !foreground_) {
@@ -168,6 +174,8 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
 STDMETHODIMP Tsf::OnSetFocus(BOOL foreground) {
     foreground_ = foreground != FALSE;
     if (!foreground_) {
+        about_.close();
+        aboutUi_.reset();
         clearRemoteContext();
     } else {
         initRemoteContext();
@@ -180,8 +188,8 @@ STDMETHODIMP Tsf::OnTestKeyDown(ITfContext *context, WPARAM key, LPARAM details,
     if (pfEaten == nullptr) {
         return E_INVALIDARG;
     }
-    *pfEaten = context && context == textEditSinkContext_ && foreground_ &&
-               remoteContextId_ && pipe_.connected() &&
+    *pfEaten = contextAllowsInput(context) && context == textEditSinkContext_ &&
+               foreground_ && remoteContextId_ && pipe_.connected() &&
                routesKey(static_cast<uint32_t>(key), currentModifiers(details),
                          keyboardOpen_,
                          !state_.preedit.empty() || !state_.candidates.empty(),
@@ -204,8 +212,8 @@ STDMETHODIMP Tsf::OnTestKeyUp(ITfContext *context, WPARAM key, LPARAM,
     if (pfEaten == nullptr) {
         return E_INVALIDARG;
     }
-    *pfEaten = context && context == textEditSinkContext_ && foreground_ &&
-               remoteContextId_ && pipe_.connected() &&
+    *pfEaten = contextAllowsInput(context) && context == textEditSinkContext_ &&
+               foreground_ && remoteContextId_ && pipe_.connected() &&
                key < handledKeys_.size() && handledKeys_.test(key);
     return S_OK;
 }

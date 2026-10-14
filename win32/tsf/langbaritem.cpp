@@ -150,6 +150,8 @@ STDMETHODIMP LangBarItem::GetStatus(DWORD *pdwStatus) {
         return E_INVALIDARG;
     }
     *pdwStatus = shown_ ? 0 : TF_LBI_STATUS_HIDDEN;
+    if (!available_)
+        *pdwStatus |= TF_LBI_STATUS_DISABLED;
     if (chineseMode_) {
         *pdwStatus |= TF_LBI_STATUS_BTN_TOGGLED;
     }
@@ -191,8 +193,11 @@ STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT point, const RECT *) {
         return PostMessageW(dispatchWindow_, kToggleMessage, 0, 0) ? S_OK
                                                                    : E_FAIL;
     }
-    if (click == TF_LBI_CLK_RIGHT && dispatchWindow_) {
+    if (click == TF_LBI_CLK_RIGHT && dispatchWindow_ && !systemMenu_) {
         CComPtr<LangBarItem> lifetime(this);
+        AuxiliaryUI permission;
+        if (!permission.begin(uiManager_, L"Fcitx5 menu", [] { EndMenu(); }))
+            return S_OK;
         const auto menu = CreatePopupMenu();
         if (!menu) {
             return E_OUTOFMEMORY;
@@ -217,12 +222,14 @@ STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT point, const RECT *) {
             return E_FAIL;
         }
         SetForegroundWindow(owner);
+        permission.setVisible(true);
         const auto selected = TrackPopupMenuEx(
             menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, point.x,
             point.y, owner, nullptr);
         PostMessageW(owner, WM_NULL, 0, 0);
         DestroyMenu(menu);
         DestroyWindow(owner);
+        permission.reset();
         if (selected) {
             return OnMenuSelect(selected);
         }
@@ -237,6 +244,9 @@ STDMETHODIMP LangBarItem::InitMenu(ITfMenu *menu) {
     const auto translation = translation_;
     const win32::i18n::Translator english;
     for (const auto &command : kCommands) {
+        if ((restricted_ && command.id != kSettingsMenuId) ||
+            (systemMenu_ && command.id == kAboutMenuId))
+            continue;
         const auto text =
             (translation ? *translation : english).wide("menu", command.text);
         const auto result =
@@ -250,6 +260,9 @@ STDMETHODIMP LangBarItem::InitMenu(ITfMenu *menu) {
 }
 
 STDMETHODIMP LangBarItem::OnMenuSelect(UINT id) {
+    if ((restricted_ && id != kSettingsMenuId) ||
+        (systemMenu_ && id == kAboutMenuId))
+        return E_ACCESSDENIED;
     for (const auto &command : kCommands) {
         if (id == command.id) {
             return !dispatchWindow_ ||
@@ -328,6 +341,13 @@ void LangBarItem::setTranslation(win32::i18n::Translation translation) {
     notify(TF_LBI_TEXT | TF_LBI_TOOLTIP);
 }
 
+void LangBarItem::setAvailable(bool available) {
+    if (available_ == available)
+        return;
+    available_ = available;
+    notify(TF_LBI_STATUS);
+}
+
 void LangBarItem::setMode(bool chineseMode) {
     if (chineseMode_ != chineseMode) {
         chineseMode_ = chineseMode;
@@ -349,6 +369,7 @@ void LangBarItem::setInputMethod(bool enabled, std::wstring name,
 }
 
 void LangBarItem::detach() {
+    uiManager_.Release();
     dispatchWindow_ = nullptr;
     shown_ = false;
     notify(TF_LBI_STATUS);

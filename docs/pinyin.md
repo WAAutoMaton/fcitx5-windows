@@ -446,7 +446,7 @@ thread. A manual stop is recorded in a logon-specific `.state` file under
 `%LOCALAPPDATA%/fcitx5`, surviving unloading all TSF DLLs without applying to the
 next login. A shared 10-second retry interval prevents launch storms on failure.
 There is no forced termination by process name. A hung process yields a timeout
-instead of being killed. The current IPC protocol is v8;
+instead of being killed. The current IPC protocol is v9;
 deploy updated Core, TSF and Settings together for the new control behavior.
 
 Run only one Core process per user/session. A second Core process detects the

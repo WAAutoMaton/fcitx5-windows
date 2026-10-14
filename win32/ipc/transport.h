@@ -43,6 +43,11 @@ inline std::wstring pipeName() {
     return name;
 }
 
+inline std::wstring inputPipeName() {
+    auto name = pipeName();
+    return name.empty() ? name : name + L"-input";
+}
+
 inline bool transfer(HANDLE pipe, bool write, void *data, DWORD size,
                      DWORD timeout, HANDLE stopEvent = nullptr) {
     OVERLAPPED operation{};
@@ -79,8 +84,9 @@ inline bool transfer(HANDLE pipe, bool write, void *data, DWORD size,
 }
 
 inline bool readFrame(HANDLE pipe, Frame &frame, DWORD timeout,
-                      HANDLE stopEvent = nullptr) {
-    std::vector<uint8_t> data(kHeaderSize + kMaxPayloadSize);
+                      HANDLE stopEvent = nullptr,
+                      DWORD maxPayload = kMaxPayloadSize) {
+    std::vector<uint8_t> data(kHeaderSize + maxPayload);
     OVERLAPPED operation{};
     operation.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!operation.hEvent) {

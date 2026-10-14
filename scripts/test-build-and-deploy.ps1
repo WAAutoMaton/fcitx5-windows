@@ -85,7 +85,7 @@ try {
         $buildRoot = Join-Path $temporary 'build'
         $prefix = Join-Path $temporary 'deployment'
         $environmentBefore = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
-        & $entry -Prefix './deployment' -BuildRoot './build' -WhatIf
+        & $entry -Prefix './deployment' -BuildRoot './build' -ModernApps -WhatIf
         if ((Test-Path $prefix) -or (Test-Path $buildRoot)) { throw 'WhatIf created build/deployment files.' }
         $environmentAfter = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
         if (Compare-Object $environmentBefore $environmentAfter) { throw 'WhatIf changed the environment.' }

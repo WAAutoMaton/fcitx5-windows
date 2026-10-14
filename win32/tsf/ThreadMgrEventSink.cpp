@@ -37,6 +37,8 @@ bool Tsf::initRemoteContext() {
     if (!pipe_.connected() || remoteContextId_ != 0 || !textEditSinkContext_) {
         return remoteContextId_ != 0;
     }
+    if (!foreground_ || !refreshContextPolicy())
+        return false;
     const auto capabilities = kCapabilityPreedit | kCapabilityReportKeyRepeat;
     if (!pipe_.createContext(capabilities, remoteContextId_)) {
         remoteContextId_ = 0;
@@ -72,6 +74,7 @@ void Tsf::clearRemoteContext() {
     cancelComposition();
     ++generation_;
     edits_.clear();
+    candidateActions_.clear();
     editRequested_ = false;
     composition_ = nullptr;
     displayedPreedit_.clear();

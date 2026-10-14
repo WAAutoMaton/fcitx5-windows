@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sandbox.h"
+#include "isolationpolicy.h"
 #include <Windows.h>
 #include <filesystem>
 #include <fstream>

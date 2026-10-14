@@ -3,6 +3,7 @@
 #include "util.h"
 #include <atlcomcli.h>
 #include <msctf.h>
+#include <vector>
 
 #define FCITX5 "Fcitx5"
 #define THREADING_MODEL "ThreadingModel"
@@ -123,10 +124,15 @@ HRESULT RegisterProfile(ITfInputProcessorProfileMgr *manager,
         ARRAYSIZE(description) - 1, dllPath, length, 0, nullptr, 0, TRUE, 0);
 }
 
-// Desktop input-indicator support does not declare Windows Store compatibility.
-const GUID Categories[] = {GUID_TFCAT_TIP_KEYBOARD,
-                           GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
-                           GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT};
+// Modern categories are enabled explicitly until signed system acceptance.
+const GUID Categories[] = {
+    GUID_TFCAT_TIP_KEYBOARD, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+    GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT
+#ifdef FCITX5_MODERN_TSF_CATEGORIES
+    ,
+    GUID_TFCAT_TIPCAP_UIELEMENTENABLED, GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT
+#endif
+};
 
 /*
 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}
@@ -152,14 +158,46 @@ HRESULT RegisterCategories(ITfCategoryMgr *manager) {
     if (!manager) {
         return E_INVALIDARG;
     }
+    size_t completed = 0;
     for (const auto &guid : Categories) {
         const auto result =
             manager->RegisterCategory(FCITX_CLSID, guid, FCITX_CLSID);
         if (FAILED(result)) {
+            while (completed) {
+                const auto &registered = Categories[--completed];
+                manager->UnregisterCategory(FCITX_CLSID, registered,
+                                            FCITX_CLSID);
+            }
             return result;
         }
+        ++completed;
     }
     return S_OK;
+}
+
+HRESULT UnregisterCategories(ITfCategoryMgr *manager) {
+    if (!manager)
+        return E_INVALIDARG;
+    CComPtr<IEnumGUID> categories;
+    auto result = manager->EnumCategoriesInItem(FCITX_CLSID, &categories);
+    if (FAILED(result) || !categories)
+        return FAILED(result) ? result : E_FAIL;
+    HRESULT firstError = S_OK;
+    std::vector<GUID> registered;
+    GUID guid{};
+    ULONG fetched = 0;
+    while ((result = categories->Next(1, &guid, &fetched)) == S_OK && fetched) {
+        registered.push_back(guid);
+    }
+    if (FAILED(result))
+        return result;
+    for (const auto &guid : registered) {
+        const auto removed =
+            manager->UnregisterCategory(FCITX_CLSID, guid, FCITX_CLSID);
+        if (FAILED(removed) && SUCCEEDED(firstError))
+            firstError = removed;
+    }
+    return FAILED(firstError) ? firstError : FAILED(result) ? result : S_OK;
 }
 
 HRESULT UnregisterCategoriesAndProfiles() {
@@ -180,17 +218,13 @@ HRESULT UnregisterCategoriesAndProfiles() {
     if (FAILED(result)) {
         return result;
     }
-    for (const auto &guid : Categories) {
-        result = categories->UnregisterCategory(FCITX_CLSID, guid, FCITX_CLSID);
-        if (FAILED(result)) {
-            return result;
-        }
-    }
+    const auto categoryResult = UnregisterCategories(categories);
     CComPtr<ITfInputProcessorProfiles> profiles;
     result = profiles.CoCreateInstance(CLSID_TF_InputProcessorProfiles);
     if (FAILED(result)) {
         return result;
     }
-    return profiles->Unregister(FCITX_CLSID);
+    result = profiles->Unregister(FCITX_CLSID);
+    return FAILED(categoryResult) ? categoryResult : result;
 }
 } // namespace fcitx

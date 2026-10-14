@@ -9,6 +9,12 @@
 
 namespace fcitx {
 void Tsf::requestService(UINT command) {
+    if (!inputAllowed_ ||
+        (restrictedInput_ && command != kEnsureServiceMessage &&
+         command != LangBarItem::kSettingsMessage))
+        return;
+    if (restrictedInput_ && command == kEnsureServiceMessage)
+        return;
     if (serviceTask_.valid()) {
         if (command != kEnsureServiceMessage) {
             pendingServiceCommand_ = command;
@@ -145,6 +151,10 @@ void Tsf::pollServiceTask() {
         pendingServiceCommand_ = 0;
         requestService(pending);
     }
+    if (error && command != kEnsureServiceMessage && modernUi_) {
+        OutputDebugStringW(L"Fcitx5: host service operation failed.\n");
+        return;
+    }
     if (error && command != kEnsureServiceMessage) {
         const auto translation = translationMonitor_.snapshot();
         const bool pipeMissing =
@@ -184,7 +194,7 @@ void Tsf::pollServiceTask() {
         }
         text += L"\n" +
                 translation->format("settings", "Windows error: {0}", error);
-        MessageBoxW(nullptr, text.c_str(), L"Fcitx5", MB_OK | MB_ICONERROR);
+        OutputDebugStringW(text.c_str());
     }
 }
 

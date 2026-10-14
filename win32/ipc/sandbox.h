@@ -48,8 +48,15 @@ class SandboxieApi {
         }
         return SandboxState::Boxed;
     }
-    bool hostOnly() const {
-        return process(GetCurrentProcessId()) != SandboxState::Host;
+    bool hostOnly() const { return !isHostProcess(); }
+    bool isHostProcess(DWORD pid = GetCurrentProcessId()) const {
+        return process(pid) == SandboxState::Host;
+    }
+    bool isSandboxedProcess(DWORD pid = GetCurrentProcessId()) const {
+        return process(pid) == SandboxState::Boxed;
+    }
+    bool isUnknownProcess(DWORD pid = GetCurrentProcessId()) const {
+        return process(pid) == SandboxState::Unknown;
     }
     bool acceptsServer(DWORD pid) const {
         return !hostOnly() || process(pid) == SandboxState::Host;
@@ -60,17 +67,5 @@ class SandboxieApi {
     QueryProcess query_ = nullptr;
     QueryInfo info_ = nullptr;
 };
-
-inline bool hostOnlyClient() { return SandboxieApi().hostOnly(); }
-
-inline bool hostServicesAllowed() { return !hostOnlyClient(); }
-
-inline void requireHostServices() {
-    if (!hostServicesAllowed()) {
-        OutputDebugStringW(
-            L"Fcitx5: sandboxed or unknown environment; host services only.\n");
-        throw std::system_error(ERROR_ACCESS_DENIED, std::system_category());
-    }
-}
 
 } // namespace fcitx::win32::ipc

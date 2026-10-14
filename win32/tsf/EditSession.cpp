@@ -1,3 +1,4 @@
+#include "diagnostics.h"
 #include "dpiawareness.h"
 #include "textutil.h"
 #include "tsf.h"
@@ -175,6 +176,8 @@ bool Tsf::requestCandidatePosition() {
     if (candidateLayoutPending_ &&
         GetTickCount64() >= candidateLayoutDeadline_) {
         candidates_.hide();
+        if (candidateElement_)
+            candidateElement_->setVisible(false);
     }
     if (!textEditSinkContext_ || displayedCandidates_.candidates.empty() ||
         candidatePositionRequested_) {
@@ -223,11 +226,164 @@ void Tsf::refreshCandidatePosition(TfEditCookie cookie, ITfContext *context,
 
 void Tsf::hideCandidates() {
     candidates_.hide();
+    auto element = candidateElement_;
+    candidateElement_.Release();
+    const auto id = candidateElementId_;
+    const auto active = candidateElementActive_;
+    candidateElementActive_ = false;
+    showOwnCandidates_ = !modernUi_;
+    if (element)
+        element->detach();
     candidateLayoutPending_ = false;
     candidateLayoutDeadline_ = 0;
     displayedCandidates_ = {};
     candidateView_.Release();
     candidateOwner_ = nullptr;
+    if (active && uiElementMgr_) {
+        CComPtr<ITfUIElementMgr> manager = uiElementMgr_;
+        manager->EndUIElement(id);
+    }
+}
+
+void Tsf::showCandidateUi(bool show) {
+    showOwnCandidates_ = show;
+    if (!show) {
+        candidates_.hide();
+        if (candidateElement_)
+            candidateElement_->setVisible(false);
+    } else if (messageWindow_ && !candidateRefreshPosted_) {
+        candidateRefreshPosted_ =
+            PostMessageW(messageWindow_, kRefreshCandidateMessage, 0, 0) !=
+            FALSE;
+    }
+}
+
+bool Tsf::publishCandidates(ITfContext *context,
+                            const PipeClient::KeyReply &reply) {
+    if (!uiElementMgr_)
+        return !modernUi_;
+    CComPtr<ITfDocumentMgr> document;
+    if (FAILED(context->GetDocumentMgr(&document)))
+        return !modernUi_;
+    const auto generation = generation_;
+    CComPtr<ITfUIElementMgr> manager = uiElementMgr_;
+    if (!candidateElement_) {
+        CComPtr<CandidateUIElement> element;
+        element.Attach(new (std::nothrow) CandidateUIElement(
+            [this](bool show) { showCandidateUi(show); },
+            [this](ipc::CandidateAction action, uint64_t identity,
+                   uint32_t index) {
+                return queueCandidateAction(action, identity, index);
+            }));
+        if (!element)
+            return false;
+        element->publish(reply, document);
+        candidateElement_ = element;
+        BOOL show = TRUE;
+        DWORD id = 0;
+        const auto showSerial = element->showSerial();
+        const auto result = manager->BeginUIElement(element, &show, &id);
+        diagnosticResult(show ? L"BeginUIElement own UI"
+                              : L"BeginUIElement host UI",
+                         result);
+        if (generation != generation_ || context != textEditSinkContext_ ||
+            candidateElement_ != element) {
+            element->detach();
+            if (SUCCEEDED(result))
+                manager->EndUIElement(id);
+            return false;
+        }
+        if (FAILED(result)) {
+            element->detach();
+            candidateElement_.Release();
+            showOwnCandidates_ = !modernUi_;
+            OutputDebugStringW(L"Fcitx5: BeginUIElement failed.\n");
+            return !modernUi_;
+        }
+        candidateElementId_ = id;
+        candidateElementActive_ = true;
+        if (!show || element->showSerial() == showSerial)
+            showCandidateUi(show != FALSE);
+    } else {
+        CComPtr<CandidateUIElement> element = candidateElement_;
+        const auto changes = element->publish(reply, document);
+        if (changes && candidateElementActive_ &&
+            FAILED(manager->UpdateUIElement(candidateElementId_))) {
+            showCandidateUi(false);
+            OutputDebugStringW(L"Fcitx5: UpdateUIElement failed.\n");
+            return false;
+        }
+        if (generation != generation_ || context != textEditSinkContext_ ||
+            candidateElement_ != element)
+            return false;
+    }
+    return showOwnCandidates_;
+}
+
+HRESULT Tsf::queueCandidateAction(ipc::CandidateAction action,
+                                  uint64_t identity, uint32_t index) {
+    if (!messageWindow_ || !foreground_ ||
+        !contextAllowsInput(textEditSinkContext_) || !remoteContextId_ ||
+        !identity || identity != displayedCandidates_.candidateGeneration)
+        return E_UNEXPECTED;
+    if (candidateActions_.size() >= 32)
+        return HRESULT_FROM_WIN32(ERROR_BUSY);
+    try {
+        candidateActions_.push_back({textEditSinkContext_, generation_,
+                                     remoteContextId_, identity, action,
+                                     index});
+    } catch (const std::bad_alloc &) {
+        return E_OUTOFMEMORY;
+    }
+    if (!PostMessageW(messageWindow_, kCandidateActionMessage, 0, 0)) {
+        candidateActions_.pop_back();
+        return E_FAIL;
+    }
+    return S_OK;
+}
+
+void Tsf::processCandidateActions() {
+    if (candidateActions_.empty())
+        return;
+    const auto operation = candidateActions_.front();
+    candidateActions_.pop_front();
+    if (operation.context != textEditSinkContext_ ||
+        operation.generation != generation_ ||
+        operation.remoteContext != remoteContextId_ || !foreground_)
+        return;
+    if (!refreshContextPolicy()) {
+        clearRemoteContext();
+        return;
+    }
+    const auto previous = state_;
+    PipeClient::KeyReply reply;
+    if (!pipe_.candidateAction(operation.remoteContext,
+                               operation.candidateGeneration, operation.action,
+                               operation.index, reply)) {
+        candidateActions_.clear();
+        hideCandidates();
+        OutputDebugStringW(
+            L"Fcitx5: candidate action rejected or transport unavailable.\n");
+        if (!pipe_.connected())
+            clearRemoteContext();
+        return;
+    }
+    if (operation.context != textEditSinkContext_ ||
+        operation.generation != generation_ ||
+        operation.remoteContext != remoteContextId_)
+        return;
+    if (operation.action == ipc::CandidateAction::Select &&
+        reply.candidates == previous.candidates &&
+        reply.preedit == previous.preedit &&
+        reply.inputMethod == previous.inputMethod &&
+        reply.settingsRevision == previous.settingsRevision) {
+        for (auto &queued : candidateActions_)
+            if (queued.context == operation.context &&
+                queued.generation == operation.generation &&
+                queued.candidateGeneration == operation.candidateGeneration)
+                queued.candidateGeneration = reply.candidateGeneration;
+    }
+    submitSnapshot(std::move(reply), false);
 }
 
 void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
@@ -237,21 +393,29 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
         hideCandidates();
         return;
     }
+    displayedCandidates_ = reply;
+    displayedCandidates_.commit.clear();
+    if (!publishCandidates(context, reply)) {
+        candidates_.hide();
+        return;
+    }
+    if (candidateElement_)
+        candidateElement_->setVisible(false);
     CComPtr<ITfContextView> view;
     HWND window = nullptr;
+    DWORD ownerProcess = 0;
     if (FAILED(context->GetActiveView(&view)) || !view ||
-        FAILED(view->GetWnd(&window)) ||
-        (window && (!IsWindowVisible(window) || IsIconic(window)))) {
-        hideCandidates();
+        FAILED(view->GetWnd(&window)) || !window || !IsWindowVisible(window) ||
+        IsIconic(window) || !GetWindowThreadProcessId(window, &ownerProcess) ||
+        ownerProcess != GetCurrentProcessId()) {
+        candidates_.hide();
         return;
     }
     if (view != candidateView_ || window != candidateOwner_) {
-        hideCandidates();
+        candidates_.hide();
         candidateView_ = view;
         candidateOwner_ = window;
     }
-    displayedCandidates_ = reply;
-    displayedCandidates_.commit.clear();
     CComPtr<ITfRange> range;
     if (composition_) {
         composition_->GetRange(&range);
@@ -268,7 +432,7 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
         range = caret;
     }
     if (!range) {
-        hideCandidates();
+        candidates_.hide();
         return;
     }
     RECT anchor{};
@@ -276,7 +440,7 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
     ScopedDpiAwareness scope(window ? GetWindowDpiAwarenessContext(window)
                                     : GetThreadDpiAwarenessContext());
     if (!scope.valid()) {
-        hideCandidates();
+        candidates_.hide();
         return;
     }
     auto result = view->GetTextExt(cookie, range, &anchor, &clipped);
@@ -300,16 +464,20 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
         } else {
             candidates_.hide();
         }
+        if (candidateElement_)
+            candidateElement_->setVisible(candidates_.visible());
         return;
     }
     if (FAILED(result) || clipped || anchor.bottom <= anchor.top ||
         anchor.right < anchor.left) {
-        hideCandidates();
+        candidates_.hide();
         return;
     }
     candidateLayoutPending_ = false;
     candidateLayoutDeadline_ = 0;
     candidates_.show(reply, window, anchor);
+    if (candidateElement_)
+        candidateElement_->setVisible(candidates_.visible());
 }
 
 bool Tsf::requestNextEdit(bool synchronous) {
@@ -355,6 +523,7 @@ void Tsf::finishEdit(uint64_t generation, HRESULT result) {
     }
     if (FAILED(result)) {
         ++generation_;
+        candidateActions_.clear();
         candidatePositionRequested_ = false;
         edits_.clear();
         cancelComposition();
@@ -379,6 +548,8 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
     if (generation != generation_ || context != textEditSinkContext_) {
         return S_OK;
     }
+    if (!scopeAllowsInputAtEdit(context, cookie))
+        return E_ACCESSDENIED;
     auto reply = snapshot;
     // Preserve commits while preventing old schemes from recreating preedit.
     if (reply.settingsRevision < state_.settingsRevision) {

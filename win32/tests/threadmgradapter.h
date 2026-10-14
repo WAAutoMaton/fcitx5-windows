@@ -18,7 +18,8 @@ class ThreadMgrAdapter : public ITfThreadMgr,
         if (!result)
             return E_INVALIDARG;
         *result = nullptr;
-        if (id == IID_ITfCompartmentMgr)
+        if (id == IID_ITfCompartmentMgr || id == IID_ITfUIElementMgr ||
+            id == IID_ITfThreadMgrEx)
             return manager_->QueryInterface(id, result);
         if (id == IID_IUnknown || id == IID_ITfThreadMgr)
             *result = static_cast<ITfThreadMgr *>(this);

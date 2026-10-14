@@ -1,7 +1,7 @@
 #pragma once
 
+#include "../ipc/isolationpolicy.h"
 #include "../ipc/protocol.h"
-#include "../ipc/sandbox.h"
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -33,6 +33,9 @@ class PipeClient {
              uint32_t scanCode, uint32_t modifiers, uint32_t time,
              KeyReply &reply, uint32_t unicode = 0);
     bool poll(uint64_t contextId, KeyReply &reply);
+    bool candidateAction(uint64_t contextId, uint64_t candidateGeneration,
+                         ipc::CandidateAction action, uint32_t index,
+                         KeyReply &reply);
     bool reset(uint64_t contextId, KeyReply &reply);
     bool setMode(uint64_t contextId, bool enabled, KeyReply &reply);
     bool cycleInputMethod(uint64_t contextId, KeyReply &reply);

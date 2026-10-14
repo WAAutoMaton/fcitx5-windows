@@ -1,6 +1,7 @@
 #pragma once
 
 #include "aboutwindow.h"
+#include "candidateuielement.h"
 #include "candidatewindow.h"
 #include "langbaritem.h"
 #include "pipeclient.h"
@@ -80,6 +81,15 @@ class Tsf : public ITfTextInputProcessorEx,
     void updateCandidates(TfEditCookie cookie, ITfContext *context,
                           const PipeClient::KeyReply &reply);
     void hideCandidates();
+    bool publishCandidates(ITfContext *context,
+                           const PipeClient::KeyReply &reply);
+    void showCandidateUi(bool show);
+    HRESULT queueCandidateAction(ipc::CandidateAction action,
+                                 uint64_t candidateGeneration, uint32_t index);
+    void processCandidateActions();
+    bool contextAllowsInput(ITfContext *context) const;
+    bool refreshContextPolicy();
+    bool scopeAllowsInputAtEdit(ITfContext *context, TfEditCookie cookie) const;
     HRESULT initKeyEventSink();
     void uninitKeyEventSink();
     HRESULT initKeyboardCompartment();
@@ -112,6 +122,27 @@ class Tsf : public ITfTextInputProcessorEx,
 
     LONG refCount_ = 1;
     CComPtr<ITfThreadMgr> threadMgr_;
+    DWORD activationFlags_ = 0;
+    DWORD activeFlags_ = 0;
+    bool inputAllowed_ = true;
+    bool scopeAllowed_ = true;
+    bool modernUi_ = false;
+    bool restrictedInput_ = false;
+    CComPtr<ITfUIElementMgr> uiElementMgr_;
+    CComPtr<CandidateUIElement> candidateElement_;
+    DWORD candidateElementId_ = 0;
+    bool candidateElementActive_ = false;
+    bool showOwnCandidates_ = true;
+    struct CandidateOperation {
+        CComPtr<ITfContext> context;
+        uint64_t generation;
+        uint64_t remoteContext;
+        uint64_t candidateGeneration;
+        ipc::CandidateAction action;
+        uint32_t index;
+    };
+    std::deque<CandidateOperation> candidateActions_;
+    static constexpr UINT kCandidateActionMessage = WM_APP + 12;
     TfClientId clientId_ = TF_CLIENTID_NULL;
     DWORD threadMgrEventSinkCookie_ = TF_INVALID_COOKIE;
     DWORD textEditSinkCookie_ = TF_INVALID_COOKIE;
@@ -142,6 +173,7 @@ class Tsf : public ITfTextInputProcessorEx,
     std::bitset<256> handledKeys_;
     CandidateWindow candidates_;
     AboutWindow about_;
+    AuxiliaryUI aboutUi_;
     win32::i18n::TranslationMonitor translationMonitor_;
     HWND messageWindow_ = nullptr;
     ULONGLONG nextReconnect_ = 0;

@@ -2,6 +2,7 @@
 #include "../dll/util.h"
 #include "../ipc/service.h"
 #include "log.h"
+#include "startup.h"
 #include "userprofile.h"
 #include <algorithm>
 #include <fstream>
@@ -393,11 +394,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
     }
     const std::vector<std::wstring> commands{
-        L"preflight-machine", L"register-machine",  L"unregister-machine",
-        L"configure-user",    L"rollback-user",     L"prepare-uninstall-user",
-        L"set-maintenance",   L"clear-maintenance", L"mark-pending",
-        L"pause-user",        L"resume-user",       L"inspect-locks",
-        L"uninstall"};
+        L"preflight-machine", L"register-machine",   L"unregister-machine",
+        L"configure-user",    L"rollback-user",      L"prepare-uninstall-user",
+        L"set-maintenance",   L"clear-maintenance",  L"mark-pending",
+        L"pause-user",        L"resume-user",        L"inspect-locks",
+        L"uninstall",         L"enable-login-start", L"disable-login-start"};
     if (!root.is_absolute() || root == root.root_path() ||
         std::find(commands.begin(), commands.end(), command) ==
             commands.end()) {
@@ -420,6 +421,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             result = registration(root, command == L"unregister-machine");
         } else if (command == L"configure-user") {
             result = configure(root);
+        } else if (command == L"enable-login-start" ||
+                   command == L"disable-login-start") {
+            result = administrator() ? ERROR_BAD_TOKEN_TYPE
+                     : command == L"enable-login-start" &&
+                             !ipc::registeredInstallationRoot(root)
+                         ? ERROR_ACCESS_DENIED
+                         : fcitx::setup::setLoginStartup(
+                               root, command == L"enable-login-start");
         } else if (command == L"pause-user" || command == L"resume-user") {
             if (administrator()) {
                 result = ERROR_BAD_TOKEN_TYPE;
@@ -435,6 +444,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             } else {
                 result =
                     fcitx::setup::removeUser(root, command == L"rollback-user");
+                if (result == ERROR_SUCCESS &&
+                    command == L"prepare-uninstall-user")
+                    result = fcitx::setup::setLoginStartup(root, false);
             }
         } else if (command == L"inspect-locks") {
             result = inspectLocks(root);

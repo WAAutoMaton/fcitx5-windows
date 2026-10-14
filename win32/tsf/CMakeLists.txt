@@ -12,10 +12,12 @@ add_library(tsf STATIC
     TextEditSink.cpp
     KeyEventSink.cpp
     compartment.cpp
+    contextpolicy.cpp
     EditSession.cpp
     CompositionSink.cpp
     pipeclient.cpp
     candidatewindow.cpp
+    candidateuielement.cpp
     langbaritem.cpp
     aboutwindow.cpp
     pollstate.cpp

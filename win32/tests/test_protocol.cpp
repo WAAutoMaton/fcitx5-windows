@@ -72,6 +72,7 @@ int main() {
     snapshot.preeditCursor = 5;
     snapshot.revision = 42;
     snapshot.settingsRevision = 7;
+    snapshot.candidateGeneration = 11;
     snapshot.selected = 0;
     snapshot.candidates.push_back({"\xe4\xbd\xa0\xe5\xa5\xbd", "1", "ni hao"});
     KeyReply reply;
@@ -80,6 +81,7 @@ int main() {
     assert(reply.consumed && reply.preedit == "nihao" &&
            reply.preeditCursor == 5);
     assert(reply.revision == 42 && reply.settingsRevision == 7 &&
+           reply.candidateGeneration == 11 &&
            reply.candidates.front().text == snapshot.candidates.front().text);
     payload.push_back(0);
     assert(!decodeKeyReply(payload, reply));

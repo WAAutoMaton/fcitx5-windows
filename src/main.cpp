@@ -139,9 +139,20 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
 int main(int argc, char **argv) {
     try {
         fcitx::win32::ipc::requireHostServices();
+        if (argc == 2 && std::string_view(argv[1]) == "--check-ui-test") {
+#ifdef FCITX5_UI_TEST
+            return 0;
+#else
+            return 1;
+#endif
+        }
         if (!fcitx::win32::ipc::currentInstallationAllowsStart()) {
             return 0;
         }
+        const bool loginStart =
+            argc == 2 && std::string_view(argv[1]) == "--login-start";
+        if (loginStart && !fcitx::win32::ipc::serviceAutoStartAllowed())
+            return 0;
         if (argc == 2 && std::string_view(argv[1]) == "--open-user-data") {
             return static_cast<int>(fcitx::win32::ipc::openUserDataFolder());
         }
@@ -181,7 +192,7 @@ int main(int argc, char **argv) {
         }
         fs::path settingsFile;
         fs::path uiSettingsFile;
-        for (int i = 1; i < argc; i += 2) {
+        for (int i = loginStart ? 2 : 1; i < argc; i += 2) {
             if (i + 1 >= argc)
                 throw std::runtime_error("Missing settings path");
             auto path = fs::absolute(fs::path(

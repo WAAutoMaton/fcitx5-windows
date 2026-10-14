@@ -43,6 +43,11 @@ struct TsfCandidateTestAccess {
     static void queueFutureState(Tsf &tsf, const PipeClient::KeyReply &reply) {
         tsf.state_ = reply;
     }
+    static void uiManager(Tsf &tsf, ITfUIElementMgr *manager) {
+        tsf.uiElementMgr_ = manager;
+        tsf.modernUi_ = true;
+    }
+    static bool inputAllowed(Tsf &tsf) { return tsf.refreshContextPolicy(); }
 };
 } // namespace fcitx
 
@@ -50,6 +55,69 @@ namespace {
 using Access = fcitx::TsfCandidateTestAccess;
 using WindowAccess = fcitx::CandidateWindowTestAccess;
 using Reply = fcitx::PipeClient::KeyReply;
+
+class UIElementManager : public ITfUIElementMgr {
+  public:
+    STDMETHODIMP QueryInterface(REFIID id, void **result) override {
+        if (!result)
+            return E_INVALIDARG;
+        *result = nullptr;
+        if (id != IID_IUnknown && id != IID_ITfUIElementMgr)
+            return E_NOINTERFACE;
+        *result = static_cast<ITfUIElementMgr *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++references; }
+    STDMETHODIMP_(ULONG) Release() override { return --references; }
+    STDMETHODIMP BeginUIElement(ITfUIElement *value, BOOL *show,
+                                DWORD *id) override {
+        ++begins;
+        element = value;
+        if (candidateOnly) {
+            CComPtr<ITfCandidateListUIElement> list;
+            assert(SUCCEEDED(value->QueryInterface(IID_PPV_ARGS(&list))));
+            UINT count = 0;
+            assert(list->GetCount(&count) == S_OK && count);
+        }
+        *show = ownUi;
+        *id = 23;
+        if (beginCallback)
+            beginCallback();
+        return beginResult;
+    }
+    STDMETHODIMP UpdateUIElement(DWORD id) override {
+        assert(id == 23);
+        ++updates;
+        CComPtr<ITfCandidateListUIElement> list;
+        assert(SUCCEEDED(element->QueryInterface(IID_PPV_ARGS(&list))));
+        assert(list->GetUpdatedFlags(&lastFlags) == S_OK);
+        return updateResult;
+    }
+    STDMETHODIMP EndUIElement(DWORD id) override {
+        assert(id == 23);
+        ++ends;
+        if (endCallback)
+            endCallback();
+        return S_OK;
+    }
+    STDMETHODIMP GetUIElement(DWORD, ITfUIElement **result) override {
+        return element.CopyTo(result);
+    }
+    STDMETHODIMP EnumUIElements(IEnumTfUIElements **result) override {
+        if (result)
+            *result = nullptr;
+        return E_NOTIMPL;
+    }
+    ULONG references = 1;
+    unsigned begins = 0, updates = 0, ends = 0;
+    DWORD lastFlags = 0;
+    BOOL ownUi = FALSE;
+    bool candidateOnly = true;
+    HRESULT beginResult = S_OK, updateResult = S_OK;
+    CComPtr<ITfUIElement> element;
+    std::function<void()> beginCallback, endCallback;
+};
 
 void pump(DWORD duration = 30) {
     const auto deadline = GetTickCount64() + duration;
@@ -87,8 +155,8 @@ void tests() {
     CComPtr<ITfContext> context;
     TfEditCookie cookie;
     assert(SUCCEEDED(manager->CreateDocumentMgr(&document)));
-    assert(SUCCEEDED(
-        document->CreateContext(client, 0, store, &context, &cookie)));
+    assert(SUCCEEDED(document->CreateContext(
+        client, 0, static_cast<ITextStoreACP *>(store.p), &context, &cookie)));
     assert(SUCCEEDED(document->Push(context)));
 
     CComPtr<fcitx::Tsf> tsf;
@@ -179,7 +247,7 @@ void tests() {
     store->geometryResult = S_OK;
     assert(Access::submit(*tsf, snapshot(12, "ni", "focus")));
     assert(window.visible());
-    store->denySynchronous = true;
+    store->denyReadSynchronous = true;
     Access::refresh(*tsf);
     assert(Access::positionPending(*tsf));
     Access::detach(*tsf);
@@ -188,7 +256,7 @@ void tests() {
     assert(SUCCEEDED(layout->OnLayoutChange(context, TF_LC_CHANGE, nullptr)));
     pump();
     assert(!window.visible());
-    store->denySynchronous = false;
+    store->denyReadSynchronous = false;
     store->geometryResult = TS_E_NOLAYOUT;
     Access::attach(*tsf, document);
     assert(Access::submit(*tsf, snapshot(1, "n", "new focus")));
@@ -243,6 +311,119 @@ void tests() {
     assert(Access::submit(*tsf, cursorReply));
     checkCaret(1);
     assert(!window.visible());
+
+    assert(Access::inputAllowed(*tsf));
+    store->denyReadSynchronous = true;
+    assert(!Access::inputAllowed(*tsf));
+    store->denyReadSynchronous = false;
+    assert(Access::inputAllowed(*tsf));
+    store->readOnly = true;
+    assert(!Access::inputAllowed(*tsf));
+    store->readOnly = false;
+    store->setScope(IS_PASSWORD);
+    assert(!Access::inputAllowed(*tsf));
+    store->setScope(IS_NUMERIC_PASSWORD);
+    assert(!Access::inputAllowed(*tsf));
+    store->setScope(IS_DEFAULT);
+    assert(Access::inputAllowed(*tsf));
+    store->scopeResult = E_ACCESSDENIED;
+    assert(!Access::inputAllowed(*tsf));
+    store->scopeResult = S_OK;
+    assert(Access::inputAllowed(*tsf));
+    BOOL eaten = TRUE;
+    const auto readsBeforeTest = store->readLocks;
+    assert(tsf->OnTestKeyDown(context, 'N', 0, &eaten) == S_OK && !eaten);
+    assert(store->readLocks == readsBeforeTest);
+
+    UIElementManager ui;
+    Access::uiManager(*tsf, &ui);
+    const auto hostedDocument = store->text + L"hosted";
+    auto hosted = snapshot(cursorReply.revision + 1, "hosted", "candidate");
+    store->nullWindow = true;
+    store->geometryResult = TS_E_NOLAYOUT;
+    assert(Access::submit(*tsf, hosted));
+    assert(ui.begins == 1 && !window.visible() &&
+           store->text == hostedDocument);
+    CComPtr<ITfCandidateListUIElement> hostedList;
+    assert(SUCCEEDED(ui.element.QueryInterface(&hostedList)));
+    UINT count = 0;
+    assert(hostedList->GetCount(&count) == S_OK && count == 1);
+    CComBSTR hostedText;
+    assert(hostedList->GetString(0, &hostedText) == S_OK &&
+           hostedText == L"candidate");
+    assert(ui.element->Show(TRUE) == S_OK);
+    pump();
+    BOOL shown = TRUE;
+    assert(ui.element->IsShown(&shown) == S_OK && !shown);
+    store->nullWindow = false;
+    store->geometryResult = S_OK;
+    store->windowOverride = GetDesktopWindow();
+    Access::refresh(*tsf);
+    assert(!window.visible() && hostedList->GetCount(&count) == S_OK &&
+           count == 1);
+    store->windowOverride = nullptr;
+    Access::refresh(*tsf);
+    assert(window.visible());
+    assert(ui.element->IsShown(&shown) == S_OK && shown);
+    assert(ui.element->Show(FALSE) == S_OK && !window.visible());
+    ++hosted.revision;
+    assert(Access::submit(*tsf, hosted));
+    assert(!ui.updates && !window.visible());
+    hosted.candidates[0].text = "changed";
+    ++hosted.revision;
+    assert(Access::submit(*tsf, hosted));
+    assert(ui.updates == 1 && (ui.lastFlags & TF_CLUIE_STRING));
+    ui.updateResult = E_FAIL;
+    assert(ui.element->Show(TRUE) == S_OK);
+    hosted.candidates[0].text = "failure";
+    ++hosted.revision;
+    assert(Access::submit(*tsf, hosted));
+    assert(!window.visible() && store->text == hostedDocument);
+    ui.endCallback = [&] { Access::detach(*tsf); };
+    Access::detach(*tsf);
+    assert(ui.ends == 1 && ui.element->Show(TRUE) == E_UNEXPECTED);
+    assert(hostedList->GetCount(&count) == S_OK && count == 0);
+    ui.endCallback = {};
+    ui.beginResult = E_FAIL;
+    Access::attach(*tsf, document);
+    ++hosted.revision;
+    assert(Access::submit(*tsf, hosted));
+    assert(ui.begins == 2 && ui.ends == 1 && !window.visible());
+    ui.beginResult = S_OK;
+    ui.beginCallback = [&] { Access::detach(*tsf); };
+    ++hosted.revision;
+    assert(Access::submit(*tsf, hosted));
+    assert(ui.begins == 3 && ui.ends == 2 && !window.visible());
+    hostedList.Release();
+    ui.element.Release();
+    ui.beginCallback = {};
+    ui.endCallback = {};
+    ui.beginResult = S_OK;
+    ui.ownUi = TRUE;
+    Access::attach(*tsf, document);
+    ui.beginCallback = [&] { ui.element->Show(FALSE); };
+    ++hosted.revision;
+    assert(Access::submit(*tsf, hosted));
+    assert(!window.visible());
+    Access::detach(*tsf);
+    ui.beginCallback = {};
+    ui.candidateOnly = false;
+    ui.ownUi = FALSE;
+    fcitx::AuxiliaryUI permission;
+    unsigned closed = 0;
+    assert(!permission.begin(&ui, L"About", [&] { ++closed; }));
+    assert(!permission.active() && ui.element->Show(FALSE) == E_UNEXPECTED);
+    ui.ownUi = TRUE;
+    assert(permission.begin(&ui, L"About", [&] {
+        ++closed;
+        permission.reset();
+    }));
+    permission.setVisible(true);
+    assert(ui.element->IsShown(&shown) == S_OK && shown);
+    assert(ui.element->Show(FALSE) == S_OK && closed == 1 &&
+           !permission.active());
+    assert(ui.element->Show(TRUE) == E_UNEXPECTED);
+    ui.element.Release();
 
     Access::detach(*tsf);
     layout.Release();

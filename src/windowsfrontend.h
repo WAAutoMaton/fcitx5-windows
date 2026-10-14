@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <fcitx-utils/eventdispatcher.h>
+#include <fcitx/candidatelist.h>
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputcontextmanager.h>
 #include <fcitx/instance.h>
@@ -36,6 +37,8 @@ class WindowsInputContext final : public InputContext {
     uint32_t preeditCursor() const;
     ipc::KeyReply snapshot(bool consumed, bool enabled);
     void resetPreedit();
+    ipc::KeyReply candidateSnapshot() const;
+    void updateCandidateIdentity(ipc::KeyReply &reply);
 
   protected:
     void commitStringImpl(const std::string &text) override;
@@ -47,6 +50,10 @@ class WindowsInputContext final : public InputContext {
     uint64_t id_;
     std::string pendingCommit_;
     uint64_t revision_ = 0;
+    uint64_t candidateGeneration_ = 0;
+    ipc::KeyReply candidateIdentity_;
+    std::shared_ptr<CandidateList> candidateSource_;
+    int candidatePage_ = -1;
 };
 
 class WindowsPipeServer {
@@ -69,11 +76,11 @@ class WindowsPipeServer {
         std::function<void(bool)> afterReply;
     };
 
-    void run();
-    void runClient(HANDLE pipe, uint64_t clientId);
+    void run(bool inputOnly);
+    void runClient(HANDLE pipe, uint64_t clientId, bool inputOnly);
     void process(const ipc::Frame &request,
                  const std::shared_ptr<PendingReply> &pending,
-                 uint64_t clientId);
+                 uint64_t clientId, bool restricted);
     void complete(const std::shared_ptr<PendingReply> &pending,
                   ipc::Frame response);
     bool readFrame(HANDLE pipe, ipc::Frame &frame);
@@ -89,10 +96,15 @@ class WindowsPipeServer {
     ipc::HostCommands hostCommands_;
     std::atomic_bool stopping_ = false;
     std::thread thread_;
+    std::thread inputThread_;
+    std::mutex clientsMutex_;
+    std::atomic_uint64_t nextClientId_ = 0;
+    ULONGLONG nextRestrictedSettings_ = 0;
     HANDLE stopEvent_ = nullptr;
     struct ClientThread {
         std::thread thread;
         std::shared_ptr<std::atomic_bool> finished;
+        bool inputOnly;
     };
     std::vector<ClientThread> clients_;
     std::unordered_map<uint64_t, uint64_t> owners_;

@@ -1,5 +1,6 @@
 #include "windowsfrontend.h"
 #include "../win32/i18n/settings.h"
+#include "../win32/ipc/pipeidentity.h"
 #include "../win32/ipc/service.h"
 #include "../win32/ipc/transport.h"
 #include <algorithm>
@@ -211,15 +212,11 @@ void WindowsInputContext::resetPreedit() {
     pendingCommit_ = std::move(committed);
 }
 
-ipc::KeyReply WindowsInputContext::snapshot(bool consumed, bool enabled) {
+ipc::KeyReply WindowsInputContext::candidateSnapshot() const {
     ipc::KeyReply reply;
-    reply.consumed = consumed;
-    reply.enabled = enabled;
-    reply.commit = takeCommit();
     reply.preedit = preedit();
     reply.preeditCursor =
         std::min(preeditCursor(), static_cast<uint32_t>(reply.preedit.size()));
-    reply.revision = ++revision_;
     if (const auto list = inputPanel().candidateList()) {
         const auto size =
             std::min(list->size(), static_cast<int>(ipc::kMaxCandidates));
@@ -242,6 +239,34 @@ ipc::KeyReply WindowsInputContext::snapshot(bool consumed, bool enabled) {
     return reply;
 }
 
+void WindowsInputContext::updateCandidateIdentity(ipc::KeyReply &reply) {
+    const auto source = inputPanel().candidateList();
+    const auto pageable = source ? source->toPageable() : nullptr;
+    const auto page = pageable ? pageable->currentPage() : -1;
+    if (source != candidateSource_ || page != candidatePage_ ||
+        reply.candidates != candidateIdentity_.candidates ||
+        reply.preedit != candidateIdentity_.preedit ||
+        reply.inputMethod != candidateIdentity_.inputMethod ||
+        reply.settingsRevision != candidateIdentity_.settingsRevision) {
+        ++candidateGeneration_;
+        candidateSource_ = source;
+        candidatePage_ = page;
+        candidateIdentity_ = reply;
+        candidateIdentity_.commit.clear();
+    }
+    reply.candidateGeneration =
+        reply.candidates.empty() ? 0 : candidateGeneration_;
+}
+
+ipc::KeyReply WindowsInputContext::snapshot(bool consumed, bool enabled) {
+    auto reply = candidateSnapshot();
+    reply.consumed = consumed;
+    reply.enabled = enabled;
+    reply.commit = takeCommit();
+    reply.revision = ++revision_;
+    return reply;
+}
+
 WindowsPipeServer::WindowsPipeServer(Instance &instance,
                                      EventDispatcher &dispatcher,
                                      std::filesystem::path settingsFile,
@@ -259,6 +284,7 @@ ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
     auto reply = context.snapshot(consumed, settings_.chineseMode(&context));
     settings_.decorate(&context, reply);
     reply.settingsRevision = settingsEpoch_;
+    context.updateCandidateIdentity(reply);
     return reply;
 }
 
@@ -273,7 +299,8 @@ void WindowsPipeServer::start() {
     if (!stopEvent_) {
         return;
     }
-    thread_ = std::thread([this]() { run(); });
+    thread_ = std::thread([this]() { run(false); });
+    inputThread_ = std::thread([this]() { run(true); });
 }
 
 void WindowsPipeServer::stop() {
@@ -283,6 +310,9 @@ void WindowsPipeServer::stop() {
     }
     if (thread_.joinable()) {
         thread_.join();
+    }
+    if (inputThread_.joinable()) {
+        inputThread_.join();
     }
     for (auto &client : clients_) {
         client.thread.join();
@@ -296,9 +326,10 @@ void WindowsPipeServer::stop() {
     }
 }
 
-void WindowsPipeServer::run() {
-    const auto name = ipc::pipeName();
-    const auto descriptor = L"D:P(A;;GA;;;" + ipc::userSid() + L")";
+void WindowsPipeServer::run(bool inputOnly) {
+    const auto name = inputOnly ? ipc::inputPipeName() : ipc::pipeName();
+    const auto descriptor = inputOnly ? ipc::inputPipeSecurity(ipc::userSid())
+                                      : L"D:P(A;;GA;;;" + ipc::userSid() + L")";
     PSECURITY_DESCRIPTOR security = nullptr;
     if (name.empty() ||
         !ConvertStringSecurityDescriptorToSecurityDescriptorW(
@@ -307,7 +338,6 @@ void WindowsPipeServer::run() {
     }
     SECURITY_ATTRIBUTES attributes{sizeof(SECURITY_ATTRIBUTES), security,
                                    FALSE};
-    uint64_t clientId = 0;
     bool first = true;
     while (!stopping_) {
         HANDLE pipe = CreateNamedPipeW(
@@ -350,6 +380,7 @@ void WindowsPipeServer::run() {
         }
         CloseHandle(connection.hEvent);
         if (connected && !stopping_) {
+            std::lock_guard<std::mutex> lock(clientsMutex_);
             std::erase_if(clients_, [](ClientThread &client) {
                 if (!client.finished->load()) {
                     return false;
@@ -357,17 +388,22 @@ void WindowsPipeServer::run() {
                 client.thread.join();
                 return true;
             });
-            if (clients_.size() >= 64) {
+            const auto inputClients = std::count_if(
+                clients_.begin(), clients_.end(),
+                [](const ClientThread &client) { return client.inputOnly; });
+            if (clients_.size() >= 64 || (inputOnly && inputClients >= 16)) {
                 DisconnectNamedPipe(pipe);
                 CloseHandle(pipe);
                 continue;
             }
             auto finished = std::make_shared<std::atomic_bool>(false);
-            std::thread worker([this, pipe, id = ++clientId, finished] {
-                runClient(pipe, id);
-                finished->store(true);
-            });
-            clients_.push_back({std::move(worker), std::move(finished)});
+            std::thread worker(
+                [this, pipe, id = ++nextClientId_, finished, inputOnly] {
+                    runClient(pipe, id, inputOnly);
+                    finished->store(true);
+                });
+            clients_.push_back(
+                {std::move(worker), std::move(finished), inputOnly});
         } else {
             CloseHandle(pipe);
         }
@@ -375,19 +411,72 @@ void WindowsPipeServer::run() {
     LocalFree(security);
 }
 
-void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId) {
-    while (!stopping_) {
+void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId,
+                                  bool inputOnly) {
+    const auto host = ipc::clientEnvironment();
+    ipc::ClientEnvironment caller;
+    ipc::Frame hello;
+    bool restricted = inputOnly;
+    uint64_t previousRequest = 0;
+    bool authenticated = false;
+    if (!ipc::readFrame(pipe, hello, 2000, stopEvent_, 4096) ||
+        hello.type != ipc::MessageType::Hello || hello.contextId ||
+        !hello.payload.empty() || !hello.requestId ||
+        !ipc::pipeClientIdentity(pipe, caller) ||
+        !ipc::sameLogin(host, caller)) {
+        DisconnectNamedPipe(pipe);
+        CloseHandle(pipe);
+        return;
+    }
+    restricted = restricted || caller.appContainer;
+    previousRequest = hello.requestId;
+    ipc::Writer version;
+    version.u16(ipc::kVersion);
+    auto greeting = makeResponse(hello, ipc::MessageType::HelloReply);
+    greeting.payload = version.take();
+    bool ready = writeFrame(pipe, greeting);
+    while (ready && !stopping_) {
         ipc::Frame request;
-        if (!readFrame(pipe, request)) {
+        if (!ipc::readFrame(
+                pipe, request,
+                restricted ? (authenticated ? 60000 : 2000) : INFINITE,
+                stopEvent_, restricted ? 65536 : ipc::kMaxPayloadSize) ||
+            request.requestId <= previousRequest) {
+            break;
+        }
+        previousRequest = request.requestId;
+        if (request.type == ipc::MessageType::AuthenticateServer) {
+            if (authenticated || request.contextId || !request.payload.empty())
+                break;
+            ipc::ServerIdentityHandle identity(pipe);
+            if (!identity.value())
+                break;
+            auto reply =
+                makeResponse(request, ipc::MessageType::ServerIdentityReply);
+            ipc::Writer writer;
+            writer.u64(identity.value());
+            reply.payload = writer.take();
+            if (!writeFrame(pipe, reply))
+                break;
+            identity.delivered();
+            authenticated = true;
+            continue;
+        }
+        if (restricted &&
+            (!authenticated || !ipc::restrictedRequestAllowed(request.type))) {
+            writeFrame(pipe, makeResponse(request, ipc::MessageType::Error));
             break;
         }
         auto pending = std::make_shared<PendingReply>();
-        dispatcher_.schedule(
-            [this, request = std::move(request), pending, clientId]() {
-                process(request, pending, clientId);
-            });
+        dispatcher_.schedule([this, request = std::move(request), pending,
+                              clientId, restricted]() {
+            process(request, pending, clientId, restricted);
+        });
         std::unique_lock<std::mutex> lock(pending->mutex);
-        while (!pending->ready && !stopping_) {
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (!pending->ready && !stopping_ &&
+               (!restricted || std::chrono::steady_clock::now() < deadline)) {
             pending->condition.wait_for(lock, std::chrono::milliseconds(100));
         }
         if (!pending->ready) {
@@ -396,6 +485,13 @@ void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId) {
         auto response = std::move(pending->frame);
         auto afterReply = std::move(pending->afterReply);
         lock.unlock();
+        if (restricted && response.type == ipc::MessageType::KeyReply) {
+            ipc::KeyReply snapshot;
+            if (!ipc::decodeKeyReply(response.payload, snapshot))
+                break;
+            snapshot.inputMethodIcon.clear();
+            response.payload = ipc::encodeKeyReply(snapshot);
+        }
         const auto written = writeFrame(pipe, response);
         if (afterReply) {
             dispatcher_.schedule(
@@ -421,7 +517,7 @@ void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId) {
 
 void WindowsPipeServer::process(const ipc::Frame &request,
                                 const std::shared_ptr<PendingReply> &pending,
-                                uint64_t clientId) {
+                                uint64_t clientId, bool restricted) {
     using ipc::MessageType;
     auto response = makeResponse(request, MessageType::Ack);
     ipc::Reader reader(request.payload.data(), request.payload.size());
@@ -561,7 +657,13 @@ void WindowsPipeServer::process(const ipc::Frame &request,
     case MessageType::SetSettings: {
         auto error = ipc::SettingsError::None;
         if (request.type == MessageType::OpenSettings) {
-            error = settings_.openWindow();
+            if (restricted && GetTickCount64() < nextRestrictedSettings_) {
+                error = ipc::SettingsError::Busy;
+            } else {
+                if (restricted)
+                    nextRestrictedSettings_ = GetTickCount64() + 2000;
+                error = settings_.openWindow();
+            }
         } else if (request.type == MessageType::SetSettings) {
             ipc::PinyinSettings requested;
             const bool valid = ipc::decodeSettings(request.payload, requested);
@@ -599,7 +701,11 @@ void WindowsPipeServer::process(const ipc::Frame &request,
         std::string program;
         uint64_t capabilities = 0;
         if (!reader.string(program) || !reader.u64(capabilities) ||
-            reader.remaining()) {
+            reader.remaining() ||
+            (restricted && std::count_if(owners_.begin(), owners_.end(),
+                                         [clientId](const auto &owner) {
+                                             return owner.second == clientId;
+                                         }) >= 4)) {
             response.type = MessageType::Error;
             writer.string("invalid create_context request");
             response.payload = writer.take();
@@ -716,6 +822,53 @@ void WindowsPipeServer::process(const ipc::Frame &request,
 #endif
         response.type = MessageType::KeyReply;
         response.payload = ipc::encodeKeyReply(snapshot(context, consumed));
+        break;
+    }
+    case MessageType::CandidateAction: {
+        uint64_t generation = 0;
+        uint8_t action = 0;
+        uint32_t index = 0;
+        auto &context = *contexts_.at(request.contextId);
+        auto identity = context.candidateSnapshot();
+        settings_.decorate(&context, identity);
+        identity.settingsRevision = settingsEpoch_;
+        context.updateCandidateIdentity(identity);
+        const auto list = context.inputPanel().candidateList();
+        const auto reject = [&](const char *reason) {
+            response.type = MessageType::Error;
+            ipc::Writer error;
+            error.string(reason);
+            response.payload = error.take();
+        };
+        if (!reader.u64(generation) || !reader.u8(action) ||
+            action > static_cast<uint8_t>(ipc::CandidateAction::Abort) ||
+            !reader.u32(index) || reader.remaining() || !context.hasFocus() ||
+            !generation || generation != identity.candidateGeneration ||
+            !list) {
+            reject("stale or invalid candidate action");
+            break;
+        }
+        if (action == static_cast<uint8_t>(ipc::CandidateAction::Abort)) {
+            context.reset();
+            context.takeCommit();
+        } else if (index >= identity.candidates.size() ||
+                   list->candidate(index).isPlaceHolder()) {
+            reject("invalid candidate index");
+            break;
+        } else if (action ==
+                   static_cast<uint8_t>(ipc::CandidateAction::Select)) {
+            const auto cursor = list->toCursorModifiable();
+            if (!cursor) {
+                reject("candidate cursor is not modifiable");
+                break;
+            }
+            cursor->setCursorIndex(static_cast<int>(index));
+            context.updateUserInterface(UserInterfaceComponent::InputPanel);
+        } else {
+            list->candidate(index).select(&context);
+        }
+        response.type = MessageType::KeyReply;
+        response.payload = ipc::encodeKeyReply(snapshot(context, false));
         break;
     }
     case MessageType::SetMode: {

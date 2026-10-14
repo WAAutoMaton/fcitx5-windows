@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../i18n/translator.h"
+#include "auxiliaryuielement.h"
 #include <atlcomcli.h>
 #include <ctffunc.h>
 #include <ctfutb.h>
@@ -48,10 +49,16 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     STDMETHODIMP UnadviseSink(DWORD dwCookie) override;
 
     void setMode(bool chineseMode);
+    void setAvailable(bool available);
     void setInputMethod(bool enabled, std::wstring name, std::wstring label,
                         std::wstring icon = {});
     void detach();
     void setTranslation(win32::i18n::Translation translation);
+    void setUiPolicy(bool systemMenu, bool restricted) {
+        systemMenu_ = systemMenu;
+        restricted_ = restricted;
+    }
+    void setUiManager(ITfUIElementMgr *manager) { uiManager_ = manager; }
 
   private:
     HICON createIcon() const;
@@ -67,6 +74,10 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     DWORD sinkCookie_ = TF_INVALID_COOKIE;
     DWORD nextSinkCookie_ = 0;
     bool shown_ = true;
+    bool available_ = true;
+    bool systemMenu_ = false;
+    bool restricted_ = false;
+    CComPtr<ITfUIElementMgr> uiManager_;
     win32::i18n::Translation translation_;
 };
 

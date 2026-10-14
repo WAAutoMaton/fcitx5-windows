@@ -14,5 +14,6 @@ BOOL RegisterProfiles();
 BOOL RegisterCategories();
 HRESULT RegisterProfile(ITfInputProcessorProfileMgr *manager, HINSTANCE module);
 HRESULT RegisterCategories(ITfCategoryMgr *manager);
+HRESULT UnregisterCategories(ITfCategoryMgr *manager);
 HRESULT UnregisterCategoriesAndProfiles();
 } // namespace fcitx

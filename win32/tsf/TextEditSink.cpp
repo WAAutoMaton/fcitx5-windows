@@ -1,3 +1,4 @@
+#include "diagnostics.h"
 #include "tsf.h"
 
 namespace fcitx {
@@ -34,17 +35,20 @@ bool Tsf::initTextEditSink(CComPtr<ITfDocumentMgr> documentMgr) {
     bool ret = false;
     if (SUCCEEDED(textEditSinkContext_->QueryInterface(IID_ITfSource,
                                                        (void **)&source))) {
-        if (SUCCEEDED(source->AdviseSink(IID_ITfTextEditSink,
-                                         (ITfTextEditSink *)this,
-                                         &textEditSinkCookie_))) {
+        const auto editResult = source->AdviseSink(
+            IID_ITfTextEditSink, (ITfTextEditSink *)this, &textEditSinkCookie_);
+        diagnosticResult(L"text edit sink", editResult);
+        if (SUCCEEDED(editResult)) {
             ret = true;
         } else {
             textEditSinkCookie_ = TF_INVALID_COOKIE;
         }
         if (ret) {
-            if (FAILED(source->AdviseSink(IID_ITfTextLayoutSink,
-                                          (ITfTextLayoutSink *)this,
-                                          &textLayoutSinkCookie_))) {
+            const auto layoutResult = source->AdviseSink(
+                IID_ITfTextLayoutSink, (ITfTextLayoutSink *)this,
+                &textLayoutSinkCookie_);
+            diagnosticResult(L"layout sink", layoutResult);
+            if (FAILED(layoutResult)) {
                 textLayoutSinkCookie_ = TF_INVALID_COOKIE;
             }
         }

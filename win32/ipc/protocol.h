@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 8;
+constexpr uint16_t kVersion = 9;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -51,7 +51,12 @@ enum class MessageType : uint16_t {
     RestartServices = 34,
     StopServices = 35,
     ServiceReply = 36,
+    AuthenticateServer = 37,
+    ServerIdentityReply = 38,
+    CandidateAction = 39,
 };
+
+enum class CandidateAction : uint8_t { Select, Finalize, Abort };
 
 enum class PinyinScheme : uint8_t { Full = 0, Double = 1 };
 enum class ShuangpinProfile : uint8_t {
@@ -175,6 +180,7 @@ struct Candidate {
     std::string text;
     std::string label;
     std::string comment;
+    bool operator==(const Candidate &) const = default;
 };
 
 struct KeyReply {
@@ -190,6 +196,7 @@ struct KeyReply {
     uint32_t preeditCursor = 0;
     uint64_t revision = 0;
     uint64_t settingsRevision = 0;
+    uint64_t candidateGeneration = 0;
     uint32_t selected = UINT32_MAX;
     bool hasPrev = false;
     bool hasNext = false;
@@ -482,6 +489,7 @@ inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
     writer.u32(reply.preeditCursor);
     writer.u64(reply.revision);
     writer.u64(reply.settingsRevision);
+    writer.u64(reply.candidateGeneration);
     writer.u32(reply.selected);
     writer.u8(reply.hasPrev);
     writer.u8(reply.hasNext);
@@ -510,6 +518,7 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
         !reader.u32(result.preeditCursor) ||
         result.preeditCursor > result.preedit.size() ||
         !reader.u64(result.revision) || !reader.u64(result.settingsRevision) ||
+        !reader.u64(result.candidateGeneration) ||
         !reader.u32(result.selected) || !reader.u8(hasPrev) || hasPrev > 1 ||
         !reader.u8(hasNext) || hasNext > 1 || !reader.u32(count) ||
         count > kMaxCandidates ||

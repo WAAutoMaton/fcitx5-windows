@@ -60,6 +60,28 @@ void exercise(HMODULE module) {
         require(SUCCEEDED(service->Deactivate()),
                 "TIP deactivation and pipe mutex failed");
         require(adapter->removeItemCalls == 1, "language bar cleanup failed");
+        for (const auto flags : {TF_TMAE_SECUREMODE, TF_TMAE_COMLESS}) {
+            require(SUCCEEDED(service->ActivateEx(adapter, client, flags)),
+                    "restricted activation failed");
+            require(!adapter->langBarItem, "restricted activation created UI");
+            CComPtr<ITfKeyEventSink> keys;
+            require(SUCCEEDED(service.QueryInterface(&keys)),
+                    "key interface missing");
+            BOOL eaten = TRUE;
+            require(keys->OnTestKeyDown(nullptr, 'N', 0, &eaten) == S_OK &&
+                        !eaten,
+                    "secure key was routed");
+            require(keys->OnKeyDown(nullptr, 'N', 0, &eaten) == S_OK && !eaten,
+                    "secure key was consumed");
+            require(SUCCEEDED(service->Deactivate()),
+                    "restricted deactivation failed");
+        }
+        adapter->addItemResult = E_ACCESSDENIED;
+        require(SUCCEEDED(service->ActivateEx(adapter, client,
+                                              TF_TMAE_UIELEMENTENABLEDONLY)),
+                "optional UI failure disabled activation");
+        require(!adapter->langBarItem, "failed optional UI retained item");
+        require(SUCCEEDED(service->Deactivate()), "optional UI cleanup failed");
         require(SUCCEEDED(manager->Deactivate()),
                 "thread manager deactivation failed");
     }

@@ -65,6 +65,9 @@ Source: "{#Dependencies}\WindowsAppRuntimeInstall-x64.exe"; DestDir: "{app}\setu
 Name: "{group}\Fcitx5 Settings"; Filename: "{app}\settings\Fcitx5Settings.exe"
 Name: "{group}\Uninstall Fcitx5"; Filename: "{app}\setup\Fcitx5SetupHelper.exe"; Parameters: "uninstall"
 
+[Tasks]
+Name: "loginstart"; Description: "Start Fcitx5 when I sign in (for modern apps)"; Flags: unchecked
+
 [Registry]
 Root: HKLM64; Subkey: "SOFTWARE\Fcitx5\Installer"; Flags: uninsdeletekey
 
@@ -198,6 +201,12 @@ begin
         AddQuotes(ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe')) + ' uninstall');
       RegWriteStringValue(HKLM64, UninstallKey, 'QuietUninstallString',
         AddQuotes(ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe')) + ' uninstall --silent');
+      if not MachineOnly then begin
+        if WizardIsTaskSelected('loginstart') then
+          RequireHelper('enable-login-start', True)
+        else
+          RequireHelper('disable-login-start', True);
+      end;
       Maintenance := False;
       Paused := False;
       if MachineOnly then

@@ -79,6 +79,7 @@ It does not register/unregister TSF, stop applications or start services.
 | `-DataArchive` | Optional local prebuilt archive, checked against the locked SHA256 |
 | `-Jobs` | `6`; parallel jobs for CMake builds |
 | `-SkipTests` | Skip default CTest tests |
+| `-ModernApps` | Explicitly declare immersive/UIElement TSF categories for system acceptance; no registration or signing |
 | `-WhatIf` | Preview without builds, submodule initialization or file copies |
 
 Default paths are resolved relative to the repository; explicit relative paths
@@ -111,6 +112,57 @@ For individual Core, TSF and Settings builds, see the
 [input-method integration guide](pinyin.md#build-and-deploy-core). A plain root
 CMake build does not build/deploy libime, chinese-addons, TSF, Settings or input
 method data.
+
+## Modern App Acceptance
+
+The runtime implementation is described in
+[windows-modern-apps-design.md](windows-modern-apps-design.md). A modern acceptance
+build uses `build-and-deploy.ps1 -ModernApps` with an isolated prefix/build root.
+The default build leaves the new categories disabled until signed system
+acceptance. Re-registration, signing, package installation and login startup
+are explicit operations, never side effects of building or testing.
+
+For transport diagnostics, build `appcontainer_probe` and pass an existing
+AppContainer profile/package family name:
+
+```powershell
+./build/modern-apps/tsf/tests/appcontainer_probe.exe Microsoft.WindowsCalculator_8wekyb3d8bbwe
+```
+
+The probe launches real x64 restricted tokens using the existing profile without
+creating or altering a profile. It compares global and `LOCAL\` names, desktop
+and restricted roundtrips, peer identity, message mode, deadlines and cancellation.
+Only isolated diagnostic pipes are created; no Core or TIP registration is used.
+Local-name results are diagnostic; the global authenticated path must pass.
+
+For engine/TSF integration while a production Core is running, compile both Core
+and the independent TSF/probe project with `-DCMAKE_CXX_FLAGS=-DFCITX5_UI_TEST`.
+Stage the real engines/data in the test prefix, then run:
+
+```powershell
+./scripts/test-modern-apps.ps1 -Prefix ./build/modern-apps/prefix -TsfBuild ./build/modern-apps/tsf -AppContainerProfile Microsoft.WindowsCalculator_8wekyb3d8bbwe
+```
+
+The runner checks the isolated-build markers before starting Core, uses temporary
+configuration/data directories, and releases only the process it created. It
+tests restricted Pinyin input, actual TSF edit sessions, host-rendered candidate
+elements and queued selection/finalize/abort, password scope, denied management
+operations, reconnect, and the desktop IPC/settings/TSF probes. This is an
+unregistered fixture, not Windows system dispatch into an installed UWP app.
+
+In the initialized Windows SDK/ATL environment, create the unsigned UWP fixture:
+
+```powershell
+cmake -S win32 -B build/modern-apps/tsf -DENABLE_UWP_FIXTURE=ON
+cmake --build build/modern-apps/tsf --target uwp_fixture_package
+```
+
+The `.appx` under `tests/uwp-fixture` contains native UWP TextBox, RichEditBox and
+PasswordBox controls with no broad capabilities or full-trust manifest entry.
+It is not signed, installed or activated by the build. After explicit package/TIP
+installation, verify Win+Space selection, keyboard and host candidate actions,
+focus, suspension/resume and Core stop/restart in this fixture and system Settings.
+Signed, protected installation acceptance remains separate from unsigned tests.
 
 ## CI Build and Artifact Flow
 

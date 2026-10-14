@@ -223,6 +223,12 @@ int main() {
     assert(item->Show(FALSE) == S_OK);
     DWORD status = 0;
     assert(item->GetStatus(&status) == S_OK && (status & TF_LBI_STATUS_HIDDEN));
+    item->setAvailable(false);
+    assert(item->GetStatus(&status) == S_OK &&
+           (status & TF_LBI_STATUS_DISABLED));
+    item->setAvailable(true);
+    assert(item->GetStatus(&status) == S_OK &&
+           !(status & TF_LBI_STATUS_DISABLED));
     assert(source->UnadviseSink(cookie + 1) == CONNECT_E_NOCONNECTION);
     assert(source->UnadviseSink(cookie) == S_OK && sink.references == 1);
     DWORD newCookie = 0;

@@ -23,6 +23,7 @@
 | `scripts/build-installer.ps1`、`installer/fcitx5.iss` | 校验打包输入、复制许可证、标记受管理安装、生成双版本 EXE/manifest/SHA256，编排安装与卸载 |
 | `cmake/installer-lock.json` | 记录参考 Inno 版本及官方运行库下载地址、版本、SHA256 和发布者 |
 | `win32/setup/main.cpp`、`userprofile.cpp` | 注册归属、权限、占用检查、用户输入项备份/恢复、启用/激活、Core 就绪及卸载 launcher |
+| `win32/setup/startup.h` | 显式当前用户登录启动项；固定 `--login-start` 命令和安装路径归属检查 |
 | `win32/setup/log.h` | 安装 helper 的 UTF-8 诊断日志 |
 | `win32/dll/register.cpp`、`main.cpp` | COM/profile/category 注册与注销、失败结果传递 |
 | `win32/ipc/installation.h` | 受管理安装识别与服务启动门控 |
@@ -52,6 +53,8 @@ Core 保持独立进程和 MSYS2 Windows GNU 运行库；TSF/helper 使用 Windo
 
 TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.state` 仍只表达 SID/session/logon 的手动关闭意图，不能代替机器安装状态。旧版本已加载 DLL 若不认识维护状态，仍需要关闭相关应用或注销/重启来释放。
 
+安装向导的 `loginstart` 任务默认不选中，按普通原始用户身份写入 HKCU Run 的固定 `Fcitx5.exe --login-start` 命令。该启动路径在读取配置/创建服务之前检查自动启动许可，不解除本次登录的手动停止状态。`prepare-uninstall-user` 清理本安装树拥有的启动项，保留其他路径的同名值；machine-only、构建、部署和 probe 不创建启动项。真实登录、升级/卸载及其他用户账户清理仍需验收。
+
 用户设置、词库和学习历史位于 `%APPDATA%/Fcitx5`，不由安装器覆盖或删除。用户输入项备份和 helper 日志位于该用户 LocalAppData。当前安装器直接打包给定完整树，尚未生成最小运行文件清单及完整依赖源码/许可清单；正式发行前仍需核对全部捆绑依赖的交付要求。
 
 ## Helper 与权限
@@ -65,6 +68,7 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 | `configure-user` | 普通权限验证 runtime、备份/启用输入项、首次设置默认并激活、重启 Core 和等待就绪 |
 | `rollback-user` / `prepare-uninstall-user` | 普通权限恢复必要的用户偏好、移除输入项并正常停止自己的服务 |
 | `pause-user` / `resume-user` | 普通权限执行维护前用户处理及恢复 |
+| `enable-login-start` / `disable-login-start` | 普通原始用户显式设置本安装路径的 HKCU Run 启动项；拒绝覆盖其他路径 |
 | `set-maintenance` / `clear-maintenance` / `mark-pending` | 管理员写入 `maintenance` / `installed` / `pending` |
 | `inspect-locks` | 用 Restart Manager 查询安装树的 EXE/DLL 占用，返回错误或占用状态 |
 | `uninstall` | 普通权限处理用户阶段，再提权执行机器注销和原生卸载器；支持 `--silent` |

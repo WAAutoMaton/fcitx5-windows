@@ -2,7 +2,7 @@
 
 #include "atomicfile.h"
 #include "installation.h"
-#include "sandbox.h"
+#include "isolationpolicy.h"
 #include "transport.h"
 #include <exception>
 #include <filesystem>

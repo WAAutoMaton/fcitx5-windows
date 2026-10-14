@@ -33,12 +33,16 @@ void pump(DWORD duration = 50) {
 
 void press(ITfKeyEventSink *keys, ITfContext *context, uint32_t key,
            bool runPump = true) {
+    static unsigned sequence = 0;
+    ++sequence;
     BOOL handled = FALSE;
     require(SUCCEEDED(keys->OnTestKeyDown(context, key, 0, &handled)) &&
                 handled,
             ("key routing failed: " + std::to_string(key)).c_str());
     require(SUCCEEDED(keys->OnKeyDown(context, key, 0, &handled)) && handled,
-            ("key processing failed: " + std::to_string(key)).c_str());
+            ("key processing failed: " + std::to_string(key) +
+             " sequence=" + std::to_string(sequence))
+                .c_str());
     if (runPump)
         pump();
 }
@@ -123,8 +127,9 @@ void cycleProbe(HMODULE module) {
     CComPtr<ITfContext> context;
     TfEditCookie cookie = 0;
     require(SUCCEEDED(manager->CreateDocumentMgr(&document)) &&
-                SUCCEEDED(document->CreateContext(clientId, 0, store, &context,
-                                                  &cookie)) &&
+                SUCCEEDED(document->CreateContext(
+                    clientId, 0, static_cast<ITextStoreACP *>(store.p),
+                    &context, &cookie)) &&
                 SUCCEEDED(document->Push(context)) &&
                 SUCCEEDED(manager->SetFocus(document)),
             "cycle context setup failed");
@@ -348,8 +353,9 @@ int wmain(int count, wchar_t **arguments) {
         CComPtr<ITfContext> context;
         TfEditCookie cookie = 0;
         require(SUCCEEDED(manager->CreateDocumentMgr(&document)) &&
-                    SUCCEEDED(document->CreateContext(client, 0, store,
-                                                      &context, &cookie)) &&
+                    SUCCEEDED(document->CreateContext(
+                        client, 0, static_cast<ITextStoreACP *>(store.p),
+                        &context, &cookie)) &&
                     SUCCEEDED(document->Push(context)) &&
                     SUCCEEDED(manager->SetFocus(document)),
                 "real TSF context creation failed");
@@ -531,7 +537,8 @@ int wmain(int count, wchar_t **arguments) {
         CComPtr<ITfContext> otherContext;
         require(SUCCEEDED(manager->CreateDocumentMgr(&otherDocument)) &&
                     SUCCEEDED(otherDocument->CreateContext(
-                        client, 0, otherStore, &otherContext, &cookie)) &&
+                        client, 0, static_cast<ITextStoreACP *>(otherStore.p),
+                        &otherContext, &cookie)) &&
                     SUCCEEDED(otherDocument->Push(otherContext)) &&
                     SUCCEEDED(manager->SetFocus(otherDocument)),
                 "focus switch failed");
@@ -673,11 +680,15 @@ int wmain(int count, wchar_t **arguments) {
                     (inactiveStatus & TF_LBI_STATUS_HIDDEN),
                 "retained input mode item was not detached");
         adapter->addItemResult = E_FAIL;
-        require(FAILED(service->ActivateEx(adapter, client, 0)) &&
-                    !adapter->langBarItem,
-                "failed input mode registration was not rolled back");
-        adapter->addItemResult = S_OK;
         require(adapter->unpreserveCalls == 1,
+                "initial preserved key cleanup failed");
+        require(SUCCEEDED(service->ActivateEx(adapter, client, 0)) &&
+                    !adapter->langBarItem,
+                "optional language bar failure disabled input");
+        require(SUCCEEDED(service->Deactivate()),
+                "activation without language bar did not clean up");
+        adapter->addItemResult = S_OK;
+        require(adapter->unpreserveCalls == 2,
                 "preserved key was not removed on deactivation");
         adapter->preserveResult = E_FAIL;
         require(SUCCEEDED(service->ActivateEx(adapter, client, 0)),
@@ -703,7 +714,7 @@ int wmain(int count, wchar_t **arguments) {
         require(SUCCEEDED(service->Deactivate()), "second deactivation failed");
         require(adapter->removeItemCalls == 2 && !adapter->langBarItem,
                 "reactivated input mode item leaked");
-        require(adapter->unpreserveCalls == 1,
+        require(adapter->unpreserveCalls == 2,
                 "failed preserved-key registration was unregistered");
         require(SUCCEEDED(keyboard->SetValue(client, &closed)),
                 "keyboard close after deactivation failed");

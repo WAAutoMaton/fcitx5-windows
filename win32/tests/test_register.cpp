@@ -1,6 +1,7 @@
 #include "../dll/register.h"
 #include "../dll/resource.h"
 #include "../dll/util.h"
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <shellapi.h>
@@ -88,22 +89,84 @@ class ProfileManager : public ManagerStub<ITfInputProcessorProfileMgr> {
     HRESULT result = S_OK;
 };
 
+class GUIDEnumeration : public IEnumGUID {
+  public:
+    explicit GUIDEnumeration(std::vector<GUID> values)
+        : values_(std::move(values)) {}
+    STDMETHODIMP QueryInterface(REFIID id, void **result) override {
+        if (!result)
+            return E_INVALIDARG;
+        *result = nullptr;
+        if (id != IID_IUnknown && id != IID_IEnumGUID)
+            return E_NOINTERFACE;
+        *result = static_cast<IEnumGUID *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++references_; }
+    STDMETHODIMP_(ULONG) Release() override {
+        const auto count = --references_;
+        if (!count)
+            delete this;
+        return count;
+    }
+    STDMETHODIMP Next(ULONG count, GUID *values, ULONG *fetched) override {
+        if (!values || !fetched)
+            return E_INVALIDARG;
+        *fetched = 0;
+        while (*fetched < count && position_ < values_.size())
+            values[(*fetched)++] = values_[position_++];
+        return *fetched == count ? S_OK : S_FALSE;
+    }
+    STDMETHODIMP Skip(ULONG) override { return E_NOTIMPL; }
+    STDMETHODIMP Reset() override {
+        position_ = 0;
+        return S_OK;
+    }
+    STDMETHODIMP Clone(IEnumGUID **result) override {
+        if (result)
+            *result = nullptr;
+        return E_NOTIMPL;
+    }
+
+  private:
+    ULONG references_ = 1;
+    size_t position_ = 0;
+    std::vector<GUID> values_;
+};
+
 class CategoryManager : public ManagerStub<ITfCategoryMgr> {
   public:
     STDMETHODIMP RegisterCategory(REFCLSID clsid, REFGUID category,
                                   REFGUID item) override {
         require(clsid == fcitx::FCITX_CLSID && item == fcitx::FCITX_CLSID);
+        require(category != GUID_TFCAT_TIPCAP_SECUREMODE &&
+                category != GUID_TFCAT_TIPCAP_COMLESS);
+#ifndef FCITX5_MODERN_TSF_CATEGORIES
         require(category != GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT &&
-                category != GUID_TFCAT_TIPCAP_SECUREMODE &&
                 category != GUID_TFCAT_TIPCAP_UIELEMENTENABLED);
+#endif
         categories.push_back(category);
-        return categories.size() == failAt ? E_ACCESSDENIED : S_OK;
+        if (categories.size() == failAt)
+            return E_ACCESSDENIED;
+        registered.push_back(category);
+        return S_OK;
     }
-    STDMETHODIMP UnregisterCategory(REFCLSID, REFGUID, REFGUID) override {
-        return E_NOTIMPL;
+    STDMETHODIMP UnregisterCategory(REFCLSID clsid, REFGUID category,
+                                    REFGUID item) override {
+        require(clsid == fcitx::FCITX_CLSID && item == fcitx::FCITX_CLSID);
+        removed.push_back(category);
+        if (removed.size() == failRemoveAt)
+            return E_ACCESSDENIED;
+        std::erase(registered, category);
+        return S_OK;
     }
-    STDMETHODIMP EnumCategoriesInItem(REFGUID, IEnumGUID **) override {
-        return E_NOTIMPL;
+    STDMETHODIMP EnumCategoriesInItem(REFGUID item,
+                                      IEnumGUID **result) override {
+        if (!result || item != fcitx::FCITX_CLSID)
+            return E_INVALIDARG;
+        *result = new GUIDEnumeration(registered);
+        return S_OK;
     }
     STDMETHODIMP EnumItemsInCategory(REFGUID, IEnumGUID **) override {
         return E_NOTIMPL;
@@ -137,7 +200,9 @@ class CategoryManager : public ManagerStub<ITfCategoryMgr> {
         return E_NOTIMPL;
     }
     std::vector<GUID> categories;
+    std::vector<GUID> registered, removed;
     size_t failAt = 0;
+    size_t failRemoveAt = 0;
 };
 } // namespace
 
@@ -172,15 +237,39 @@ int wmain(int count, wchar_t **arguments) {
 
     CategoryManager categories;
     require(fcitx::RegisterCategories(&categories) == S_OK);
+#ifdef FCITX5_MODERN_TSF_CATEGORIES
+    require(categories.categories.size() == 5);
+    require(categories.categories[3] == GUID_TFCAT_TIPCAP_UIELEMENTENABLED &&
+            categories.categories[4] == GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT);
+#else
     require(categories.categories.size() == 3);
+#endif
     require(categories.categories[0] == GUID_TFCAT_TIP_KEYBOARD &&
             categories.categories[1] == GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER &&
             categories.categories[2] == GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT);
+    require(fcitx::UnregisterCategories(&categories) == S_OK &&
+            categories.registered.empty());
+    // Remove capabilities from an earlier modern build even after downgrade.
+    categories.registered = {GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+                             GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT};
+    categories.removed.clear();
+    categories.failRemoveAt = 1;
+    require(fcitx::UnregisterCategories(&categories) == E_ACCESSDENIED &&
+            categories.removed.size() == 2);
+    categories.failRemoveAt = 0;
+    categories.registered.clear();
+    categories.removed.clear();
+    categories.categories.clear();
+    categories.failAt = 3;
+    require(fcitx::RegisterCategories(&categories) == E_ACCESSDENIED &&
+            categories.registered.empty());
+    require(categories.removed.size() == 2);
     categories.categories.clear();
     categories.failAt = 1;
     require(fcitx::RegisterCategories(&categories) == E_ACCESSDENIED);
     require(categories.categories.size() == 1);
     require(fcitx::RegisterCategories(nullptr) == E_INVALIDARG);
+    require(fcitx::UnregisterCategories(nullptr) == E_INVALIDARG);
     FreeLibrary(module);
     std::cout
         << "PASS: embedded DLL branding icon, profile character lengths, "

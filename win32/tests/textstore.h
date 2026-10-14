@@ -2,13 +2,20 @@
 
 #include <algorithm>
 #include <atlcomcli.h>
+#include <inputscope.h>
 #include <msctf.h>
 #include <string>
 #include <textstor.h>
 
 namespace fcitx::test {
 
-class TextStore : public ITextStoreACP {
+inline constexpr GUID kInputScopeAttribute = {
+    0x1713dd5a,
+    0x68e7,
+    0x4a5b,
+    {0x9a, 0xf6, 0x59, 0x2a, 0x59, 0x5c, 0x77, 0x8d}};
+
+class TextStore : public ITextStoreACP, public ITfInputScope {
   public:
     TextStore() {
         window_ = CreateWindowExW(0, L"STATIC", L"Fcitx5 TSF test",
@@ -21,6 +28,7 @@ class TextStore : public ITextStoreACP {
     }
     std::wstring text;
     bool denySynchronous = false;
+    bool denyReadSynchronous = false;
     ULONG writes = 0;
     ULONG readLocks = 0;
     ULONG geometryCalls = 0;
@@ -28,6 +36,19 @@ class TextStore : public ITextStoreACP {
     bool clipComposition = false;
     bool clipCaret = false;
     bool emptyRectangle = false;
+    bool nullWindow = false;
+    HWND windowOverride = nullptr;
+    bool readOnly = false;
+    bool suppliesScope = false;
+    InputScope inputScope = IS_DEFAULT;
+    HRESULT scopeResult = S_OK;
+    void setScope(InputScope scope) {
+        suppliesScope = true;
+        inputScope = scope;
+        if (sink_)
+            sink_->OnAttrsChange(0, static_cast<LONG>(text.size()), 1,
+                                 &kInputScopeAttribute);
+    }
     LONG anchorX = 10;
     HWND window() const { return window_; }
     const TS_SELECTION_ACP &selection() const { return selection_; }
@@ -38,6 +59,11 @@ class TextStore : public ITextStoreACP {
         if (!result)
             return E_INVALIDARG;
         *result = nullptr;
+        if (id == __uuidof(ITfInputScope)) {
+            *result = static_cast<ITfInputScope *>(this);
+            AddRef();
+            return S_OK;
+        }
         if (id != IID_IUnknown && id != IID_ITextStoreACP)
             return E_NOINTERFACE;
         *result = static_cast<ITextStoreACP *>(this);
@@ -67,7 +93,10 @@ class TextStore : public ITextStoreACP {
     STDMETHODIMP RequestLock(DWORD flags, HRESULT *result) override {
         if (!result || !sink_)
             return E_INVALIDARG;
-        if (lock_ || (denySynchronous && (flags & TS_LF_SYNC))) {
+        const bool deny = (flags & TS_LF_READWRITE) == TS_LF_READWRITE
+                              ? denySynchronous
+                              : denyReadSynchronous;
+        if (lock_ || (deny && (flags & TS_LF_SYNC))) {
             *result = TS_E_SYNCHRONOUS;
             return S_OK;
         }
@@ -81,7 +110,8 @@ class TextStore : public ITextStoreACP {
     STDMETHODIMP GetStatus(TS_STATUS *status) override {
         if (!status)
             return E_INVALIDARG;
-        *status = {0, TS_SS_NOHIDDENTEXT};
+        *status = {readOnly ? static_cast<DWORD>(TS_SD_READONLY) : 0UL,
+                   TS_SS_NOHIDDENTEXT};
         return S_OK;
     }
     STDMETHODIMP QueryInsert(LONG start, LONG end, ULONG, LONG *resultStart,
@@ -189,12 +219,17 @@ class TextStore : public ITextStoreACP {
                                            TS_TEXTCHANGE *) override {
         return E_NOTIMPL;
     }
-    STDMETHODIMP RequestSupportedAttrs(DWORD, ULONG,
-                                       const TS_ATTRID *) override {
-        return S_OK;
+    STDMETHODIMP RequestSupportedAttrs(DWORD, ULONG count,
+                                       const TS_ATTRID *attributes) override {
+        return RequestAttrsAtPosition(0, count, attributes, 0);
     }
-    STDMETHODIMP RequestAttrsAtPosition(LONG, ULONG, const TS_ATTRID *,
+    STDMETHODIMP RequestAttrsAtPosition(LONG, ULONG count,
+                                        const TS_ATTRID *attributes,
                                         DWORD) override {
+        scopeRequested_ = false;
+        for (ULONG i = 0; i < count; ++i)
+            if (suppliesScope && attributes[i] == kInputScopeAttribute)
+                scopeRequested_ = true;
         return S_OK;
     }
     STDMETHODIMP RequestAttrsTransitioningAtPosition(LONG, ULONG,
@@ -212,12 +247,58 @@ class TextStore : public ITextStoreACP {
         *offset = 0;
         return S_OK;
     }
-    STDMETHODIMP RetrieveRequestedAttrs(ULONG, TS_ATTRVAL *,
+    STDMETHODIMP RetrieveRequestedAttrs(ULONG capacity, TS_ATTRVAL *attributes,
                                         ULONG *fetched) override {
         if (!fetched)
             return E_INVALIDARG;
         *fetched = 0;
+        if (scopeRequested_ && capacity && attributes) {
+            attributes[0].idAttr = kInputScopeAttribute;
+            attributes[0].dwOverlapId = 0;
+            VariantInit(&attributes[0].varValue);
+            attributes[0].varValue.vt = VT_UNKNOWN;
+            attributes[0].varValue.punkVal = static_cast<ITfInputScope *>(this);
+            AddRef();
+            *fetched = 1;
+        }
+        scopeRequested_ = false;
         return S_OK;
+    }
+    STDMETHODIMP GetInputScopes(InputScope **scopes, UINT *count) override {
+        if (!scopes || !count)
+            return E_INVALIDARG;
+        *scopes = nullptr;
+        *count = 0;
+        if (FAILED(scopeResult))
+            return scopeResult;
+        *scopes = static_cast<InputScope *>(CoTaskMemAlloc(sizeof(InputScope)));
+        if (!*scopes)
+            return E_OUTOFMEMORY;
+        **scopes = inputScope;
+        *count = 1;
+        return S_OK;
+    }
+    STDMETHODIMP GetPhrase(BSTR **phrases, UINT *count) override {
+        if (!phrases || !count)
+            return E_INVALIDARG;
+        *phrases = nullptr;
+        *count = 0;
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP GetRegularExpression(BSTR *text) override {
+        if (text)
+            *text = nullptr;
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP GetSRGS(BSTR *text) override {
+        if (text)
+            *text = nullptr;
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP GetXML(BSTR *text) override {
+        if (text)
+            *text = nullptr;
+        return E_NOTIMPL;
     }
     STDMETHODIMP GetEndACP(LONG *end) override {
         if (!end)
@@ -260,7 +341,9 @@ class TextStore : public ITextStoreACP {
     STDMETHODIMP GetWnd(TsViewCookie, HWND *window) override {
         if (!window)
             return E_INVALIDARG;
-        *window = window_;
+        *window = nullWindow       ? nullptr
+                  : windowOverride ? windowOverride
+                                   : window_;
         return S_OK;
     }
 
@@ -271,6 +354,7 @@ class TextStore : public ITextStoreACP {
     }
     LONG references_ = 1;
     DWORD lock_ = 0;
+    bool scopeRequested_ = false;
     TS_SELECTION_ACP selection_{0, 0, {TS_AE_NONE, FALSE}};
     CComPtr<ITextStoreACPSink> sink_;
     HWND window_ = nullptr;
