@@ -37,6 +37,105 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-<当前用户SID>-*
 
 放行 Pipe 也允许沙箱程序调用既有设置修改协议，这是共享服务的权限边界。维持当前用户 ACL、session 范围和请求校验，不开放任意命令、可执行路径或文件路径。
 
+## 用户操作手册
+
+### 1. 准备宿主输入法与目标沙箱
+
+1. 先在沙箱外确认 Fcitx5 已安装、已注册，并能在普通 x64 应用中输入中文。Core、TSF DLL 和 Settings 应来自同一套构建，使用一致的协议 v8；仅添加 Sandboxie 规则不能代替输入法安装或注册。
+2. 在 Sandboxie 管理器中确认要配置的沙箱已启用，并记下它在 `Sandboxie.ini` 中的节名，例如 `[DefaultBox]` 对应 `DefaultBox`。下文命令中的 `DefaultBox` 都要替换为实际节名，而非自定义显示名称。多个沙箱需要分别配置。
+3. 在沙箱外，以平时使用输入法的 Windows 用户启动已部署的 `bin/Fcitx5.exe`。例如安装目录为 `C:\Fcitx5` 时，在沙箱外 PowerShell 中运行：
+
+   ```powershell
+   Start-Process -FilePath 'C:\Fcitx5\bin\Fcitx5.exe'
+   ```
+
+   请替换为实际部署路径，保留相邻的 `share`、`tsf` 和 `settings` 目录。不要从 Sandboxie 的“在沙箱中运行”入口启动 Core，也不要让强制沙箱规则把它重定向到沙箱内。若之前手动关闭过服务，需要在沙箱外使用“重启服务”，或运行同一路径的 `Fcitx5.exe --restart-services` 解除停止状态。
+
+### 2. 生成当前用户的规则
+
+在沙箱外、当前用户的 PowerShell 中切换到本仓库根目录，运行：
+
+```powershell
+.\scripts\sandboxie-template.ps1 -BoxName DefaultBox
+```
+
+脚本只显示配置片段，不会修改 Sandboxie。输出类似：
+
+```ini
+[DefaultBox]
+OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-333333333-1001-*
+```
+
+上面的 SID 仅为示例，应使用脚本实际输出的整行。没有仓库脚本时，可以在沙箱外运行 `whoami /user`，将显示的当前用户 SID 填入下面的规则；不要保留尖括号，也不要照抄其他用户的 SID：
+
+```ini
+OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-<当前用户SID>-*
+```
+
+末尾 `*` 用于匹配该用户的 session 编号，实际连接仍受当前用户/session 的 Pipe 名称和 ACL 限制。首次排查时可给脚本加上 `-SessionOnly`，生成只匹配当前 session 的规则；注销再登录后 session 编号可能变化，需要重新生成。通常日常使用选择默认的 `-*` 规则。
+
+### 3. 将规则加入 Sandboxie
+
+以下两种方法任选一种。修改前先备份现有 `Sandboxie.ini`。规则只对选定沙箱放行 Fcitx5 Pipe；该沙箱中的程序也因此可以通过现有 IPC 修改宿主输入法设置和调用服务控制操作，请只为需要共享输入法的沙箱启用。
+
+#### 方法 A：手动编辑配置
+
+1. 打开 Sandboxie 管理器的 `Sandboxie.ini` 编辑入口。Sandboxie Classic 为“配置（Configure）→ 编辑配置（Edit Configuration）”；Sandboxie Plus 中找到编辑 `Sandboxie.ini` 的入口，具体菜单名称可能随版本或界面语言变化。
+2. 在配置中找到目标沙箱已有的节，例如 `[DefaultBox]`，将第 2 步生成的 `OpenPipePath=...` 整行添加到该节内、下一个 `[节名]` 之前。保留该节原有配置和其他 `OpenPipePath` 行，不要重复添加 `[DefaultBox]`，也不要放入 `[GlobalSettings]` 或其他沙箱节。如果编辑器仅显示当前沙箱的配置，只添加规则行即可。
+3. 保存配置并让 Sandboxie 重新加载。Classic 从“编辑配置”关闭编辑器时会自动重新加载；必要时使用“配置 → 重新加载配置（Reload Configuration）”。回到配置中确认该规则仍在目标节下。
+
+例如，目标沙箱原有 `Enabled=y` 时，添加后的局部内容应类似下列形式（SID 仍须替换）：
+
+```ini
+[DefaultBox]
+Enabled=y
+OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-333333333-1001-*
+```
+
+规则使用单个反斜杠，无需加引号。无需额外添加 `OpenIpcPath=*`、放行全部 Named Pipe、开放用户配置目录或 Windows App Runtime 目录。手动编辑和重新加载配置的说明见 [Sandboxie 官方配置菜单文档](https://sandboxie-plus.github.io/sandboxie-docs/Content/ConfigureMenu.html)，规则类型见 [OpenPipePath 文档](https://sandboxie-plus.github.io/sandboxie-docs/Content/OpenPipePath.html)。
+
+#### 方法 B：用仓库脚本写入
+
+在仓库根目录、沙箱外的 PowerShell 中先预览，再执行写入：
+
+```powershell
+.\scripts\sandboxie-template.ps1 -BoxName DefaultBox -Apply -WhatIf
+.\scripts\sandboxie-template.ps1 -BoxName DefaultBox -Apply
+```
+
+第一条只预览；第二条通过 `SbieIni.exe` 向指定沙箱追加规则，并检查是否保存成功。已有完全相同的规则时不会重复追加。脚本不创建沙箱，也不启动 Core 或关闭应用。脚本支持的沙箱节名为 1–32 个英文字母、数字或下划线；其他名称可使用手动编辑方式。
+
+若提示找不到 `SbieIni.exe`，指定实际安装路径，例如：
+
+```powershell
+.\scripts\sandboxie-template.ps1 -BoxName DefaultBox -Apply -SbieIniPath 'D:\Apps\Sandboxie-Plus\SbieIni.exe'
+```
+
+### 4. 重新打开应用并确认输入
+
+1. 保存沙箱应用中的工作，正常退出受影响的应用及其驻留后台进程，再从目标沙箱重新打开。仅打开一个新标签页或新窗口可能仍复用旧进程，不能保证规则已重新加载。
+2. 在沙箱应用的普通文本框中，通过 Windows 输入法切换选择 Fcitx5，再通过语言栏或 `Ctrl+Space` 选中拼音条目。输入 `nihao`，确认有预编辑和候选，并可按空格提交中文；测试其他引擎时使用该引擎对应的编码。
+3. 从 Fcitx5 菜单打开设置，确认 Settings 在沙箱外运行，输入法列表和选项与沙箱外一致。配置和学习记录由宿主 Core 共享，不会因沙箱不同而各自隔离。
+
+宿主 Core 必须保持运行。若在沙箱内关闭了服务，需要回到沙箱外重新启动服务；沙箱内 TSF 不会自动拉起 Core。旧版本遗留的沙箱 Core/Settings 也不会自动退出，应保存工作后自行关闭。
+
+### 5. 常见问题与诊断
+
+| 现象 | 检查方法 |
+| --- | --- |
+| 沙箱外也无法输入 | 先检查宿主 Core、输入法注册和引擎数据，确认沙箱外普通 x64 应用可用后再排查规则。 |
+| 沙箱外正常，沙箱内无法输入 | 确认应用实际位于配置的沙箱，规则在正确节内，SID 属于当前用户，并已彻底退出、重新打开应用。若使用 `-SessionOnly`，重新生成当前 session 的规则。 |
+| 脚本提示沙箱不存在或未启用 | 检查 `-BoxName` 是否为配置节名，以及目标节的 `Enabled=y`；脚本不会新建或启用沙箱。 |
+| 规则无法保存或脚本写入失败 | 检查 Sandboxie 配置锁定、管理权限及 `SbieIni.exe` 路径，处理具体报错后重新确认规则已保存。 |
+| 连接后提示协议不匹配 | 使用同一套构建的 Core、TSF DLL 和 Settings，并重新打开加载旧 DLL 的应用。Pipe 名中的 `v2` 不是 IPC 协议版本，不要自行改成 `v8`。 |
+| Settings 在沙箱内启动或出现另一份 Core | 检查是否仍在使用旧构建、残留沙箱进程或强制沙箱规则；当前实现要求 Core 和 Settings 在沙箱外运行。 |
+
+若已有构建产物，可在沙箱外和目标沙箱内分别运行 `ipc_probe.exe --diagnose`（使用实际文件路径），比较 Pipe 名称、连接阶段、Windows 错误码和服务端 PID。该命令不启动服务或修改配置。错误 `2/3` 只说明当前 Pipe 不可见，可能是宿主未启动、规则未生效或应用未重启；不能仅凭错误码判断原因。诊断成功只证明 IPC 连接，真实输入和候选窗仍需按上面的应用步骤验证。
+
+### 6. 撤销规则
+
+在目标沙箱的配置节中删除本次添加的 Fcitx5 `OpenPipePath=...` 行；若同时添加过 session 专用规则，也一并删除。保存、重新加载配置，并正常退出后重新打开受影响的沙箱应用。保留其他应用的规则。撤销后该沙箱将无法通过此规则连接宿主 Core，不影响沙箱外的 Fcitx5 安装和用户数据。
+
 ## 操作路由
 
 | 操作 | 沙箱内实现 |
