@@ -59,9 +59,16 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-<当前用户SID>-*
 ```powershell
 ./scripts/sandboxie-template.ps1 -BoxName DefaultBox -SessionOnly
 ./scripts/sandboxie-template.ps1 -BoxName DefaultBox
+./scripts/sandboxie-template.ps1 -BoxName DefaultBox -Apply
 ```
 
-脚本只向标准输出写入片段。将对应规则应用到目标沙箱后，重新打开应用。首次使用需先在沙箱外启动 Core；手动关闭后同样需在沙箱外重启。Core、TSF、Settings 必须使用一致的协议 v8 构建。
+前两个命令只向标准输出写入片段；最后一个命令通过 Sandboxie 的 `SbieIni.exe append` 将规则写入指定沙箱。`-Apply` 是显式配置操作，必须提供 `-BoxName`。应用规则后重新打开应用。首次使用需先在沙箱外启动 Core；手动关闭后同样需在沙箱外重启。Core、TSF、Settings 必须使用一致的协议 v8 构建。
+
+`-Apply -WhatIf` 不执行 Sandboxie 命令；应用前检查目标沙箱已启用，写入后确认规则存在，已有相同规则时不重复追加。脚本不会关闭应用或终止进程。
+
+诊断可在沙箱内外分别运行 `ipc_probe.exe --diagnose`，比较 Pipe 名称、连接阶段、Windows 错误码和服务端 PID。该模式不创建输入 context、不修改配置、不启动服务。错误 2/3 表示当前 Pipe 不可见，可能是 Core 未运行，也可能是缺少规则或应用尚未重启；它本身不能证明是哪一种。沙箱外诊断成功而沙箱内失败时优先核对目标沙箱的有效规则。
+
+`ipc_probe.exe --check-candidates` 创建临时输入 context，以当前可用中文条目输入 `NI`，检查预编辑和候选后取消并销毁 context，不提交文字或保存配置。它用于验证候选数据链路，不验证真实应用中的候选窗显示；码表等条目对 `NI` 不一定产生候选，需结合当前引擎判断失败。
 
 自动化回归覆盖 Sandboxie 查询的宿主/沙箱/异常状态、启动禁止、服务端归属、控制请求校验、回复后执行、模板输出和 UI 语言来源；保留桌面服务生命周期、IPC 超时和 TSF 编辑回归。
 

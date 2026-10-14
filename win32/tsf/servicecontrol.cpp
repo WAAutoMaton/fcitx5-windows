@@ -147,23 +147,41 @@ void Tsf::pollServiceTask() {
     }
     if (error && command != kEnsureServiceMessage) {
         const auto translation = translationMonitor_.snapshot();
-        auto text = translation->wide(
-            "settings",
-            command == LangBarItem::kUserDataMessage
-                ? win32::i18n::mark("settings",
-                                    "Cannot open the user data folder.")
-                : win32::i18n::mark("settings", "Service operation failed."));
-        if (command != LangBarItem::kUserDataMessage)
+        const bool pipeMissing =
+            ipc::hostOnlyClient() &&
+            (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND);
+        auto text =
+            pipeMissing
+                ? translation->wide(
+                      "settings",
+                      "Cannot reach the host Core named pipe. Start Core "
+                      "outside Sandboxie, add the Fcitx5 OpenPipePath rule "
+                      "to this sandbox, and reopen the application.")
+                : translation->wide(
+                      "settings",
+                      command == LangBarItem::kUserDataMessage
+                          ? win32::i18n::mark(
+                                "settings", "Cannot open the user data folder.")
+                          : win32::i18n::mark("settings",
+                                              "Service operation failed."));
+        if (command != LangBarItem::kUserDataMessage && !pipeMissing)
             text += L"\n" + translation->wide(
                                 "settings",
                                 "If services are stopped, restart services. "
                                 "Check that the DLL, Core and Settings are in "
                                 "the same installation directory.");
-        if (ipc::hostOnlyClient())
+        if (ipc::hostOnlyClient() && !pipeMissing)
             text += L"\n" +
                     translation->wide("settings",
                                       "Start Core outside Sandboxie and allow "
                                       "its named pipe in the sandbox.");
+        if (ipc::hostOnlyClient()) {
+            const auto name = ipc::pipeName();
+            constexpr std::wstring_view prefix = LR"(\\.\pipe\)";
+            if (name.starts_with(prefix))
+                text += L"\nOpenPipePath=\\Device\\NamedPipe\\" +
+                        name.substr(prefix.size());
+        }
         text += L"\n" +
                 translation->format("settings", "Windows error: {0}", error);
         MessageBoxW(nullptr, text.c_str(), L"Fcitx5", MB_OK | MB_ICONERROR);

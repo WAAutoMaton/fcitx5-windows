@@ -100,6 +100,7 @@ int wmain(int count, wchar_t **arguments) {
     fcitx::PipeClient client(name, sandbox);
     assert(!client.connect() &&
            client.connectionError() == ERROR_ACCESS_DENIED);
+    assert(std::string_view(client.connectionStage()) == "server ownership");
     assert(!client.connected());
     CloseHandle(server);
 
@@ -118,6 +119,8 @@ int wmain(int count, wchar_t **arguments) {
     while (!host.connect() && GetTickCount64() < deadline)
         Sleep(10);
     assert(host.connected() && host.connectionError() == ERROR_SUCCESS);
+    assert(std::string_view(host.connectionStage()) == "connected");
+    assert(host.serverProcessId() == child.dwProcessId);
     DWORD error = 0;
     assert(!host.hostCommand(ipc::MessageType::OpenSettings, error) &&
            error == ERROR_INVALID_PARAMETER);

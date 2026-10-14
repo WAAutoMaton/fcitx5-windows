@@ -1,3 +1,4 @@
+#include "../ipc/transport.h"
 #include "../tsf/pipeclient.h"
 #include <algorithm>
 #include <iostream>
@@ -45,7 +46,43 @@ uint64_t create(fcitx::PipeClient &client) {
 int main(int argumentCount, char **arguments) {
     try {
         fcitx::PipeClient client;
+        if (argumentCount == 2 && std::string(arguments[1]) == "--diagnose") {
+            std::wcout << L"pipe=" << fcitx::win32::ipc::pipeName() << L"\n";
+            const bool connected = client.connect();
+            std::wcout << L"pid=" << GetCurrentProcessId() << L"\nhostOnly="
+                       << fcitx::win32::ipc::hostOnlyClient() << L"\nserverPid="
+                       << client.serverProcessId() << L"\nerror="
+                       << client.connectionError() << L"\n";
+            std::cout << "stage=" << client.connectionStage() << "\n";
+            if (connected) {
+                fcitx::ipc::InputMethodsReply methods;
+                require(client.getInputMethods(methods) &&
+                            methods.error == fcitx::ipc::SettingsError::None,
+                        "Cannot read host input methods");
+                std::cout << "revision=" << methods.selection.revision << "\n";
+                for (const auto &id : methods.selection.enabled)
+                    std::cout << "method=" << id << "\n";
+            }
+            return connected ? 0 : 1;
+        }
         const auto context = create(client);
+        if (argumentCount == 2 &&
+            std::string(arguments[1]) == "--check-candidates") {
+            fcitx::PipeClient::KeyReply reply;
+            require(client.setMode(context, true, reply) && reply.enabled,
+                    "No enabled Chinese input method");
+            reply = type(client, context, "NI");
+            require(!reply.preedit.empty() && !reply.candidates.empty(),
+                    "Host Core returned no preedit/candidates");
+            std::cout << "method=" << reply.inputMethod
+                      << "\ncandidateCount=" << reply.candidates.size() << "\n";
+            require(client.reset(context, reply) && client.focusOut(context) &&
+                        client.destroyContext(context),
+                    "Candidate probe context cleanup failed");
+            std::cout << "PASS: host Core preedit and candidates (no "
+                         "commit/configuration writes)\n";
+            return 0;
+        }
         if (argumentCount == 2 && std::string(arguments[1]) == "--ready") {
             require(client.focusOut(context) && client.destroyContext(context),
                     "ready context cleanup failed");

@@ -22,6 +22,8 @@ class PipeClient {
     void disconnect();
     bool connected() const { return pipe_ != INVALID_HANDLE_VALUE; }
     DWORD connectionError() const { return connectionError_; }
+    const char *connectionStage() const { return connectionStage_; }
+    DWORD serverProcessId() const { return serverProcessId_; }
 
     bool createContext(uint64_t capabilities, uint64_t &contextId);
     bool focusIn(uint64_t contextId);
@@ -62,6 +64,8 @@ class PipeClient {
     std::wstring name_;
     ipc::SandboxieApi sandbox_;
     DWORD connectionError_ = ERROR_SUCCESS;
+    const char *connectionStage_ = "not connected";
+    DWORD serverProcessId_ = 0;
     uint64_t nextRequestId_ = 1;
     mutable std::mutex mutex_;
 };

@@ -11,10 +11,13 @@ bool PipeClient::connect() {
         return true;
     }
     const auto name = name_.empty() ? ipc::pipeName() : name_;
+    serverProcessId_ = 0;
+    connectionStage_ = "WaitNamedPipe";
     if (name.empty() || !WaitNamedPipeW(name.c_str(), 50)) {
         connectionError_ = name.empty() ? ERROR_INVALID_NAME : GetLastError();
         return false;
     }
+    connectionStage_ = "CreateFile";
     pipe_ = CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                         OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
     if (!connected()) {
@@ -22,6 +25,7 @@ bool PipeClient::connect() {
         return false;
     }
     ULONG server = 0;
+    connectionStage_ = "server ownership";
     if (sandbox_.hostOnly() && (!GetNamedPipeServerProcessId(pipe_, &server) ||
                                 !sandbox_.acceptsServer(server))) {
         connectionError_ = ERROR_ACCESS_DENIED;
@@ -43,9 +47,16 @@ bool PipeClient::connect() {
     request.requestId = nextRequestId_++;
     ipc::Frame response;
     uint16_t version = 0;
-    if (!SetNamedPipeHandleState(pipe_, &mode, nullptr, nullptr) ||
-        !writeFrame(request) || !readFrame(response))
+    connectionStage_ = "SetNamedPipeHandleState";
+    if (!SetNamedPipeHandleState(pipe_, &mode, nullptr, nullptr))
         return fail(GetLastError());
+    connectionStage_ = "Hello write";
+    if (!writeFrame(request))
+        return fail(GetLastError());
+    connectionStage_ = "Hello read";
+    if (!readFrame(response))
+        return fail(GetLastError());
+    connectionStage_ = "Hello validation";
     if (response.type != ipc::MessageType::HelloReply ||
         response.requestId != request.requestId || response.contextId != 0)
         return fail(ERROR_INVALID_DATA);
@@ -55,6 +66,9 @@ bool PipeClient::connect() {
     if (version != ipc::kVersion)
         return fail(ERROR_REVISION_MISMATCH);
     connectionError_ = ERROR_SUCCESS;
+    if (GetNamedPipeServerProcessId(pipe_, &server))
+        serverProcessId_ = server;
+    connectionStage_ = "connected";
     return true;
 }
 

@@ -597,6 +597,10 @@ msgctxt "settings"
 msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
 msgstr "请在 Sandboxie 外启动 Core，并在沙箱中放行其命名管道。"
 
+msgctxt "settings"
+msgid "Cannot reach the host Core named pipe. Start Core outside Sandboxie, add the Fcitx5 OpenPipePath rule to this sandbox, and reopen the application."
+msgstr "无法连接宿主 Core 命名管道。请在 Sandboxie 外启动 Core，为此沙箱添加 Fcitx5 的 OpenPipePath 规则，然后重新打开应用。"
+
 #: win32/tsf/servicecontrol.cpp:162
 msgctxt "settings"
 msgid "If services are stopped, restart services. Check that the DLL, Core and Settings are in the same installation directory."
