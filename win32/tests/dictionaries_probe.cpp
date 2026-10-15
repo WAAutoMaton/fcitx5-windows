@@ -110,6 +110,20 @@ bool candidate(fcitx::PipeClient &client, uint64_t context,
     require(client.reset(context, reply), "context cleanup failed");
     return found;
 }
+
+void waitCandidate(fcitx::PipeClient &client, uint64_t context,
+                   const std::string &input, const std::string &text,
+                   const char *message) {
+    wait(
+        [&] {
+            try {
+                return candidate(client, context, input, text);
+            } catch (const std::exception &) {
+                return false;
+            }
+        },
+        message);
+}
 } // namespace
 
 int main(int argc, char **argv) {
@@ -200,9 +214,10 @@ int main(int argc, char **argv) {
         requested = settings.settings;
         requested.profile = ShuangpinProfile::Ziranma;
         require(configuration.setSettings(requested, settings) &&
-                    settings.error == SettingsError::None &&
-                    candidate(input, context, "YELLFGYUUG", poetry),
-                "Ziranma did not use third-party dictionary");
+                    settings.error == SettingsError::None,
+                "Ziranma setup failed");
+        waitCandidate(input, context, "YELLFGYUUG", poetry,
+                      "Ziranma did not use third-party dictionary");
         fs::rename(cleanup.valid, cleanup.renamed);
         wait(
             [&] {
