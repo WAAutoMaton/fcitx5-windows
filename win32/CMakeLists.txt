@@ -27,6 +27,14 @@ set(CMAKE_CXX_STANDARD 20)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/native-boost.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/windows-translations.cmake")
 add_subdirectory(i18n)
+add_library(windows_diagnostic STATIC ipc/diagnostic_log.cpp)
+target_compile_definitions(windows_diagnostic PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(windows_diagnostic PUBLIC shell32 ole32)
+execute_process(COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    OUTPUT_VARIABLE diagnostic_build OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+target_compile_definitions(windows_diagnostic PRIVATE
+    FCITX5_DIAGNOSTIC_BUILD="${diagnostic_build}-${CMAKE_BUILD_TYPE}")
 
 add_subdirectory(assets)
 add_subdirectory(tsf)

@@ -15,9 +15,11 @@ bool Tsf::initTextEditSink(CComPtr<ITfDocumentMgr> documentMgr) {
     if (textEditSinkCookie_ != TF_INVALID_COOKIE) {
         if (SUCCEEDED(textEditSinkContext_->QueryInterface(IID_ITfSource,
                                                            (void **)&source))) {
-            source->UnadviseSink(textEditSinkCookie_);
+            diagnosticResult(L"text edit sink unadvise",
+                             source->UnadviseSink(textEditSinkCookie_));
             if (textLayoutSinkCookie_ != TF_INVALID_COOKIE) {
-                source->UnadviseSink(textLayoutSinkCookie_);
+                diagnosticResult(L"layout sink unadvise",
+                                 source->UnadviseSink(textLayoutSinkCookie_));
             }
         }
         textEditSinkContext_ = nullptr;
@@ -67,6 +69,9 @@ STDMETHODIMP Tsf::OnLayoutChange(ITfContext *context, TfLayoutCode,
         displayedCandidates_.candidates.empty()) {
         return S_OK;
     }
+    win32::diagnostic::tsfLogger().event(
+        win32::diagnostic::Level::Debug, "candidate_refresh",
+        {{"coalesced", candidateRefreshPosted_ ? "true" : "false"}});
     if (!candidateRefreshPosted_) {
         candidateRefreshPosted_ =
             PostMessageW(messageWindow_, kRefreshCandidateMessage, 0, 0) !=
@@ -109,6 +114,7 @@ STDMETHODIMP Tsf::OnEndEdit(ITfContext *context, TfEditCookie cookie,
         hideCandidates();
         PipeClient::KeyReply reply;
         if (remoteContextId_ && pipe_.reset(remoteContextId_, reply)) {
+            acceptInputMethod(reply);
             state_ = std::move(reply);
         }
     }

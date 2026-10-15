@@ -46,6 +46,7 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     const ipc::InputMethodInfo *method(const std::string &id) const;
     winrt::fire_and_forget refreshDictionaries();
     winrt::fire_and_forget openDictionaryFolder();
+    winrt::fire_and_forget refreshLogStatus(bool openFolder = false);
     void busy(bool enabled);
     winrt::Microsoft::UI::Xaml::Window window_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ListView methods_{nullptr};
@@ -67,8 +68,14 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     ipc::GlobalSettingsReply global_;
     winrt::Microsoft::UI::Xaml::Controls::Primitives::ToggleButton
         globalButton_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::StackPanel globalPanel_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TabView globalPanel_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ComboBox language_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch detailedLogging_{
+        nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock logStatus_{nullptr},
+        logDirectory_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button logFolder_{nullptr};
+    bool logRefresh_ = false;
     winrt::Microsoft::UI::Xaml::Controls::TextBlock status_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button confirm_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button retry_{nullptr};

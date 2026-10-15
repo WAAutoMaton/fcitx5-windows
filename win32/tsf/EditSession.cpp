@@ -42,8 +42,17 @@ class SnapshotEditSession final : public ITfEditSession {
         return remaining;
     }
     STDMETHODIMP DoEditSession(TfEditCookie cookie) override {
+        const auto started = GetTickCount64();
         const auto result =
             owner_->applySnapshot(cookie, context_, reply_, generation_);
+        if (win32::diagnostic::tsfLogger().enabled())
+            win32::diagnostic::tsfLogger().event(
+                win32::diagnostic::Level::Debug, "edit_execute",
+                {{"generation", generation_},
+                 {"valid_context",
+                  context_ == owner_->textEditSinkContext_ ? "true" : "false"},
+                 {"hr", static_cast<uint32_t>(result)},
+                 {"elapsed_ms", GetTickCount64() - started}});
         owner_->finishEdit(generation_, result);
         return result;
     }
@@ -163,6 +172,8 @@ void Tsf::cancelComposition() {
 bool Tsf::submitSnapshot(PipeClient::KeyReply reply, bool synchronous) {
     if (!textEditSinkContext_ ||
         (reply.revision && reply.revision <= state_.revision)) {
+        win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                             "snapshot_rejected");
         return false;
     }
     acceptInputMethod(reply);
@@ -215,6 +226,8 @@ void Tsf::refreshCandidatePosition(TfEditCookie cookie, ITfContext *context,
                                    uint64_t generation) {
     if (generation != generation_ || context != textEditSinkContext_ ||
         !foreground_ || displayedCandidates_.candidates.empty()) {
+        win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                             "candidate_refresh_rejected");
         return;
     }
     if (displayedCandidates_.settingsRevision < state_.settingsRevision) {
@@ -241,7 +254,8 @@ void Tsf::hideCandidates() {
     candidateOwner_ = nullptr;
     if (active && uiElementMgr_) {
         CComPtr<ITfUIElementMgr> manager = uiElementMgr_;
-        manager->EndUIElement(id);
+        const auto result = manager->EndUIElement(id);
+        diagnosticResult(L"EndUIElement", result);
     }
 }
 
@@ -283,6 +297,12 @@ bool Tsf::publishCandidates(ITfContext *context,
         DWORD id = 0;
         const auto showSerial = element->showSerial();
         const auto result = manager->BeginUIElement(element, &show, &id);
+        if (win32::diagnostic::tsfLogger().enabled())
+            win32::diagnostic::tsfLogger().event(
+                win32::diagnostic::Level::Debug, "ui_element_begin",
+                {{"hr", static_cast<uint32_t>(result)},
+                 {"show", show ? "true" : "false"},
+                 {"element", id}});
         diagnosticResult(show ? L"BeginUIElement own UI"
                               : L"BeginUIElement host UI",
                          result);
@@ -307,11 +327,14 @@ bool Tsf::publishCandidates(ITfContext *context,
     } else {
         CComPtr<CandidateUIElement> element = candidateElement_;
         const auto changes = element->publish(reply, document);
-        if (changes && candidateElementActive_ &&
-            FAILED(manager->UpdateUIElement(candidateElementId_))) {
-            showCandidateUi(false);
-            OutputDebugStringW(L"Fcitx5: UpdateUIElement failed.\n");
-            return false;
+        if (changes && candidateElementActive_) {
+            const auto result = manager->UpdateUIElement(candidateElementId_);
+            diagnosticResult(L"UpdateUIElement", result);
+            if (FAILED(result)) {
+                showCandidateUi(false);
+                OutputDebugStringW(L"Fcitx5: UpdateUIElement failed.\n");
+                return false;
+            }
         }
         if (generation != generation_ || context != textEditSinkContext_ ||
             candidateElement_ != element)
@@ -404,10 +427,25 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
     CComPtr<ITfContextView> view;
     HWND window = nullptr;
     DWORD ownerProcess = 0;
-    if (FAILED(context->GetActiveView(&view)) || !view ||
-        FAILED(view->GetWnd(&window)) || !window || !IsWindowVisible(window) ||
-        IsIconic(window) || !GetWindowThreadProcessId(window, &ownerProcess) ||
+    const auto viewResult = context->GetActiveView(&view);
+    const auto windowResult =
+        SUCCEEDED(viewResult) && view ? view->GetWnd(&window) : E_FAIL;
+    diagnosticResult(L"GetActiveView", viewResult);
+    diagnosticResult(L"GetWnd", windowResult);
+    if (FAILED(viewResult) || !view || FAILED(windowResult) || !window ||
+        !IsWindowVisible(window) || IsIconic(window) ||
+        !GetWindowThreadProcessId(window, &ownerProcess) ||
         ownerProcess != GetCurrentProcessId()) {
+        if (win32::diagnostic::tsfLogger().enabled())
+            win32::diagnostic::tsfLogger().event(
+                win32::diagnostic::Level::Debug, "candidate_hidden",
+                {{"reason", "owner_unavailable"},
+                 {"window_present", window ? "true" : "false"},
+                 {"visible",
+                  window && IsWindowVisible(window) ? "true" : "false"},
+                 {"minimized", window && IsIconic(window) ? "true" : "false"},
+                 {"owner_matches",
+                  ownerProcess == GetCurrentProcessId() ? "true" : "false"}});
         candidates_.hide();
         return;
     }
@@ -432,6 +470,9 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
         range = caret;
     }
     if (!range) {
+        win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                             "candidate_hidden",
+                                             {{"reason", "no_range"}});
         candidates_.hide();
         return;
     }
@@ -444,12 +485,28 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
         return;
     }
     auto result = view->GetTextExt(cookie, range, &anchor, &clipped);
+    diagnosticResult(L"GetTextExt", result);
+    bool fallback = false;
     // A partially offscreen composition can still have a visible caret.
     if ((result == TS_E_NOLAYOUT || (SUCCEEDED(result) && clipped)) && caret &&
         SUCCEEDED(caret->Collapse(cookie, TF_ANCHOR_END))) {
         result = view->GetTextExt(cookie, caret, &anchor, &clipped);
+        fallback = true;
     }
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "candidate_extent",
+            {{"hr", static_cast<uint32_t>(result)},
+             {"clipped", clipped ? "true" : "false"},
+             {"caret_fallback", fallback ? "true" : "false"},
+             {"left", anchor.left},
+             {"top", anchor.top},
+             {"right", anchor.right},
+             {"bottom", anchor.bottom}});
     if (result == TS_E_NOLAYOUT) {
+        win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                             "candidate_layout_pending",
+                                             {{"reason", "no_layout"}});
         if (!candidateLayoutPending_) {
             candidateLayoutDeadline_ = GetTickCount64() + 250;
             if (messageWindow_ && !candidateRefreshPosted_) {
@@ -470,6 +527,11 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
     }
     if (FAILED(result) || clipped || anchor.bottom <= anchor.top ||
         anchor.right < anchor.left) {
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "candidate_hidden",
+            {{"reason", FAILED(result) ? "extent_failed"
+                        : clipped      ? "clipped"
+                                       : "empty_rectangle"}});
         candidates_.hide();
         return;
     }
@@ -497,6 +559,13 @@ bool Tsf::requestNextEdit(bool synchronous) {
     auto request = operation.context->RequestEditSession(
         clientId_, session,
         (synchronous ? TF_ES_SYNC : TF_ES_ASYNC) | TF_ES_READWRITE, &result);
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "edit_request",
+            {{"synchronous", synchronous ? "true" : "false"},
+             {"queue_length", edits_.size()},
+             {"request_hr", static_cast<uint32_t>(request)},
+             {"session_hr", static_cast<uint32_t>(result)}});
     if (synchronous && (FAILED(request) || result == TF_E_SYNCHRONOUS ||
                         result == TF_E_LOCKED)) {
         result = E_FAIL;
@@ -546,6 +615,8 @@ HRESULT Tsf::applySnapshot(TfEditCookie cookie, ITfContext *context,
                            const PipeClient::KeyReply &snapshot,
                            uint64_t generation) {
     if (generation != generation_ || context != textEditSinkContext_) {
+        win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                             "edit_stale");
         return S_OK;
     }
     if (!scopeAllowsInputAtEdit(context, cookie))

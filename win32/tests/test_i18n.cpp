@@ -109,6 +109,36 @@ int main() {
     assert(actual.language == UiLanguage::TraditionalChinese &&
            actual.revision == 2);
     assert(SetFileAttributesW(file.c_str(), FILE_ATTRIBUTE_NORMAL));
+    assert(ipc::replaceFile(file,
+                            "[General]\nVersion=1\nLanguage=en\nRevision=7\n"));
+    assert(i18n::readSettings(file, actual) && !actual.detailedLogging &&
+           actual.revision == 7);
+    request = actual;
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::None);
+    {
+        std::ifstream input(file);
+        const std::string contents{std::istreambuf_iterator<char>(input), {}};
+        assert(contents.find("Version=2") != std::string::npos);
+        assert(contents.find("DetailedLogging=false") != std::string::npos);
+    }
+    request.detailedLogging = true;
+    assert(i18n::saveSettings(file, request, actual) ==
+               ipc::SettingsError::None &&
+           actual.detailedLogging && actual.revision == 8);
+    request.language = UiLanguage::SimplifiedChinese;
+    assert(i18n::saveSettings(file, request, actual) ==
+               ipc::SettingsError::Conflict &&
+           actual.detailedLogging && actual.language == UiLanguage::English);
+    request = actual;
+    request.detailedLogging = false;
+    assert(i18n::saveSettings(file, request, actual) ==
+               ipc::SettingsError::None &&
+           !actual.detailedLogging && actual.revision == 9);
+    assert(ipc::replaceFile(
+        file,
+        "[General]\nVersion=2\nLanguage=en\nRevision=1\nDetailedLogging=1\n"));
+    assert(!i18n::readSettings(file, actual));
     assert(ipc::replaceFile(
         file, "[General]\nVersion=1\nLanguage=invalid\nRevision=1\n"));
     assert(!i18n::readSettings(file, actual));

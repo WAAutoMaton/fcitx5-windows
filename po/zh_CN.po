@@ -14,6 +14,50 @@ msgstr ""
 
 #: win32/settings/SettingsWindow.cpp:68
 msgctxt "settings"
+msgid "Developer options"
+msgstr "开发者选项"
+
+msgctxt "settings"
+msgid "Enable detailed logging"
+msgstr "开启详细日志记录"
+
+msgctxt "settings"
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 30 days."
+msgstr "日志记录连接、上下文、候选数量和布局元数据，不记录输入文本。日志保存在下方目录，最多保留 30 天。"
+
+msgctxt "settings"
+msgid "Log folder"
+msgstr "日志目录"
+
+msgctxt "settings"
+msgid "Open log folder"
+msgstr "打开日志目录"
+
+msgctxt "settings"
+msgid "Starting"
+msgstr "启动中"
+
+msgctxt "settings"
+msgid "On"
+msgstr "开启"
+
+msgctxt "settings"
+msgid "Off"
+msgstr "已关闭"
+
+msgctxt "settings"
+msgid "Recording"
+msgstr "记录中"
+
+msgctxt "settings"
+msgid "Unavailable"
+msgstr "不可用"
+
+msgctxt "settings"
+msgid "{0} log files, {1} bytes"
+msgstr "{0} 个日志文件，共 {1} 字节"
+
+msgctxt "settings"
 msgid "Loaded"
 msgstr "已加载"
 

@@ -156,6 +156,13 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
         return FALSE;
     }
     bool consumed = reply.consumed;
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "key_result",
+            {{"release", release ? "true" : "false"},
+             {"scan_code", scanCode(lParam)},
+             {"modifiers", modifiers},
+             {"consumed", consumed ? "true" : "false"}});
     if (reply.enabled != keyboardOpen_) {
         setKeyboardOpen(reply.enabled);
     }
@@ -172,6 +179,9 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
 }
 
 STDMETHODIMP Tsf::OnSetFocus(BOOL foreground) {
+    win32::diagnostic::tsfLogger().event(
+        win32::diagnostic::Level::Debug, "foreground",
+        {{"active", foreground ? "true" : "false"}});
     foreground_ = foreground != FALSE;
     if (!foreground_) {
         about_.close();

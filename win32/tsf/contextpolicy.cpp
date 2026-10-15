@@ -119,7 +119,15 @@ bool Tsf::refreshContextPolicy() {
     if (generation != generation_ || context != textEditSinkContext_)
         return false;
     scopeAllowed_ = SUCCEEDED(request) && result == S_OK && session->allowed;
-    return contextAllowsInput(context);
+    const bool allowed = contextAllowsInput(context);
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "context_policy",
+            {{"scope_allowed", scopeAllowed_ ? "true" : "false"},
+             {"input_allowed", allowed ? "true" : "false"},
+             {"request_hr", static_cast<uint32_t>(request)},
+             {"session_hr", static_cast<uint32_t>(result)}});
+    return allowed;
 }
 
 bool Tsf::scopeAllowsInputAtEdit(ITfContext *context,

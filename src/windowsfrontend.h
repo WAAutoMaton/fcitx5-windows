@@ -61,7 +61,8 @@ class WindowsPipeServer {
     WindowsPipeServer(Instance &instance, EventDispatcher &dispatcher,
                       std::filesystem::path settingsFile = {},
                       std::filesystem::path uiSettingsFile = {},
-                      ipc::UiLanguage activeLanguage = ipc::UiLanguage::System);
+                      ipc::UiLanguage activeLanguage = ipc::UiLanguage::System,
+                      bool detailedLogging = false);
     ~WindowsPipeServer();
 
     void start();
@@ -69,6 +70,7 @@ class WindowsPipeServer {
 
   private:
     struct PendingReply {
+        ULONGLONG submittedAt = GetTickCount64();
         std::mutex mutex;
         std::condition_variable condition;
         bool ready = false;
@@ -92,6 +94,7 @@ class WindowsPipeServer {
     WindowsDictionaries dictionaries_;
     std::filesystem::path uiSettingsFile_;
     ipc::UiLanguage activeLanguage_;
+    bool detailedLogging_ = false;
     uint64_t settingsEpoch_ = 1;
     ipc::HostCommands hostCommands_;
     std::atomic_bool stopping_ = false;

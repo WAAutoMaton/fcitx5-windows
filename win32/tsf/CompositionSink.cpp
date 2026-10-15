@@ -18,6 +18,7 @@ STDMETHODIMP Tsf::OnCompositionTerminated(TfEditCookie ecWrite,
         hideCandidates();
         PipeClient::KeyReply reply;
         if (remoteContextId_ && pipe_.reset(remoteContextId_, reply)) {
+            acceptInputMethod(reply);
             state_ = std::move(reply);
         } else {
             state_ = {};

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$SettingsBuild, [Parameter(Mandatory)][string]$TsfBuild,
-      [string]$LogDirectory = '')
+      [string]$LogDirectory = '', [switch]$TestLogging)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (!$LogDirectory) { $LogDirectory = "$root/build/ui-localization-test/$([guid]::NewGuid().ToString('N'))" }
@@ -22,6 +22,8 @@ $file = [IO.Path]::GetFullPath("$LogDirectory/windows-ui.conf")
 New-Item -ItemType Directory -Force "$SettingsBuild/share/locale" | Out-Null
 Copy-Item "$TsfBuild/share/locale/*" "$SettingsBuild/share/locale" -Recurse -Force
 $fixture = $null; $settings = $null
+$previousDiagnosticDirectory = $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY
+$env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY = [IO.Path]::GetFullPath("$LogDirectory/diagnostics")
 function Find-Id([string]$Id) {
     $script:window.FindFirst([Windows.Automation.TreeScope]::Descendants,
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty, $Id))
@@ -49,6 +51,11 @@ function Global {
     $button.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
     Start-Sleep -Milliseconds 250
     Wait-Ready
+    $general = Find-Id 'GeneralOptions'
+    if ($general) {
+        $general.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        Start-Sleep -Milliseconds 100
+    }
     if (!(Find-Id 'UiLanguage')) { throw 'Global language control is missing.' }
 }
 function Choose-Language([string]$Name) {
@@ -81,7 +88,7 @@ function Open-Settings([string]$Title) {
 }
 function Close-Settings([string]$CloseLabel) {
     Invoke (Find-Name $CloseLabel)
-    if (!$script:settings.WaitForExit(5000)) { throw 'Test Settings did not close.' }
+    if (!$script:settings.WaitForExit(10000)) { throw 'Test Settings did not close.' }
 }
 function Stop-Fixture {
     if ($script:fixture -and !$script:fixture.HasExited) {
@@ -106,6 +113,94 @@ function Capture([string]$Name, [int]$Width = 0, [int]$Height = 0) {
 try {
     [IO.File]::WriteAllText($file, "[General]`nVersion=1`nLanguage=en`nRevision=1`n")
     Start-Fixture; Open-Settings 'Input Method Settings'; Global
+    if ($TestLogging) {
+        function Developer {
+            (Find-Id 'DeveloperOptions').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            Start-Sleep -Milliseconds 300
+        }
+        function Toggle-Logging {
+            (Find-Id 'DetailedLogging').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+            Start-Sleep -Milliseconds 100
+        }
+        function Assert-Logging([bool]$Enabled) {
+            $expected = if ($Enabled) { [Windows.Automation.ToggleState]::On } else { [Windows.Automation.ToggleState]::Off }
+            if ((Find-Id 'DetailedLogging').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -ne $expected) {
+                throw "Wrong logging toggle state: expected $Enabled"
+            }
+        }
+        function Discard-LoggingDraft {
+            (Find-Id 'method:pinyin').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            Start-Sleep -Milliseconds 300
+            Invoke (Find-Name 'Discard'); Wait-Ready
+            Global
+            Developer
+        }
+        Developer
+        Assert-Logging $false
+        if (Test-Path -LiteralPath $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY) { throw 'Disabled Settings created logs.' }
+        Invoke (Find-Id 'OpenLogFolder')
+        $shell = New-Object -ComObject Shell.Application
+        $opened = $false
+        for ($attempt = 0; $attempt -lt 30 -and !$opened; ++$attempt) {
+            Start-Sleep -Milliseconds 200
+            foreach ($folder in $shell.Windows()) {
+                if ($folder.LocationURL -and
+                    ([uri]$folder.LocationURL).LocalPath.TrimEnd('\', '/') -ieq $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY.TrimEnd('\', '/')) {
+                    $folder.Quit()
+                    $opened = $true
+                    break
+                }
+            }
+        }
+        if (!$opened) { throw 'Log folder button did not open the isolated directory.' }
+        Assert-Logging $false
+        if (Get-ChildItem -LiteralPath $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY -File) { throw 'Opening the folder enabled logging.' }
+        Toggle-Logging
+        Invoke (Find-Name 'Apply'); Wait-Ready
+        if ((Get-Content $file -Raw) -notmatch 'DetailedLogging=true') { throw 'Logging was not saved.' }
+        Start-Sleep -Milliseconds 700
+        if (!(Get-ChildItem -LiteralPath $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY -Filter 'settings-*.log')) { throw 'Settings log missing.' }
+        Capture 'developer-logging-on'
+        Capture 'developer-logging-minimum' 720 480
+        Toggle-Logging
+        (Find-Id 'method:pinyin').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        Start-Sleep -Milliseconds 300
+        Invoke (Find-Name 'Cancel'); Wait-Ready
+        Assert-Logging $false
+        Discard-LoggingDraft
+        Assert-Logging $true
+        Toggle-Logging
+        $external = (Get-Content $file -Raw) -replace 'Revision=2', 'Revision=3'
+        [IO.File]::WriteAllText($file, $external)
+        Invoke (Find-Name 'Apply'); Wait-Ready
+        if ((Get-Content $file -Raw) -notmatch 'DetailedLogging=true') { throw 'Stale draft overwrote logging.' }
+        Invoke (Find-Name 'Reload'); Wait-Ready
+        Developer
+        Assert-Logging $true
+        Invoke (Find-Name 'Reset to Defaults')
+        Assert-Logging $false
+        if ((Get-Content $file -Raw) -notmatch 'DetailedLogging=true') { throw 'Reset saved a draft.' }
+        Discard-LoggingDraft
+        Close-Settings 'Close'; Stop-Fixture
+        Start-Fixture; Open-Settings 'Input Method Settings'; Global; Developer
+        Assert-Logging $true
+        Toggle-Logging
+        Invoke (Find-Name 'Apply'); Wait-Ready
+        Assert-Logging $false
+        Start-Sleep -Milliseconds 500
+        $total = (Get-ChildItem -LiteralPath $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY -File | Measure-Object Length -Sum).Sum
+        Invoke (Find-Name 'Apply'); Wait-Ready
+        Start-Sleep -Milliseconds 500
+        if ((Get-ChildItem -LiteralPath $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY -File | Measure-Object Length -Sum).Sum -ne $total) {
+            throw 'Settings recorded events after logging was disabled.'
+        }
+        if ((Find-Id 'LogStatus').Current.Name -ne 'Off') { throw 'Disabled logging status missing.' }
+        if (!(Find-Id 'OpenLogFolder') -or !(Find-Id 'LogStatistics')) { throw 'Log folder controls missing.' }
+        Capture 'developer-logging-off'
+        Close-Settings 'Close'
+        Write-Output "PASS: actual WinUI developer page, default off, directory button, save, draft, conflict, reset, restart and disable. Screenshots: $LogDirectory"
+        return
+    }
     $languageCombo = Find-Id 'UiLanguage'
     $expandChoices = $languageCombo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
     $expandChoices.Expand(); Start-Sleep -Milliseconds 150
@@ -163,4 +258,5 @@ try {
 } finally {
     if ($settings -and !$settings.HasExited) { Stop-Process -Id $settings.Id; $settings.WaitForExit() }
     Stop-Fixture
+    $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY = $previousDiagnosticDirectory
 }

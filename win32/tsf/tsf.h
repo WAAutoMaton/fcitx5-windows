@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../ipc/diagnostic_log.h"
 #include "aboutwindow.h"
 #include "candidateuielement.h"
 #include "candidatewindow.h"
@@ -124,6 +125,8 @@ class Tsf : public ITfTextInputProcessorEx,
     CComPtr<ITfThreadMgr> threadMgr_;
     DWORD activationFlags_ = 0;
     DWORD activeFlags_ = 0;
+    HRESULT activeFlagsResult_ = E_FAIL;
+    bool activationTokenKnown_ = false, activationPackage_ = false;
     bool inputAllowed_ = true;
     bool scopeAllowed_ = true;
     bool modernUi_ = false;

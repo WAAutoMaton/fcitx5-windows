@@ -71,6 +71,10 @@ bool Tsf::initRemoteContext() {
 }
 
 void Tsf::clearRemoteContext() {
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "context_clear",
+            {{"context", remoteContextId_}, {"generation", generation_}});
     cancelComposition();
     ++generation_;
     edits_.clear();
@@ -105,11 +109,16 @@ STDMETHODIMP Tsf::OnUninitDocumentMgr(ITfDocumentMgr *document) {
 }
 
 STDMETHODIMP Tsf::OnSetFocus(ITfDocumentMgr *pDocMgrFocus, ITfDocumentMgr *) {
+    win32::diagnostic::tsfLogger().event(
+        win32::diagnostic::Level::Debug, "document_focus",
+        {{"present", pDocMgrFocus ? "true" : "false"}});
     initTextEditSink(pDocMgrFocus);
     return S_OK;
 }
 
 STDMETHODIMP Tsf::OnPushContext(ITfContext *context) {
+    win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                         "context_push");
     CComPtr<ITfDocumentMgr> document;
     if (context && SUCCEEDED(context->GetDocumentMgr(&document))) {
         CComPtr<ITfDocumentMgr> focused;
@@ -121,6 +130,8 @@ STDMETHODIMP Tsf::OnPushContext(ITfContext *context) {
 }
 
 STDMETHODIMP Tsf::OnPopContext(ITfContext *context) {
+    win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                         "context_pop");
     if (context == textEditSinkContext_) {
         CComPtr<ITfDocumentMgr> document;
         threadMgr_->GetFocus(&document);

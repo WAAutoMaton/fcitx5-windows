@@ -1,4 +1,5 @@
 #include "SettingsWindow.h"
+#include "../ipc/diagnostic_log.h"
 #include "../ipc/transport.h"
 #include "keycapture.h"
 #include <commctrl.h>
@@ -250,6 +251,33 @@ void SettingsWindow::translateStatic() {
     root.FindName(L"LanguageLabel")
         .as<TextBlock>()
         .Text(tr("settings", "Language"));
+    root.FindName(L"GeneralTab")
+        .as<TabViewItem>()
+        .Header(box_value(tr("settings", "General")));
+    root.FindName(L"DeveloperTab")
+        .as<TabViewItem>()
+        .Header(box_value(tr("settings", "Developer options")));
+    root.FindName(L"DetailedLoggingLabel")
+        .as<TextBlock>()
+        .Text(tr("settings", "Enable detailed logging"));
+    root.FindName(L"LoggingPrivacy")
+        .as<TextBlock>()
+        .Text(tr("settings",
+                 "Logs record connection, context, candidate counts "
+                 "and layout metadata, never input text. Files are "
+                 "kept here for up to 30 days."));
+    root.FindName(L"LogFolderLabel")
+        .as<TextBlock>()
+        .Text(tr("settings", "Log folder"));
+    root.FindName(L"OpenLogFolderText")
+        .as<TextBlock>()
+        .Text(tr("settings", "Open log folder"));
+    Automation::AutomationProperties::SetName(
+        detailedLogging_, tr("settings", "Enable detailed logging"));
+    detailedLogging_.OnContent(box_value(tr("settings", "On")));
+    detailedLogging_.OffContent(box_value(tr("settings", "Off")));
+    Automation::AutomationProperties::SetName(
+        logFolder_, tr("settings", "Open log folder"));
     Automation::AutomationProperties::SetName(language_,
                                               tr("settings", "Language"));
     Automation::AutomationProperties::SetName(
@@ -299,6 +327,12 @@ void SettingsWindow::renderGlobal() {
     tabs_.Visibility(Visibility::Collapsed);
     globalPanel_.Visibility(Visibility::Visible);
     language_.SelectedIndex(static_cast<int>(global_.settings.language));
+    detailedLogging_.IsOn(global_.settings.detailedLogging);
+    win32::diagnostic::settingsLogger().setEnabled(
+        global_.settings.detailedLogging);
+    logStatus_.Text(
+        tr("settings", global_.settings.detailedLogging ? "Starting" : "Off"));
+    refreshLogStatus();
 }
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
@@ -307,7 +341,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
     bool connected = false;
     co_await resume_background();
     try {
-        PipeClient client;
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.getGlobalSettings(reply);
     } catch (...) {
     }
@@ -332,20 +366,22 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
     if (index < 0 || index > 3)
         co_return false;
     const ipc::GlobalSettings request{static_cast<ipc::UiLanguage>(index),
-                                      global_.settings.revision};
+                                      global_.settings.revision,
+                                      detailedLogging_.IsOn()};
     const apartment_context ui;
     ipc::GlobalSettingsReply reply;
     bool connected = false;
     co_await resume_background();
     try {
-        PipeClient client;
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected =
             client.connect() && client.setGlobalSettings(request, reply);
         if (!connected) {
             client.disconnect();
             connected = client.connect() && client.getGlobalSettings(reply);
             if (connected && reply.error == ipc::SettingsError::None &&
-                reply.settings.language != request.language)
+                (reply.settings.language != request.language ||
+                 reply.settings.detailedLogging != request.detailedLogging))
                 reply.error = ipc::SettingsError::Conflict;
         }
     } catch (...) {
@@ -361,6 +397,11 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
         co_return false;
     }
     global_ = reply;
+    win32::diagnostic::settingsLogger().setEnabled(
+        global_.settings.detailedLogging);
+    win32::diagnostic::settingsLogger().event(
+        win32::diagnostic::Level::Info, "global_settings_saved",
+        {{"revision", global_.settings.revision}});
     renderGlobal();
     const bool pending = reply.resolvedLanguage != reply.coreActiveLanguage;
     status_.Text(
@@ -377,7 +418,8 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::resolveDraft() {
     bool dirty = false;
     if (page_ == PageKind::Global) {
         dirty = language_.SelectedIndex() !=
-                static_cast<int>(global_.settings.language);
+                    static_cast<int>(global_.settings.language) ||
+                detailedLogging_.IsOn() != global_.settings.detailedLogging;
     } else {
         const auto values = configValues();
         for (size_t i = 0; i < values.size(); ++i)
@@ -480,13 +522,34 @@ bool SettingsWindow::open() {
       </Grid>
     </TabViewItem>
   </TabView>
-  <StackPanel x:Name="GlobalPanel" Grid.Row="1" Spacing="16" Visibility="Collapsed">
+  <TabView x:Name="GlobalPanel" Grid.Row="1" Visibility="Collapsed" IsAddTabButtonVisible="False" CanDragTabs="False" CanReorderTabs="False">
+    <TabViewItem x:Name="GeneralTab" Header="General" IsClosable="False" AutomationProperties.AutomationId="GeneralOptions">
     <Grid ColumnSpacing="20">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <TextBlock x:Name="LanguageLabel" Text="Language" VerticalAlignment="Center" TextWrapping="Wrap"/>
       <ComboBox x:Name="UiLanguage" Grid.Column="1" Width="230" AutomationProperties.AutomationId="UiLanguage"/>
     </Grid>
-  </StackPanel>
+    </TabViewItem>
+    <TabViewItem x:Name="DeveloperTab" Header="Developer options" IsClosable="False" AutomationProperties.AutomationId="DeveloperOptions">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Spacing="12" Margin="0,16,12,0">
+    <Grid ColumnSpacing="20">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock x:Name="DetailedLoggingLabel" Text="Enable detailed logging" VerticalAlignment="Center" TextWrapping="Wrap"/>
+      <ToggleSwitch x:Name="DetailedLogging" Grid.Column="1" Width="132" AutomationProperties.AutomationId="DetailedLogging"/>
+    </Grid>
+    <TextBlock x:Name="LoggingPrivacy" TextWrapping="Wrap" FontSize="12"/>
+    <TextBlock x:Name="LogFolderLabel" Text="Log folder" FontWeight="SemiBold"/>
+    <TextBlock x:Name="LogDirectory" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="12"/>
+    <TextBlock x:Name="LogStatus" TextWrapping="Wrap" AutomationProperties.AutomationId="LogStatus" AutomationProperties.LiveSetting="Polite"/>
+    <TextBlock x:Name="LogStatistics" TextWrapping="Wrap" AutomationProperties.AutomationId="LogStatistics"/>
+    <Button x:Name="LogFolder" HorizontalAlignment="Left" AutomationProperties.AutomationId="OpenLogFolder">
+      <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE8B7;" FontSize="16"/><TextBlock x:Name="OpenLogFolderText"/></StackPanel>
+    </Button>
+    </StackPanel>
+    </ScrollViewer>
+    </TabViewItem>
+  </TabView>
   </Grid>
   <TextBlock x:Name="Status" Grid.Row="1" Grid.ColumnSpan="2" TextWrapping="Wrap" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
   <Grid Grid.Row="2" Grid.ColumnSpan="2">
@@ -511,8 +574,12 @@ bool SettingsWindow::open() {
     dictionaryTab_ = root.FindName(L"DictionaryTab").as<TabViewItem>();
     globalButton_ =
         root.FindName(L"GlobalSettings").as<Primitives::ToggleButton>();
-    globalPanel_ = root.FindName(L"GlobalPanel").as<StackPanel>();
+    globalPanel_ = root.FindName(L"GlobalPanel").as<TabView>();
     language_ = root.FindName(L"UiLanguage").as<ComboBox>();
+    detailedLogging_ = root.FindName(L"DetailedLogging").as<ToggleSwitch>();
+    logDirectory_ = root.FindName(L"LogDirectory").as<TextBlock>();
+    logStatus_ = root.FindName(L"LogStatus").as<TextBlock>();
+    logFolder_ = root.FindName(L"LogFolder").as<Button>();
     globalButton_.Click([this](auto &&, auto &&) { chooseGlobal(); });
     methods_.SelectionChanged([this](auto &&, auto &&) {
         if (!rendering_ && !working_) {
@@ -528,6 +595,7 @@ bool SettingsWindow::open() {
     reset_.Click([this](auto &&, auto &&) {
         if (page_ == PageKind::Global) {
             language_.SelectedIndex(0);
+            detailedLogging_.IsOn(false);
             return;
         }
         const auto previous = config_.options;
@@ -557,6 +625,7 @@ bool SettingsWindow::open() {
     });
     dictionaryFolder_.Click(
         [this](auto &&, auto &&) { openDictionaryFolder(); });
+    logFolder_.Click([this](auto &&, auto &&) { refreshLogStatus(true); });
     root.FindName(L"Cancel").as<Button>().Click(
         [this](auto &&, auto &&) { window_.Close(); });
     confirm_.Click([this](auto &&, auto &&) { transfer(true); });
@@ -594,6 +663,8 @@ bool SettingsWindow::open() {
             if (page_ == PageKind::InputMethod && tabs_.SelectedIndex() == 1) {
                 refreshDictionaries();
             }
+            if (page_ == PageKind::Global && globalPanel_.SelectedIndex() == 1)
+                refreshLogStatus();
         }
     });
     timer_.Start();
@@ -607,6 +678,7 @@ void SettingsWindow::busy(bool enabled) {
     methods_.IsEnabled(!enabled && loaded_);
     globalButton_.IsEnabled(!enabled && loaded_);
     language_.IsEnabled(!enabled && loaded_);
+    detailedLogging_.IsEnabled(!enabled && loaded_);
     for (auto &editor : editors_) {
         editor.as<Control>().IsEnabled(!enabled && loaded_);
     }
@@ -646,7 +718,7 @@ fire_and_forget SettingsWindow::transfer(bool save) {
     bool connected = false;
     co_await resume_background();
     try {
-        PipeClient client;
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.getGlobalSettings(globalReply) &&
                     client.getInputMethods(reply);
         if (connected && !languageInitialized_) {
@@ -1140,7 +1212,7 @@ SettingsWindow::loadConfig(const std::string &entry) {
     bool connected = false;
     co_await resume_background();
     try {
-        PipeClient client;
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.getMethodConfig(id, reply);
     } catch (...) {
     }
@@ -1181,7 +1253,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveConfig() {
     bool connected = false;
     co_await resume_background();
     try {
-        PipeClient client;
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.setMethodConfig(request, reply);
         if (!connected) {
             client.disconnect();
@@ -1303,7 +1375,7 @@ fire_and_forget SettingsWindow::changeSelection(int action) {
     bool connected = false;
     co_await resume_background();
     try {
-        PipeClient client;
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.setInputMethods(next, reply);
         if (!connected) {
             client.disconnect();
@@ -1346,7 +1418,7 @@ fire_and_forget SettingsWindow::refreshDictionaries() {
     bool connected = false;
     co_await resume_background();
     try {
-        PipeClient client;
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.getDictionaries(reply);
     } catch (...) {
     }
@@ -1419,5 +1491,65 @@ fire_and_forget SettingsWindow::openDictionaryFolder() {
                 tr("settings", "Cannot open the dictionary folder."));
         }
     }
+}
+
+fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) {
+    if (logRefresh_ || closed_)
+        co_return;
+    const auto lifetime = shared_from_this();
+    const apartment_context ui;
+    logRefresh_ = true;
+    logFolder_.IsEnabled(false);
+    const bool enabled = win32::diagnostic::settingsLogger().enabled();
+    if (enabled && win32::diagnostic::settingsLogger().status().state ==
+                       win32::diagnostic::State::Starting)
+        logStatus_.Text(tr("settings", "Starting"));
+    std::filesystem::path path;
+    win32::diagnostic::Status state;
+    bool unavailable = false;
+    co_await resume_background();
+    try {
+        auto &logger = win32::diagnostic::settingsLogger();
+        logger.maintain(openFolder);
+        logger.flush(std::chrono::milliseconds(1500));
+        path = logger.directory();
+        state = logger.status();
+        unavailable = state.error != 0;
+        if (openFolder && !unavailable) {
+            const auto initialized = CoInitializeEx(
+                nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            if (SUCCEEDED(initialized)) {
+                SHELLEXECUTEINFOW execute{sizeof(execute)};
+                execute.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+                execute.lpVerb = L"open";
+                execute.lpFile = path.c_str();
+                execute.nShow = SW_SHOWNORMAL;
+                unavailable = !ShellExecuteExW(&execute);
+                CoUninitialize();
+            } else {
+                unavailable = true;
+            }
+        }
+    } catch (...) {
+        unavailable = true;
+    }
+    co_await ui;
+    logRefresh_ = false;
+    if (closed_)
+        co_return;
+    logFolder_.IsEnabled(true);
+    logDirectory_.Text(path.wstring());
+    logStatus_.Text(unavailable ? tr("settings", "Unavailable")
+                    : !win32::diagnostic::settingsLogger().enabled()
+                        ? tr("settings", "Off")
+                    : state.state == win32::diagnostic::State::Starting
+                        ? tr("settings", "Starting")
+                        : tr("settings", "Recording"));
+    window_.Content()
+        .as<FrameworkElement>()
+        .FindName(L"LogStatistics")
+        .as<TextBlock>()
+        .Text(translator_.format("settings", "{0} log files, {1} bytes",
+                                 state.fileCount, state.totalBytes));
 }
 } // namespace fcitx

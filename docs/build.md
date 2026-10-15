@@ -113,6 +113,36 @@ For individual Core, TSF and Settings builds, see the
 CMake build does not build/deploy libime, chinese-addons, TSF, Settings or input
 method data.
 
+## Developer Logging
+
+In Settings, open **Global Settings > Developer options** and enable detailed
+logging, then apply. Core applies the change immediately; TSF learns the setting
+from its next Core reply. Core, TSF and Settings must be deployed together using
+IPC v10. `windows-ui.conf` now uses version 2; version 1 loads with logging off
+and migrates on the next successful save. Language and logging share a revision.
+
+Logs are JSON Lines under `%LOCALAPPDATA%/Fcitx5/logs`, split by role and TSF or
+Settings PID. The files rotate at 8 MiB and UTC date changes, expire after 30
+days, and are bounded to 64 MiB per process and 256 MiB per directory. Active
+files in other processes are protected from deletion by Windows sharing rules;
+capacity cleanup retries on subsequent maintenance. Disabling retains history.
+
+Events contain diagnostic metadata, HRESULT/error codes, counts, lengths and
+geometry. Input text, candidate contents, raw keys/payloads, titles and user paths
+are excluded. Upstream Fcitx messages are represented only by severity and byte
+count; no addon Debug categories are enabled, and `key_trace` stays disabled.
+The background worker pins the DLL until its thread-pool callback returns.
+
+Run `test_diagnostic_log`, `test_protocol`, `test_i18n`, `test_candidate` and
+`test_candidate_tsf` with CTest. For integration, compile Core, TSF and probes with
+`-DCMAKE_CXX_FLAGS=-DFCITX5_UI_TEST`, and Settings with `build-settings.ps1 -UiTest`.
+Use `scripts/test-developer-logging.ps1 -Prefix <isolated-prefix> -TsfBuild <build>`
+for real engine/IPC and unregistered TSF checks, and
+`scripts/test-ui-localization.ps1 -SettingsBuild <build> -TsfBuild <build> -TestLogging`
+for the developer page. These runners set `FCITX5_DIAGNOSTIC_TEST_DIRECTORY` to
+an isolated directory; production builds ignore that variable. They do not
+register TSF or validate real application dispatch, physical DPI or installers.
+
 ## Modern App Acceptance
 
 The runtime implementation is described in

@@ -14,11 +14,15 @@ int main() {
     assert(globalSettingsRequest(MessageType::StopServices));
     assert(globalSettingsRequest(MessageType::GetGlobalSettings));
     assert(globalSettingsRequest(MessageType::SetGlobalSettings));
-    GlobalSettings global{UiLanguage::TraditionalChinese, 42};
+    assert(kVersion == 10);
+    GlobalSettings global{UiLanguage::TraditionalChinese, 42, true};
     GlobalSettings restoredGlobal;
     assert(decodeGlobalSettings(encodeGlobalSettings(global), restoredGlobal) &&
            restoredGlobal == global);
     auto globalPayload = encodeGlobalSettings(global);
+    globalPayload[9] = 2;
+    assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
+    globalPayload = encodeGlobalSettings(global);
     globalPayload[0] = 255;
     assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
     globalPayload = encodeGlobalSettings(global);
@@ -36,7 +40,7 @@ int main() {
     assert(decodeGlobalSettingsReply(globalReplyPayload, decodedGlobalReply));
     assert(decodedGlobalReply.settings == global &&
            decodedGlobalReply.coreActiveLanguage == UiLanguage::English);
-    globalReplyPayload[10] = static_cast<uint8_t>(UiLanguage::System);
+    globalReplyPayload[11] = static_cast<uint8_t>(UiLanguage::System);
     assert(!decodeGlobalSettingsReply(globalReplyPayload, decodedGlobalReply));
     Frame source;
     source.type = MessageType::KeyDown;
@@ -72,19 +76,30 @@ int main() {
     snapshot.preeditCursor = 5;
     snapshot.revision = 42;
     snapshot.settingsRevision = 7;
+    snapshot.detailedLogging = true;
     snapshot.candidateGeneration = 11;
     snapshot.selected = 0;
     snapshot.candidates.push_back({"\xe4\xbd\xa0\xe5\xa5\xbd", "1", "ni hao"});
     KeyReply reply;
     auto payload = encodeKeyReply(snapshot);
     assert(decodeKeyReply(payload, reply));
-    assert(reply.consumed && reply.preedit == "nihao" &&
-           reply.preeditCursor == 5);
+    assert(reply.consumed && reply.detailedLogging &&
+           reply.preedit == "nihao" && reply.preeditCursor == 5);
     assert(reply.revision == 42 && reply.settingsRevision == 7 &&
            reply.candidateGeneration == 11 &&
            reply.candidates.front().text == snapshot.candidates.front().text);
     payload.push_back(0);
     assert(!decodeKeyReply(payload, reply));
+    for (size_t length = 0; length + 1 < payload.size(); ++length) {
+        KeyReply truncated;
+        assert(!decodeKeyReply({payload.begin(), payload.begin() + length},
+                               truncated));
+    }
+    const auto emptyReply = encodeKeyReply(KeyReply{});
+    auto invalidLogging = emptyReply;
+    // Flags, seven string lengths, preedit cursor and two revisions.
+    invalidLogging[2 + 7 * 4 + 4 + 2 * 8] = 2;
+    assert(!decodeKeyReply(invalidLogging, reply));
     snapshot.preeditCursor = 6;
     assert(!decodeKeyReply(encodeKeyReply(snapshot), reply));
     snapshot.preeditCursor = 5;

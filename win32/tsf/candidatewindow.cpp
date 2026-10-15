@@ -1,4 +1,5 @@
 #include "candidatewindow.h"
+#include "diagnostics.h"
 #include "dpiawareness.h"
 #include "textutil.h"
 #include <algorithm>
@@ -42,6 +43,8 @@ void CandidateWindow::hide() {
     if (window_) {
         KillTimer(window_, kPaintRetryTimer);
         ShowWindow(window_, SW_HIDE);
+        win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                             "popup_hide");
     }
     paintFailures_ = 0;
 }
@@ -50,16 +53,20 @@ bool CandidateWindow::initialize() {
     if (textFormat_) {
         return true;
     }
-    if (!drawingFactory_ &&
-        FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
-                                 &drawingFactory_))) {
-        return false;
+    if (!drawingFactory_) {
+        const auto result = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                              &drawingFactory_);
+        diagnosticResult(L"D2D1CreateFactory", result);
+        if (FAILED(result))
+            return false;
     }
-    if (!textFactory_ &&
-        FAILED(DWriteCreateFactory(
+    if (!textFactory_) {
+        const auto result = DWriteCreateFactory(
             DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-            reinterpret_cast<IUnknown **>(&textFactory_)))) {
-        return false;
+            reinterpret_cast<IUnknown **>(&textFactory_));
+        diagnosticResult(L"DWriteCreateFactory", result);
+        if (FAILED(result))
+            return false;
     }
     CComPtr<IDWriteTextFormat> primary;
     CComPtr<IDWriteTextFormat> secondary;
@@ -248,8 +255,23 @@ void CandidateWindow::position() {
         top = anchor_.top - height;
     }
     top = std::clamp(top, work.top, work.bottom - height);
-    SetWindowPos(window_, HWND_TOPMOST, left, top, width, height,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    const auto positioned =
+        SetWindowPos(window_, HWND_TOPMOST, left, top, width, height,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    const auto positionError = positioned ? ERROR_SUCCESS : GetLastError();
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Debug,
+                                             "popup_position",
+                                             {{"error", positionError},
+                                              {"dpi", dpi_},
+                                              {"left", left},
+                                              {"top", top},
+                                              {"width", width},
+                                              {"height", height},
+                                              {"work_left", work.left},
+                                              {"work_top", work.top},
+                                              {"work_right", work.right},
+                                              {"work_bottom", work.bottom}});
     positioning_ = false;
     InvalidateRect(window_, nullptr, FALSE);
     UpdateWindow(window_);
@@ -272,6 +294,9 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
         anchor = {start.x, start.y, end.x, end.y};
     }
     ScopedDpiAwareness scope(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    win32::diagnostic::tsfLogger().event(
+        win32::diagnostic::Level::Debug, "popup_dpi_awareness",
+        {{"valid", scope.valid() ? "true" : "false"}});
     if (!scope.valid() || !initialize() || !updateRows(reply)) {
         hide();
         return;
@@ -297,6 +322,12 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
             CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, kWindowClass,
                             L"Fcitx5", WS_POPUP, anchor.left, anchor.top, 1, 1,
                             owner, nullptr, module, this);
+        const auto error = window_ ? ERROR_SUCCESS : GetLastError();
+        if (win32::diagnostic::tsfLogger().enabled())
+            win32::diagnostic::tsfLogger().event(
+                win32::diagnostic::Level::Info, "popup_create",
+                {{"error", error},
+                 {"owner_dpi", owner ? GetDpiForWindow(owner) : 0}});
         if (!window_) {
             return;
         }
@@ -345,15 +376,19 @@ bool CandidateWindow::createTarget() {
         D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(),
         static_cast<float>(dpi_), static_cast<float>(dpi_));
     // Keep display refresh waits off the application's TSF thread.
-    if (FAILED(drawingFactory_->CreateHwndRenderTarget(
-            properties,
-            D2D1::HwndRenderTargetProperties(window_, size,
-                                             D2D1_PRESENT_OPTIONS_IMMEDIATELY),
-            &target_))) {
+    const auto targetResult = drawingFactory_->CreateHwndRenderTarget(
+        properties,
+        D2D1::HwndRenderTargetProperties(window_, size,
+                                         D2D1_PRESENT_OPTIONS_IMMEDIATELY),
+        &target_);
+    diagnosticResult(L"CreateHwndRenderTarget", targetResult);
+    if (FAILED(targetResult)) {
         return false;
     }
-    if (FAILED(target_->CreateSolidColorBrush(systemColor(COLOR_WINDOWTEXT),
-                                              &brush_))) {
+    const auto brushResult =
+        target_->CreateSolidColorBrush(systemColor(COLOR_WINDOWTEXT), &brush_);
+    diagnosticResult(L"CreateSolidColorBrush", brushResult);
+    if (FAILED(brushResult)) {
         discardTarget();
         return false;
     }
@@ -410,6 +445,12 @@ void CandidateWindow::paint() {
 }
 
 void CandidateWindow::finishPaint(HRESULT result) {
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(
+            FAILED(result) ? win32::diagnostic::Level::Warning
+                           : win32::diagnostic::Level::Debug,
+            "popup_paint",
+            {{"hr", static_cast<uint32_t>(result)}, {"retry", paintFailures_}});
     if (SUCCEEDED(result)) {
         paintFailures_ = 0;
         KillTimer(window_, kPaintRetryTimer);
@@ -456,6 +497,8 @@ LRESULT CALLBACK CandidateWindow::windowProc(HWND window, UINT message,
         case WM_ERASEBKGND:
             return 1;
         case WM_DPICHANGED:
+            win32::diagnostic::tsfLogger().event(
+                win32::diagnostic::Level::Debug, "popup_dpi_changed");
             self->dpi_ = HIWORD(wParam);
             if (!self->positioning_ && IsWindowVisible(window)) {
                 self->position();
@@ -464,9 +507,15 @@ LRESULT CALLBACK CandidateWindow::windowProc(HWND window, UINT message,
         case WM_SIZE:
         case WM_SYSCOLORCHANGE:
         case WM_THEMECHANGED:
+            if (win32::diagnostic::tsfLogger().enabled())
+                win32::diagnostic::tsfLogger().event(
+                    win32::diagnostic::Level::Debug, "popup_window_change",
+                    {{"message", message}});
             InvalidateRect(window, nullptr, FALSE);
             return 0;
         case WM_DISPLAYCHANGE:
+            win32::diagnostic::tsfLogger().event(
+                win32::diagnostic::Level::Debug, "popup_display_change");
             if (IsWindowVisible(window)) {
                 self->position();
             }

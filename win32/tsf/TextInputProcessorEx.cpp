@@ -55,6 +55,24 @@ void Tsf::notifyLangBarItem() {
 }
 
 void Tsf::acceptInputMethod(const PipeClient::KeyReply &reply) {
+    win32::diagnostic::tsfLogger().event(
+        win32::diagnostic::Level::Debug, "core_reply",
+        {{"revision", reply.revision},
+         {"settings_revision", reply.settingsRevision},
+         {"candidate_count", reply.candidates.size()}});
+    if (win32::diagnostic::tsfLogger().enabled())
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "tsf_state",
+            {{"activation_flags", activationFlags_},
+             {"active_flags", activeFlags_},
+             {"active_flags_hr", static_cast<uint32_t>(activeFlagsResult_)},
+             {"token_known", activationTokenKnown_ ? "true" : "false"},
+             {"package_identity", activationPackage_ ? "true" : "false"},
+             {"architecture_bits", sizeof(void *) * 8},
+             {"generation", generation_},
+             {"restricted", restrictedInput_ ? "true" : "false"},
+             {"modern_ui", modernUi_ ? "true" : "false"},
+             {"input_allowed", inputAllowed_ ? "true" : "false"}});
     inputMethod_ = reply.inputMethod;
     if (reply.enabled != keyboardOpen_) {
         setKeyboardOpen(reply.enabled);
@@ -74,6 +92,8 @@ STDAPI Tsf::Activate(ITfThreadMgr *pThreadMgr, TfClientId tfClientId) {
 }
 
 STDAPI Tsf::Deactivate() {
+    win32::diagnostic::tsfLogger().event(win32::diagnostic::Level::Info,
+                                         "tsf_deactivate");
     translationMonitor_.reset();
     about_.close();
     aboutUi_.reset();
@@ -128,6 +148,9 @@ STDAPI Tsf::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId,
             activeFlags_ |= active;
     }
     const auto environment = ipc::clientEnvironment();
+    activeFlagsResult_ = flagsResult;
+    activationTokenKnown_ = environment.tokenKnown;
+    activationPackage_ = environment.hasPackageIdentity;
     const auto policy = ipc::isolationPolicy(environment);
     restrictedInput_ = policy == ipc::IsolationPolicy::RestrictedInput;
     modernUi_ =

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../ipc/diagnostic_log.h"
 #include "../ipc/isolationpolicy.h"
 #include "../ipc/protocol.h"
 #include <cstdint>
@@ -14,8 +15,9 @@ class PipeClient {
   public:
     using KeyReply = ipc::KeyReply;
 
-    explicit PipeClient(std::wstring name = {}, ipc::SandboxieApi sandbox = {})
-        : name_(std::move(name)), sandbox_(sandbox) {}
+    explicit PipeClient(std::wstring name = {}, ipc::SandboxieApi sandbox = {},
+                        win32::diagnostic::Logger *logger = nullptr)
+        : logger_(logger), name_(std::move(name)), sandbox_(sandbox) {}
     ~PipeClient();
 
     bool connect();
@@ -24,6 +26,7 @@ class PipeClient {
     DWORD connectionError() const { return connectionError_; }
     const char *connectionStage() const { return connectionStage_; }
     DWORD serverProcessId() const { return serverProcessId_; }
+    void setLogger(win32::diagnostic::Logger *logger) { logger_ = logger; }
 
     bool createContext(uint64_t capabilities, uint64_t &contextId);
     bool focusIn(uint64_t contextId);
@@ -62,6 +65,7 @@ class PipeClient {
                  const std::vector<uint8_t> &payload, ipc::Frame &response);
     bool readFrame(ipc::Frame &frame);
     bool writeFrame(const ipc::Frame &frame);
+    win32::diagnostic::Logger *logger_ = nullptr;
 
     HANDLE pipe_ = INVALID_HANDLE_VALUE;
     std::wstring name_;

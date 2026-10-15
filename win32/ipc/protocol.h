@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 9;
+constexpr uint16_t kVersion = 10;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -92,6 +92,7 @@ enum class UiLanguage : uint8_t {
 struct GlobalSettings {
     UiLanguage language = UiLanguage::System;
     uint64_t revision = 1;
+    bool detailedLogging = false;
     bool operator==(const GlobalSettings &) const = default;
 };
 
@@ -196,6 +197,7 @@ struct KeyReply {
     uint32_t preeditCursor = 0;
     uint64_t revision = 0;
     uint64_t settingsRevision = 0;
+    bool detailedLogging = false;
     uint64_t candidateGeneration = 0;
     uint32_t selected = UINT32_MAX;
     bool hasPrev = false;
@@ -325,6 +327,7 @@ encodeGlobalSettings(const GlobalSettings &settings) {
     Writer writer;
     writer.u8(static_cast<uint8_t>(settings.language));
     writer.u64(settings.revision);
+    writer.u8(settings.detailedLogging);
     return writer.take();
 }
 
@@ -333,7 +336,9 @@ inline bool decodeGlobalSettings(const std::vector<uint8_t> &payload,
     Reader reader(payload.data(), payload.size());
     GlobalSettings result;
     uint8_t language = 0;
+    uint8_t detailedLogging = 0;
     if (!reader.u8(language) || !reader.u64(result.revision) ||
+        !reader.u8(detailedLogging) || detailedLogging > 1 ||
         !result.revision || reader.remaining()) {
         return false;
     }
@@ -341,6 +346,7 @@ inline bool decodeGlobalSettings(const std::vector<uint8_t> &payload,
     if (!validLanguage(result.language)) {
         return false;
     }
+    result.detailedLogging = detailedLogging;
     settings = result;
     return true;
 }
@@ -358,18 +364,18 @@ encodeGlobalSettingsReply(const GlobalSettingsReply &reply) {
 
 inline bool decodeGlobalSettingsReply(const std::vector<uint8_t> &payload,
                                       GlobalSettingsReply &reply) {
-    if (payload.size() != 12) {
+    if (payload.size() != 13) {
         return false;
     }
     GlobalSettingsReply result;
     if (payload[0] > static_cast<uint8_t>(SettingsError::Busy) ||
-        !decodeGlobalSettings({payload.begin() + 1, payload.begin() + 10},
+        !decodeGlobalSettings({payload.begin() + 1, payload.begin() + 11},
                               result.settings)) {
         return false;
     }
     result.error = static_cast<SettingsError>(payload[0]);
-    result.resolvedLanguage = static_cast<UiLanguage>(payload[10]);
-    result.coreActiveLanguage = static_cast<UiLanguage>(payload[11]);
+    result.resolvedLanguage = static_cast<UiLanguage>(payload[11]);
+    result.coreActiveLanguage = static_cast<UiLanguage>(payload[12]);
     if (!validLanguage(result.resolvedLanguage, false) ||
         !validLanguage(result.coreActiveLanguage, false)) {
         return false;
@@ -489,6 +495,7 @@ inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
     writer.u32(reply.preeditCursor);
     writer.u64(reply.revision);
     writer.u64(reply.settingsRevision);
+    writer.u8(reply.detailedLogging);
     writer.u64(reply.candidateGeneration);
     writer.u32(reply.selected);
     writer.u8(reply.hasPrev);
@@ -508,6 +515,7 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
     KeyReply result;
     uint8_t consumed = 0, enabled = 0, hasPrev = 0, hasNext = 0;
     uint32_t count = 0;
+    uint8_t detailedLogging = 0;
     if (!reader.u8(consumed) || consumed > 1 || !reader.u8(enabled) ||
         enabled > 1 || !reader.string(result.inputMethod) ||
         !reader.string(result.inputMethodName) ||
@@ -518,6 +526,7 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
         !reader.u32(result.preeditCursor) ||
         result.preeditCursor > result.preedit.size() ||
         !reader.u64(result.revision) || !reader.u64(result.settingsRevision) ||
+        !reader.u8(detailedLogging) || detailedLogging > 1 ||
         !reader.u64(result.candidateGeneration) ||
         !reader.u32(result.selected) || !reader.u8(hasPrev) || hasPrev > 1 ||
         !reader.u8(hasNext) || hasNext > 1 || !reader.u32(count) ||
@@ -529,6 +538,7 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
     result.enabled = enabled;
     result.hasPrev = hasPrev;
     result.hasNext = hasNext;
+    result.detailedLogging = detailedLogging;
     result.candidates.resize(count);
     for (auto &candidate : result.candidates) {
         if (!reader.string(candidate.text) || !reader.string(candidate.label) ||

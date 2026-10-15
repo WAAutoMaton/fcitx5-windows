@@ -14,6 +14,50 @@ msgstr ""
 
 #: win32/settings/SettingsWindow.cpp:68
 msgctxt "settings"
+msgid "Developer options"
+msgstr "開發者選項"
+
+msgctxt "settings"
+msgid "Enable detailed logging"
+msgstr "開啟詳細日誌記錄"
+
+msgctxt "settings"
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 30 days."
+msgstr "日誌記錄連線、輸入環境、候選數量和版面配置中繼資料，不記錄輸入文字。日誌儲存在下方目錄，最多保留 30 天。"
+
+msgctxt "settings"
+msgid "Log folder"
+msgstr "日誌目錄"
+
+msgctxt "settings"
+msgid "Open log folder"
+msgstr "開啟日誌目錄"
+
+msgctxt "settings"
+msgid "Starting"
+msgstr "啟動中"
+
+msgctxt "settings"
+msgid "On"
+msgstr "開啟"
+
+msgctxt "settings"
+msgid "Off"
+msgstr "已關閉"
+
+msgctxt "settings"
+msgid "Recording"
+msgstr "記錄中"
+
+msgctxt "settings"
+msgid "Unavailable"
+msgstr "無法使用"
+
+msgctxt "settings"
+msgid "{0} log files, {1} bytes"
+msgstr "{0} 個日誌檔案，共 {1} 位元組"
+
+msgctxt "settings"
 msgid "Loaded"
 msgstr "已載入"
 

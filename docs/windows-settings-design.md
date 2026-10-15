@@ -15,7 +15,7 @@
 - `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，显示当前输入法图标/标签和名称，左键轮换输入法；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
 - `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
-- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v9 framing、输入法目录、选项描述、全局语言设置、词库状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
+- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v10 framing、输入法目录、选项描述、全局语言与详细日志设置、词库状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。日志设计见 [windows-developer-logging-design.md](windows-developer-logging-design.md)，Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
 - `src/main.cpp`：初始化 Core、预热拼音并创建 Windows 设置管理器；完整内存输入法组由 `src/windowsinputmethods.cpp` 按已安装可用条目建立。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置保存、真实 profile 应用、中文 entry 切换与 context 同步。
 - `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。

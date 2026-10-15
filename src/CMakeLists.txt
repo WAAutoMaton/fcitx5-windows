@@ -1,7 +1,9 @@
 find_package(Intl REQUIRED)
 add_executable(Fcitx5
     main.cpp
+    ../win32/ipc/diagnostic_log.cpp
     windowsfrontend.cpp
+    windowslogging.cpp
     windowssettings.cpp
     windowsinputmethods.cpp
     windowsdictionaries.cpp
@@ -11,6 +13,11 @@ add_library(core_i18n STATIC ../win32/i18n/settings.cpp ../win32/i18n/translator
 target_compile_definitions(core_i18n PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN BOOST_ALL_NO_LIB)
 target_link_libraries(core_i18n PUBLIC Boost::locale Boost::property_tree shell32 ole32)
 target_link_libraries(Fcitx5 Fcitx5::Core core_i18n Intl::Intl advapi32 secur32)
+execute_process(COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE diagnostic_build OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+target_compile_definitions(Fcitx5 PRIVATE
+    FCITX5_DIAGNOSTIC_BUILD="${diagnostic_build}-${CMAKE_BUILD_TYPE}")
 
 if (ENABLE_WINDOWS_ASCII_FALLBACK)
     target_compile_definitions(Fcitx5 PRIVATE FCITX5_WINDOWS_ASCII_FALLBACK)

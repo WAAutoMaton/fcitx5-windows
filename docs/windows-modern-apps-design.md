@@ -2,7 +2,7 @@
 
 ## 状态与目标
 
-本文保留现代应用输入的分阶段设计。基础运行时链路、候选 UIElement/Behavior、受限 Pipe 和登录启动选项已接入；自动化 AppContainer token/免注册 TSF 验证不代表已经完成真实 UWP 系统派发和签名安装验收。Sandboxie 的宿主共享沿用 [windows-sandboxie-design.md](windows-sandboxie-design.md) 中的行为，协议统一升级至 v9。
+本文保留现代应用输入的分阶段设计。基础运行时链路、候选 UIElement/Behavior、受限 Pipe 和登录启动选项已接入；自动化 AppContainer token/免注册 TSF 验证不代表已经完成真实 UWP 系统派发和签名安装验收。Sandboxie 的宿主共享沿用 [windows-sandboxie-design.md](windows-sandboxie-design.md) 中的行为，协议统一升级至 v10。
 
 目标是 Windows 11 x64 上的现代文本输入：Windows Terminal、WinUI/XAML 桌面应用和真正的 AppContainer 应用，可以选择 Fcitx5、使用真实引擎进行 composition/候选/提交，并正确处理焦点、输入法轮换和服务重连。先解决普通文本框，再扩展覆盖；不把安全桌面、密码输入、触摸键盘专用布局、系统搜索集成、ARM64/x86 或完整无障碍能力并入首轮支持声明。
 
@@ -15,7 +15,7 @@
 - `ClientEnvironment` 汇总 token、package identity 和 Sandboxie 事实；`IsolationPolicy` 决定宿主服务、HostOnly、受限输入或拒绝。Core/Settings 拒绝受限和查询异常环境。
 - 桌面/Sandboxie 继续使用原 `v2` Pipe；AppContainer 使用同名加 `-input` 的专用入口，保留 message mode、overlapped I/O、SQOS identification、超时和取消。全局命名通过真实 AppContainer token probe；`LOCAL\\` 命名可在同一 probe 中单独诊断，不自动切换或替换桌面入口。
 - 输入入口 DACL 给予当前用户完整权限，`ALL APPLICATION PACKAGES` 仅 `0x100183`，排除 `FILE_CREATE_PIPE_INSTANCE`；仅此入口有低完整性 `NW` label。AAP ACE 不是用户边界：服务端在 Hello 后模拟 identification token，校验用户 SID、session、AuthenticationId 和 AppContainer SID，再解除模拟。
-- AppContainer 不能直接打开宿主进程/token。因此 v9 增加 `AuthenticateServer`：服务端复制仅 `PROCESS_QUERY_LIMITED_INFORMATION | READ_CONTROL` 的进程句柄到已经认证的客户端；客户端核对内核 Pipe PID/session、句柄 PID、进程对象 owner 和安装树中固定的 `bin/Fcitx5.exe` 路径，然后才发送输入。句柄不授予进程控制、内存或 token 访问权限。此保证依赖受保护的安装树；不隔离同用户任意代码执行，也不把开发目录验证当作签名部署验收。
+- AppContainer 不能直接打开宿主进程/token。因此 v10 保留 `AuthenticateServer`：服务端复制仅 `PROCESS_QUERY_LIMITED_INFORMATION | READ_CONTROL` 的进程句柄到已经认证的客户端；客户端核对内核 Pipe PID/session、句柄 PID、进程对象 owner 和安装树中固定的 `bin/Fcitx5.exe` 路径，然后才发送输入。句柄不授予进程控制、内存或 token 访问权限。此保证依赖受保护的安装树；不隔离同用户任意代码执行，也不把开发目录验证当作签名部署验收。
 - Hello/认证阶段有 2 秒期限。两入口共享最多 64 个连接，受限入口最多 16 个；每个受限连接最多 4 个 context、请求体最多 64 KiB，空闲 60 秒断开。输入入口失败不停止桌面入口；关闭连接按 owner 清理 context。拒绝管理请求和未知消息，固定 Settings 命令全局限流，输入状态回复移除图标路径。
 - 激活保留 TSF flags；secure/COM-less/WOW16 透传，语言栏为可选接口。密码/numeric-password scope、只读和 disabled/empty context 不发送引擎输入。scope getter 的空 `E_FAIL` 是 TSF 缺失属性的兼容状态；其他查询失败透传，不能据此声称识别所有密码控件。
 - 候选的 Begin/Update/End、Show 和 getter 与 HWND/layout 分离；页面仅描述当前有界批次。Behavior 动作进入 owning-thread 队列，Core 检查 owner、稳定候选代次、焦点和索引，通过真实候选/游标接口处理。普通 poll 不使身份失效，过时代次拒绝。
@@ -228,7 +228,7 @@ CI/Nightly 显式启用 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`，避免已实
 
 ## 协议与实现位置
 
-当前协议是 v9，增加服务端查询句柄握手、`KeyReply.candidateGeneration` 和候选动作；Core、TSF、Settings 必须一起重建。framing 和桌面 `v2` endpoint 名保持独立管理，后续协议变更继续统一提升版本。若后续启用 RPC 备选，其 IDL 和协议版本另行设计与校验。
+当前协议是 v10，保留 v9 的服务端查询句柄握手、`KeyReply.candidateGeneration` 和候选动作，并同步全局详细日志开关；Core、TSF、Settings 必须一起重建。framing 和桌面 `v2` endpoint 名保持独立管理，后续协议变更继续统一提升版本。若后续启用 RPC 备选，其 IDL 和协议版本另行设计与校验。
 
 | 文件/模块 | 计划修改 |
 | --- | --- |

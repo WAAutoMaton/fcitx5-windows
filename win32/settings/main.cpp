@@ -1,5 +1,7 @@
 #include "../i18n/translator.h"
+#include "../ipc/diagnostic_log.h"
 #include "../ipc/service.h"
+#include "../tsf/pipeclient.h"
 #include "App.h"
 #include <MddBootstrap.h>
 #include <WindowsAppSDK-VersionInfo.h>
@@ -17,11 +19,19 @@ bool settingsServiceStopping() {
 static int runSettings() {
     fcitx::ipc::GlobalSettings languageSettings;
     try {
-        fcitx::win32::i18n::readSettings(fcitx::win32::i18n::settingsPath(),
-                                         languageSettings);
+        fcitx::PipeClient client;
+        client.setLogger(&fcitx::win32::diagnostic::settingsLogger());
+        fcitx::ipc::GlobalSettingsReply reply;
+        if (client.connect() && client.getGlobalSettings(reply) &&
+            reply.error == fcitx::ipc::SettingsError::None)
+            languageSettings = reply.settings;
     } catch (...) {
     }
     const fcitx::win32::i18n::Translator translator(languageSettings.language);
+    fcitx::win32::diagnostic::settingsLogger().setEnabled(
+        languageSettings.detailedLogging);
+    fcitx::win32::diagnostic::settingsLogger().event(
+        fcitx::win32::diagnostic::Level::Info, "settings_start");
     const auto activationName = fcitx::ipc::settingsActivationBase();
     fcitx::ipc::ServiceSecurity security;
     fcitx::ipc::ServiceHandle activation(CreateEventW(
@@ -56,6 +66,9 @@ static int runSettings() {
         WINDOWSAPPSDK_RELEASE_MAJORMINOR, WINDOWSAPPSDK_RELEASE_VERSION_TAG_W,
         minimum, MddBootstrapInitializeOptions_None);
     if (FAILED(initialized)) {
+        fcitx::win32::diagnostic::settingsLogger().event(
+            fcitx::win32::diagnostic::Level::Error, "settings_runtime_error",
+            {{"hr", static_cast<uint32_t>(initialized)}});
         wchar_t message[256]{};
         swprintf_s(message,
                    L"%ls\n"
@@ -76,11 +89,17 @@ static int runSettings() {
             winrt::make<winrt::Fcitx5Settings::implementation::App>();
         });
     } catch (const winrt::hresult_error &error) {
+        fcitx::win32::diagnostic::settingsLogger().event(
+            fcitx::win32::diagnostic::Level::Error, "settings_ui_error",
+            {{"hr", static_cast<uint32_t>(error.code())}});
         MessageBoxW(nullptr, error.message().c_str(), L"Fcitx5 settings",
                     MB_OK | MB_ICONERROR);
         result = 1;
     }
     MddBootstrapShutdown();
+    fcitx::win32::diagnostic::settingsLogger().setEnabled(false);
+    fcitx::win32::diagnostic::settingsLogger().flush(
+        std::chrono::milliseconds(250));
     fcitx::settingsService = nullptr;
     return result;
 }

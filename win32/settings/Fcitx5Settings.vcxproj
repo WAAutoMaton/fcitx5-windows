@@ -73,6 +73,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SettingsWindow.cpp" />
     <ClCompile Include="..\tsf\pipeclient.cpp" />
+    <ClCompile Include="..\ipc\diagnostic_log.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

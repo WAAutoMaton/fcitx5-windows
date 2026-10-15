@@ -5,7 +5,10 @@ extern void DllAddRef();
 extern void DllRelease();
 
 namespace fcitx {
-Tsf::Tsf() { DllAddRef(); }
+Tsf::Tsf() {
+    DllAddRef();
+    pipe_.setLogger(&win32::diagnostic::tsfLogger());
+}
 
 Tsf::~Tsf() {
     hideCandidates();

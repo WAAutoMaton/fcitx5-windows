@@ -2,6 +2,7 @@
 #include "textstore.h"
 #include <cassert>
 #include <cstdio>
+#include <fstream>
 
 namespace {
 LONG dllReferences = 0;
@@ -48,6 +49,9 @@ struct TsfCandidateTestAccess {
         tsf.modernUi_ = true;
     }
     static bool inputAllowed(Tsf &tsf) { return tsf.refreshContextPolicy(); }
+    static void staleEdit(Tsf &tsf) {
+        assert(tsf.applySnapshot(0, nullptr, {}, tsf.generation_ + 1) == S_OK);
+    }
 };
 } // namespace fcitx
 
@@ -427,6 +431,7 @@ void tests() {
 
     Access::detach(*tsf);
     layout.Release();
+    Access::staleEdit(*tsf);
     tsf->Deactivate();
     tsf.Release();
     document->Pop(TF_POPF_ALL);
@@ -436,9 +441,42 @@ void tests() {
 }
 } // namespace
 
-int main() {
+int main(int argc, char **argv) {
+#ifdef FCITX5_UI_TEST
+    const bool logging = argc == 2 && std::string_view(argv[1]) == "--logging";
+    if (logging) {
+        assert(GetEnvironmentVariableW(L"FCITX5_DIAGNOSTIC_TEST_DIRECTORY",
+                                       nullptr, 0));
+        fcitx::win32::diagnostic::tsfLogger().setEnabled(true);
+    }
+#else
+    if (argc != 1)
+        return 2;
+    (void)argv;
+#endif
     assert(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)));
     tests();
     CoUninitialize();
+#ifdef FCITX5_UI_TEST
+    if (logging) {
+        auto &logger = fcitx::win32::diagnostic::tsfLogger();
+        assert(logger.flush(std::chrono::seconds(5)));
+        logger.setEnabled(false);
+        std::string text;
+        for (const auto &file :
+             std::filesystem::directory_iterator(logger.directory())) {
+            if (!file.path().filename().string().starts_with("tsf-"))
+                continue;
+            std::ifstream input(file.path());
+            text.append(std::istreambuf_iterator<char>(input), {});
+        }
+        for (const auto event : {"candidate_layout_pending", "candidate_hidden",
+                                 "ui_element_begin", "edit_execute",
+                                 "popup_position", "edit_stale"})
+            assert(text.find(event) != std::string::npos);
+        for (const auto secret : {"\"committed\"", "\"unapplied\"", "\"nih\""})
+            assert(text.find(secret) == std::string::npos);
+    }
+#endif
     std::puts("TSF candidate layout recovery and lifecycle tests passed.");
 }

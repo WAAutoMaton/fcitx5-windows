@@ -4,11 +4,27 @@
 #include <filesystem>
 
 namespace fcitx {
+namespace {
+struct ConnectionTrace {
+    PipeClient &client;
+    win32::diagnostic::Logger *logger;
+    ULONGLONG started = GetTickCount64();
+    ~ConnectionTrace() {
+        if (logger && logger->enabled())
+            logger->event(win32::diagnostic::Level::Info, "pipe_connect",
+                          {{"stage", client.connectionStage()},
+                           {"error", client.connectionError()},
+                           {"server_pid", client.serverProcessId()},
+                           {"elapsed_ms", GetTickCount64() - started}});
+    }
+};
+} // namespace
 
 PipeClient::~PipeClient() { disconnect(); }
 
 bool PipeClient::connect() {
     std::lock_guard<std::mutex> lock(mutex_);
+    const ConnectionTrace trace{*this, logger_};
     if (connected()) {
         return true;
     }
@@ -130,6 +146,8 @@ bool PipeClient::connect() {
 void PipeClient::disconnect() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (connected()) {
+        if (logger_)
+            logger_->event(win32::diagnostic::Level::Info, "pipe_disconnect");
         CloseHandle(pipe_);
         pipe_ = INVALID_HANDLE_VALUE;
     }
@@ -351,6 +369,7 @@ bool PipeClient::request(ipc::MessageType type, uint64_t contextId,
                          const std::vector<uint8_t> &payload,
                          ipc::Frame &response) {
     std::lock_guard<std::mutex> lock(mutex_);
+    const auto started = GetTickCount64();
     if (!connected()) {
         return false;
     }
@@ -359,13 +378,46 @@ bool PipeClient::request(ipc::MessageType type, uint64_t contextId,
     frame.requestId = nextRequestId_++;
     frame.contextId = contextId;
     frame.payload = payload;
-    if (!writeFrame(frame) || !readFrame(response) ||
+    const bool transferred = writeFrame(frame) && readFrame(response);
+    if (!transferred ||
         response.requestId != frame.requestId ||
         (type != ipc::MessageType::CreateContext &&
          response.contextId != contextId)) {
+        const auto error = transferred ? ERROR_INVALID_DATA : GetLastError();
+        if (logger_ && logger_->enabled())
+            logger_->event(win32::diagnostic::Level::Warning,
+                           "pipe_request_failed",
+                           {{"type", static_cast<unsigned>(type)},
+                            {"request", frame.requestId},
+                            {"payload_bytes", payload.size()},
+                            {"error", error},
+                            {"elapsed_ms", GetTickCount64() - started}});
         CloseHandle(pipe_);
         pipe_ = INVALID_HANDLE_VALUE;
+        SetLastError(error);
         return false;
+    }
+    if (logger_) {
+        if (response.type == ipc::MessageType::KeyReply) {
+            ipc::KeyReply reply;
+            if (ipc::decodeKeyReply(response.payload, reply))
+                logger_->setEnabled(reply.detailedLogging);
+        } else if (response.type == ipc::MessageType::GlobalSettingsReply) {
+            ipc::GlobalSettingsReply reply;
+            if (ipc::decodeGlobalSettingsReply(response.payload, reply) &&
+                reply.error == ipc::SettingsError::None)
+                logger_->setEnabled(reply.settings.detailedLogging);
+        }
+        if (logger_->enabled())
+            logger_->event(win32::diagnostic::Level::Debug, "pipe_request",
+                           {{"type", static_cast<unsigned>(type)},
+                            {"request", frame.requestId},
+                            {"context", contextId},
+                            {"payload_bytes", payload.size()},
+                 {"reply_bytes", response.payload.size()},
+                 {"reply_type", static_cast<unsigned>(response.type)},
+                 {"server_pid", serverProcessId_},
+                            {"elapsed_ms", GetTickCount64() - started}});
     }
     return response.type != ipc::MessageType::Error;
 }

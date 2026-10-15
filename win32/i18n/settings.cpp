@@ -118,9 +118,9 @@ bool readSettings(const std::filesystem::path &path,
         boost::property_tree::ptree tree;
         std::istringstream input(data);
         boost::property_tree::read_ini(input, tree);
-        if (tree.size() != 1 ||
-            tree.get<std::string>("General.Version") != "1" ||
-            tree.get_child("General").size() != 3)
+        const auto version = tree.get<std::string>("General.Version");
+        if (tree.size() != 1 || (version != "1" && version != "2") ||
+            tree.get_child("General").size() != (version == "2" ? 4 : 3))
             return false;
         const auto language = tree.get<std::string>("General.Language");
         const auto revision = tree.get<std::string>("General.Revision");
@@ -136,6 +136,14 @@ bool readSettings(const std::filesystem::path &path,
         if (found == std::end(names))
             return false;
         parsed.language = static_cast<UiLanguage>(found - std::begin(names));
+        if (version == "2") {
+            const auto detailed =
+                tree.get<std::string>("General.DetailedLogging");
+            if (detailed != "true" && detailed != "false" &&
+                detailed != "True" && detailed != "False")
+                return false;
+            parsed.detailedLogging = detailed == "true" || detailed == "True";
+        }
         settings = parsed;
         return true;
     } catch (...) {
@@ -170,18 +178,22 @@ ipc::SettingsError saveSettings(const std::filesystem::path &path,
     if (!readSettings(path, saved))
         return ipc::SettingsError::SaveFailed;
     actual = saved;
-    if (saved.language == requested.language)
-        return ipc::SettingsError::None;
-    if (saved.revision != requested.revision)
+    const bool changed = saved.language != requested.language ||
+                         saved.detailedLogging != requested.detailedLogging;
+    if (changed && saved.revision != requested.revision)
         return ipc::SettingsError::Conflict;
-    if (saved.revision == std::numeric_limits<uint64_t>::max())
+    if (changed && saved.revision == std::numeric_limits<uint64_t>::max())
         return ipc::SettingsError::SaveFailed;
     saved.language = requested.language;
-    ++saved.revision;
+    saved.detailedLogging = requested.detailedLogging;
+    if (changed)
+        ++saved.revision;
     boost::property_tree::ptree tree;
-    tree.put("General.Version", "1");
+    tree.put("General.Version", "2");
     tree.put("General.Language", names[static_cast<unsigned>(saved.language)]);
     tree.put("General.Revision", std::to_string(saved.revision));
+    tree.put("General.DetailedLogging",
+             saved.detailedLogging ? "true" : "false");
     std::ostringstream output;
     boost::property_tree::write_ini(output, tree);
     if (!ipc::replaceFile(path, output.str()))

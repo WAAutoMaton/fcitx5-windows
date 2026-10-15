@@ -1,8 +1,10 @@
 #include "windowsfrontend.h"
 #include "../win32/i18n/settings.h"
+#include "../win32/ipc/diagnostic_log.h"
 #include "../win32/ipc/pipeidentity.h"
 #include "../win32/ipc/service.h"
 #include "../win32/ipc/transport.h"
+#include "windowslogging.h"
 #include <algorithm>
 #include <chrono>
 #include <fcitx-utils/key.h>
@@ -271,20 +273,33 @@ WindowsPipeServer::WindowsPipeServer(Instance &instance,
                                      EventDispatcher &dispatcher,
                                      std::filesystem::path settingsFile,
                                      std::filesystem::path uiSettingsFile,
-                                     ipc::UiLanguage activeLanguage)
+                                     ipc::UiLanguage activeLanguage,
+                                     bool detailedLogging)
     : instance_(instance), dispatcher_(dispatcher),
       settings_(instance, std::move(settingsFile)), dictionaries_(instance),
       uiSettingsFile_(uiSettingsFile.empty() ? i18n::settingsPath()
                                              : std::move(uiSettingsFile)),
       activeLanguage_(i18n::resolveLanguage(activeLanguage)),
-      settingsEpoch_(settings_.revision()) {}
+      detailedLogging_(detailedLogging), settingsEpoch_(settings_.revision()) {}
 
 ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
                                           bool consumed) {
     auto reply = context.snapshot(consumed, settings_.chineseMode(&context));
     settings_.decorate(&context, reply);
     reply.settingsRevision = settingsEpoch_;
+    reply.detailedLogging = detailedLogging_;
     context.updateCandidateIdentity(reply);
+    if (diagnostic::coreLogger().enabled())
+        diagnostic::coreLogger().event(
+            diagnostic::Level::Debug, "core_snapshot",
+            {{"input_method", reply.inputMethod},
+             {"settings_revision", reply.settingsRevision},
+             {"candidate_generation", reply.candidateGeneration},
+             {"candidate_count", reply.candidates.size()},
+             {"selected", reply.selected},
+             {"preedit_bytes", reply.preedit.size()},
+             {"commit_bytes", reply.commit.size()},
+             {"consumed", consumed ? "true" : "false"}});
     return reply;
 }
 
@@ -519,6 +534,15 @@ void WindowsPipeServer::process(const ipc::Frame &request,
                                 const std::shared_ptr<PendingReply> &pending,
                                 uint64_t clientId, bool restricted) {
     using ipc::MessageType;
+    if (diagnostic::coreLogger().enabled())
+        diagnostic::coreLogger().event(
+            diagnostic::Level::Debug, "core_request",
+            {{"type", static_cast<unsigned>(request.type)},
+             {"request", request.requestId},
+             {"context", request.contextId},
+             {"client", clientId},
+             {"payload_bytes", request.payload.size()},
+             {"dispatch_ms", GetTickCount64() - pending->submittedAt}});
     auto response = makeResponse(request, MessageType::Ack);
     ipc::Reader reader(request.payload.data(), request.payload.size());
     ipc::Writer writer;
@@ -550,6 +574,8 @@ void WindowsPipeServer::process(const ipc::Frame &request,
         !ipc::globalSettingsRequest(request.type) &&
         (!owners_.contains(request.contextId) ||
          owners_.at(request.contextId) != clientId)) {
+        diagnostic::coreLogger().event(diagnostic::Level::Warning,
+                                       "context_owner_rejected");
         response.type = MessageType::Error;
         complete(pending, std::move(response));
         return;
@@ -594,6 +620,18 @@ void WindowsPipeServer::process(const ipc::Frame &request,
                                                    reply.settings)
                               : ipc::SettingsError::Invalid;
         }
+        if (reply.error == ipc::SettingsError::None) {
+            detailedLogging_ = reply.settings.detailedLogging;
+            applyDiagnosticLogging(detailedLogging_);
+        }
+        if (diagnostic::coreLogger().enabled())
+            diagnostic::coreLogger().event(
+                reply.error == ipc::SettingsError::None
+                    ? diagnostic::Level::Info
+                    : diagnostic::Level::Warning,
+                "global_settings",
+                {{"revision", reply.settings.revision},
+                 {"error", static_cast<unsigned>(reply.error)}});
         reply.resolvedLanguage = i18n::resolveLanguage(reply.settings.language);
         response.type = MessageType::GlobalSettingsReply;
         response.payload = ipc::encodeGlobalSettingsReply(reply);
@@ -647,11 +685,18 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             ipc::encodeMethodConfig(settings_.methodConfig(config.id, error));
         break;
     }
-    case MessageType::GetDictionaries:
+    case MessageType::GetDictionaries: {
         response.type = MessageType::DictionariesReply;
-        response.payload =
-            ipc::encodeDictionariesReply(dictionaries_.snapshot());
+        const auto dictionaries = dictionaries_.snapshot();
+        if (diagnostic::coreLogger().enabled())
+            diagnostic::coreLogger().event(
+                diagnostic::Level::Debug, "dictionary_status",
+                {{"available", dictionaries.available ? "true" : "false"},
+                 {"count", dictionaries.dictionaries.size()},
+                 {"error", dictionaries.error.empty() ? "false" : "true"}});
+        response.payload = ipc::encodeDictionariesReply(dictionaries);
         break;
+    }
     case MessageType::OpenSettings:
     case MessageType::GetSettings:
     case MessageType::SetSettings: {
@@ -934,6 +979,13 @@ void WindowsPipeServer::process(const ipc::Frame &request,
 
 void WindowsPipeServer::complete(const std::shared_ptr<PendingReply> &pending,
                                  ipc::Frame response) {
+    if (diagnostic::coreLogger().enabled())
+        diagnostic::coreLogger().event(
+            diagnostic::Level::Debug, "core_reply",
+            {{"type", static_cast<unsigned>(response.type)},
+             {"request", response.requestId},
+             {"context", response.contextId},
+             {"elapsed_ms", GetTickCount64() - pending->submittedAt}});
     {
         std::lock_guard<std::mutex> lock(pending->mutex);
         pending->frame = std::move(response);

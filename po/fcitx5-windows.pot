@@ -19,6 +19,50 @@ msgstr ""
 
 #: win32/settings/SettingsWindow.cpp:68
 msgctxt "settings"
+msgid "Developer options"
+msgstr ""
+
+msgctxt "settings"
+msgid "Enable detailed logging"
+msgstr ""
+
+msgctxt "settings"
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 30 days."
+msgstr ""
+
+msgctxt "settings"
+msgid "Log folder"
+msgstr ""
+
+msgctxt "settings"
+msgid "Open log folder"
+msgstr ""
+
+msgctxt "settings"
+msgid "Starting"
+msgstr ""
+
+msgctxt "settings"
+msgid "On"
+msgstr ""
+
+msgctxt "settings"
+msgid "Off"
+msgstr ""
+
+msgctxt "settings"
+msgid "Recording"
+msgstr ""
+
+msgctxt "settings"
+msgid "Unavailable"
+msgstr ""
+
+msgctxt "settings"
+msgid "{0} log files, {1} bytes"
+msgstr ""
+
+msgctxt "settings"
 msgid "Loaded"
 msgstr ""
 

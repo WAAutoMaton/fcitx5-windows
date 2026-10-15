@@ -1,8 +1,10 @@
 #include "../win32/i18n/translator.h"
+#include "../win32/ipc/diagnostic_log.h"
 #include "../win32/ipc/service.h"
 #include "../win32/ipc/userdata.h"
 #include "windowsfrontend.h"
 #include "windowskeyboard.h"
+#include "windowslogging.h"
 #include <fcitx-utils/environ.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
@@ -51,13 +53,19 @@ void setupEnv() {
 
 void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
            win32::ipc::ServiceProcess &service) {
-    Log::setLogRule("*=3,notimedate");
-    setupEnv();
     win32::ipc::GlobalSettings uiSettings;
-    if (!win32::i18n::readSettings(uiSettingsFile, uiSettings)) {
+    const bool settingsLoaded =
+        win32::i18n::readSettings(uiSettingsFile, uiSettings);
+    win32::CoreLogStream logStream;
+    win32::applyDiagnosticLogging(uiSettings.detailedLogging);
+    win32::diagnostic::coreLogger().maintain();
+    if (!settingsLoaded) {
         FCITX_WARN()
             << "Cannot read UI language settings; using system language";
     }
+    win32::diagnostic::coreLogger().event(win32::diagnostic::Level::Info,
+                                          "core_start");
+    setupEnv();
     const auto activeLanguage =
         win32::i18n::resolveLanguage(uiSettings.language);
     const auto language = win32::i18n::localeName(activeLanguage);
@@ -111,7 +119,8 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
     dispatcher = std::make_unique<fcitx::EventDispatcher>();
     dispatcher->attach(&instance->eventLoop());
     pipeServer = std::make_unique<fcitx::win32::WindowsPipeServer>(
-        *instance, *dispatcher, settingsFile, uiSettingsFile, activeLanguage);
+        *instance, *dispatcher, settingsFile, uiSettingsFile, activeLanguage,
+        uiSettings.detailedLogging);
     pipeServer->start();
     auto shutdown = instance->eventLoop().addTimeEvent(
         CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 100000, 0,
@@ -128,11 +137,15 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
         throw std::runtime_error("Cannot watch Core shutdown requests");
     }
     instance->eventLoop().exec();
+    win32::diagnostic::coreLogger().event(win32::diagnostic::Level::Info,
+                                          "core_stop");
     shutdown.reset();
     pipeServer->stop();
     pipeServer.reset();
     dispatcher.reset();
     instance.reset();
+    win32::diagnostic::coreLogger().setEnabled(false);
+    win32::diagnostic::coreLogger().flush(std::chrono::milliseconds(250));
 }
 } // namespace fcitx
 
