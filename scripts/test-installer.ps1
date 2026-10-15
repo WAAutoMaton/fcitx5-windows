@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$InstallerPath,
     [string]$InstallRoot = '',
-    [string]$LogPath = ''
+    [string]$LogPath = '',
+    [switch]$ModernApps
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,6 +38,7 @@ New-Item -ItemType Directory -Force (Split-Path $InstallRoot -Parent) | Out-Null
 $installerKey = 'HKLM:\SOFTWARE\Fcitx5\Installer'
 $uninstallKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{0D07698A-591B-44B4-940F-BBD38AA62F0E}_is1'
 $clsidKey = 'HKLM:\SOFTWARE\Classes\CLSID\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}\InprocServer32'
+$tipKey = 'HKLM:\SOFTWARE\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}'
 $helper = Join-Path $InstallRoot 'setup/Fcitx5SetupHelper.exe'
 $installed = $false
 
@@ -58,6 +60,45 @@ function Assert-Path {
     if (!(Test-Path -LiteralPath $Path)) { throw "Expected installed path is missing: $Path" }
 }
 
+function Assert-TsfRegistration {
+    param([string]$DllPath, [switch]$ModernApps)
+
+    $clsid = '{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}'
+    $tip = "HKLM:\SOFTWARE\Microsoft\CTF\TIP\$clsid"
+    $server = "HKLM:\SOFTWARE\Classes\CLSID\$clsid\InprocServer32"
+    Assert-Path $server
+    $properties = Get-ItemProperty -LiteralPath $server
+    if ($properties.'(default)' -ine $DllPath -or $properties.ThreadingModel -ine 'Apartment') {
+        throw 'TSF COM registration does not match the installed DLL and Apartment threading model.'
+    }
+
+    $profile = "$tip\LanguageProfile\0x00000804\{9A92B895-29B9-4F19-9627-9F626C9490F2}"
+    Assert-Path $profile
+    $properties = Get-ItemProperty -LiteralPath $profile
+    if ($properties.Enable -ne 1 -or $properties.IconFile -ine $DllPath -or $properties.IconIndex -ne 0) {
+        throw 'TSF language profile is disabled or does not reference the installed DLL icon.'
+    }
+
+    $categories = [ordered]@{
+        KEYBOARD = '{34745C63-B2F0-4784-8B67-5E12C8701A31}'
+        DISPLAYATTRIBUTEPROVIDER = '{046B8C80-1647-40F7-9B21-B93B81AABC1B}'
+        SYSTRAYSUPPORT = '{25504FB4-7BAB-4BC1-9C69-CF81890F0EF5}'
+    }
+    if ($ModernApps) {
+        $categories.UIELEMENTENABLED = '{49D2F9CF-1F5E-11D7-A6D3-00065B84435C}'
+        $categories.IMMERSIVESUPPORT = '{13A016DF-560B-46CD-947A-4C3AF1E0E35D}'
+    }
+    foreach ($category in $categories.GetEnumerator()) {
+        # Check both indexes written by ITfCategoryMgr, not only COM registration.
+        foreach ($path in @("$tip\Category\Category\$($category.Value)\$clsid",
+                "$tip\Category\Item\$clsid\$($category.Value)")) {
+            if (!(Test-Path -LiteralPath $path)) {
+                throw "Missing TSF category $($category.Key): $path"
+            }
+        }
+    }
+}
+
 function Get-InstallerRoot {
     if (!(Test-Path -LiteralPath $installerKey)) { return '' }
     return [string](Get-ItemProperty -LiteralPath $installerKey -Name InstallRoot -ErrorAction SilentlyContinue).InstallRoot
@@ -73,6 +114,9 @@ try {
     }
     if (Test-Path -LiteralPath $clsidKey) {
         throw 'An existing Fcitx5 COM registration is present.'
+    }
+    if (Test-Path -LiteralPath $tipKey) {
+        throw 'An existing Fcitx5 TIP registration is present.'
     }
 
     $installed = $true
@@ -101,6 +145,7 @@ try {
     }
     Assert-Path ([string]$properties.NativeUninstaller)
     Assert-Path $uninstallKey
+    Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll') -ModernApps:$ModernApps
 
     $uninstallArguments = @('uninstall', '--silent', '--prefix', "`"$InstallRoot`"")
     $uninstallCode = Invoke-ProcessChecked -FilePath $helper -ArgumentList $uninstallArguments -AllowedExitCodes @(0, 3010)
@@ -110,6 +155,9 @@ try {
     }
     if (Test-Path -LiteralPath $uninstallKey) {
         throw 'Windows uninstall registration remained after uninstall.'
+    }
+    if ((Test-Path -LiteralPath $clsidKey) -or (Test-Path -LiteralPath $tipKey)) {
+        throw 'TSF COM or TIP registration remained after uninstall.'
     }
     if (Test-Path -LiteralPath $InstallRoot) {
         $remaining = Get-ChildItem -LiteralPath $InstallRoot -Force -Recurse -ErrorAction SilentlyContinue

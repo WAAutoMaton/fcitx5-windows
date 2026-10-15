@@ -35,7 +35,7 @@ jobs:
           Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
 
       - name: Build complete Release runtime tree without tests
-        run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/ci-runtime -BuildRoot ./build/ci-x64 -DataMode Prebuilt -SkipTests
+        run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/ci-runtime -BuildRoot ./build/ci-x64 -DataMode Prebuilt -ModernApps -SkipTests
 
       - name: Prepare portable TSF tests and probes
         run: |
@@ -134,6 +134,9 @@ jobs:
 
       - name: Test unified build script
         run: ./scripts/test-build-and-deploy.ps1
+
+      - name: Test installed TSF registration checks without system changes
+        run: ./scripts/test-installer-registration.ps1
 
       - name: Check generated icon against the existing checksum
         run: |
@@ -257,7 +260,7 @@ jobs:
         run: |
           $installer = @(Get-ChildItem dist/installer -Filter '*-x64-no-runtime-setup.exe' -File)
           if ($installer.Count -ne 1) { throw "Expected exactly one no-runtime installer, found $($installer.Count)." }
-          ./scripts/test-installer.ps1 -InstallerPath $installer[0].FullName
+          ./scripts/test-installer.ps1 -InstallerPath $installer[0].FullName -ModernApps
 
       - name: Upload installer smoke logs
         if: ${{ always() }}

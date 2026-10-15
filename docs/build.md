@@ -118,9 +118,21 @@ method data.
 The runtime implementation is described in
 [windows-modern-apps-design.md](windows-modern-apps-design.md). A modern acceptance
 build uses `build-and-deploy.ps1 -ModernApps` with an isolated prefix/build root.
-The default build leaves the new categories disabled until signed system
-acceptance. Re-registration, signing, package installation and login startup
-are explicit operations, never side effects of building or testing.
+CI/Nightly explicitly enables this option for the shared runtime and both
+installer variants, so installation declares `UIELEMENTENABLED` and
+`IMMERSIVESUPPORT`. Local builds keep the categories disabled unless the option
+is supplied. Changing a build option or replacing the DLL does not update
+existing category registration; install the updated package or explicitly
+re-register the updated DLL. Re-registration, signing, package installation and
+login startup remain explicit operations.
+
+The installer smoke test requires both modern categories in both registry
+indexes, the installed COM DLL path/threading model, and an enabled language
+profile referencing the installed icon. Missing declarations block Nightly
+publication even if the unregistered probes pass. These checks establish
+registration only: CI does not currently sign the TSF DLL or validate Windows
+dispatch into a real modern application. A signed deployment and interactive
+system acceptance are still required to establish modern-app compatibility.
 
 For transport diagnostics, build `appcontainer_probe` and pass an existing
 AppContainer profile/package family name:
@@ -171,10 +183,10 @@ run in separate jobs:
 
 | Job | Responsibility |
 | --- | --- |
-| `build-x64` | Run the unified build with `-SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
-| `test-x64` | Download the x64 runtime and tests; run build-script regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/table-method/Wubi regressions, default CTest and dictionary integration checks |
+| `build-x64` | Run the unified build with `-ModernApps -SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
+| `test-x64` | Download the x64 runtime and tests; run build-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/table-method/Wubi regressions, default CTest and dictionary integration checks |
 | `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
-| `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install and uninstall, and upload the installer log |
+| `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install, require modern TSF registration, uninstall and check registration cleanup, and upload the installer log |
 | `release` | Wait for the x64 build, tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
 
 `test-x64` and `package-installer-x64` both depend only on `build-x64`, so they
@@ -236,10 +248,20 @@ The script regression can run without system installation:
 
 The GitHub Actions `installer-smoke-x64` job executes the no-runtime package on
 a fresh Windows runner with `/VERYSILENT /MACHINEONLY=1`, verifies the installed
-files, machine registration and managed install state, then invokes the installed
+files, COM/profile/category registration and managed install state, then invokes
+the installed
 `Fcitx5SetupHelper.exe uninstall --silent` entry point and checks that both
-uninstall registrations are removed. The bundled-runtime package is still only
-packaged in CI; installing system runtimes and exercising the original-user
+uninstall registrations and the TSF COM/TIP registration are removed. CI passes
+`-ModernApps` to `scripts/test-installer.ps1` to require the modern categories;
+omit it only when testing a build that deliberately disables them. The assertion
+regression can run locally without installing anything or changing the registry:
+
+```powershell
+./scripts/test-installer-registration.ps1
+```
+
+The bundled-runtime package is still only packaged in CI; installing system
+runtimes and exercising the original-user
 configuration path require a dedicated clean Windows VM or self-hosted runner.
 
 ## Deployment and Updates

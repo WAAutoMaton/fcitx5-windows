@@ -22,7 +22,7 @@
 - immersive/UIElement-only 使用系统菜单，受限菜单仅保留 Settings；桌面原生菜单和 About 也经过 UIElement 显示许可。服务错误只输出诊断，不弹无许可的 MessageBox。
 - 安装器提供默认不选中的当前用户登录启动项。固定命令使用 `--login-start`，遵守手动停止状态；显式卸载 helper 清理本安装树拥有的启动项，保留其他安装路径的同名项。普通 build/deploy/test 不写启动项。
 
-`scripts/build-and-deploy.ps1 -ModernApps` 显式启用 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT` 构建声明，默认关闭以保留真实系统验收门槛。该选项不注册 DLL、不签名、不启动服务。首次受限输入要求宿主 Core 已运行，或用户在安装器中选择登录启动。验证和 fixture 构建见 [build.md](build.md#modern-app-acceptance)。
+`scripts/build-and-deploy.ps1 -ModernApps` 显式启用 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT` 构建声明。本地构建默认关闭；CI/Nightly 显式启用，使共享运行树和两种安装包具备现代应用选择所需的能力声明。该选项不注册 DLL、不签名、不启动服务；实际安装才更新系统注册，替换 DLL 不会补齐旧的 category。首次受限输入要求宿主 Core 已运行，或用户在安装器中选择登录启动。验证和 fixture 构建见 [build.md](build.md#modern-app-acceptance)。
 
 ## 宿主分类与已有缺口
 
@@ -216,7 +216,9 @@ immersive/UIElement-only 的右键走系统 `ITfMenu`/`InitMenu`/`OnMenuSelect`�
 
 ## 注册、签名与部署
 
-`UIELEMENTENABLED` 在所有自有 UI 满足协商和生命周期测试后注册。`IMMERSIVESUPPORT` 在真正受限宿主的输入、IPC、候选和停止/重连路径达到验收要求后注册。可以在隔离测试部署中先启用这些 category 来开展系统验收，但不默认发布未经验证的能力。
+CI/Nightly 显式启用 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`，避免已实现现代输入链路的安装包因缺少声明而被系统筛选。安装 smoke test 必须检查实际安装 DLL 的 COM 路径、启用的语言 profile 及两项能力在 category/item 双向索引中的注册；卸载后检查 COM/TIP 清理。`scripts/test-installer-registration.ps1` 使用模拟注册表覆盖旧三类注册、单侧索引缺失、错误 DLL 路径和禁用 profile 等失败状态，不执行安装或系统写入。
+
+这些声明和自动化检查不是完整现代兼容验收。`UIELEMENTENABLED` 的验收仍覆盖所有自有 UI 的协商和生命周期；`IMMERSIVESUPPORT` 的验收仍覆盖真正受限宿主的输入、IPC、候选和停止/重连。CI 当前没有配置 TSF DLL 发行签名，也没有验证真实应用中的系统派发；Nightly 仍属开发预发布，不能据此声明所有现代宿主已受支持。
 
 现有 keyboard/display attribute/SYSTRAYSUPPORT 保留；不顺带注册 `SECUREMODE`、`COMLESS` 或其他未实现能力。更新 `test_register` 精确验证实际 category、失败回滚及注销。category 注册是机器全局声明，不能根据当前安装在某台机器上的应用名单动态猜测支持范围。
 
