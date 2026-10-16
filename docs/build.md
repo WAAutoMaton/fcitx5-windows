@@ -127,6 +127,30 @@ days, and are bounded to 64 MiB per process and 256 MiB per directory. Active
 files in other processes are protected from deletion by Windows sharing rules;
 capacity cleanup retries on subsequent maintenance. Disabling retains history.
 
+Settings records window open/close, close-button/service-stop requests, dispatcher
+return, runtime shutdown and a final `settings_exit` with a reason and exit code.
+Page rendering and user operations have begin/stage/end events correlated by
+`operation_id`. `settings_exception` includes the operation, exception kind,
+numeric HRESULT (when available) and whether the exception is fatal. XAML
+unhandled exceptions and `std::terminate` are also recorded. Exception messages,
+configuration values and input text are excluded. These events require detailed
+logging to be enabled; disabling it also disables exit diagnostics.
+
+Fatal C++/WinRT callback errors attempt to drain the log queue for 250 ms before
+preserving the existing fail-fast behavior. These are best-effort diagnostics:
+native access violations, stack/heap corruption, external termination, and a
+blocked/unavailable logger can leave no final event. A missing `settings_exit`
+is a reason to inspect Windows Application Error/WER records, not proof of a
+crash. `settings_window_closed` followed by `settings_exit` distinguishes a
+completed shutdown from a failure during teardown.
+
+Build isolated Settings with `scripts/build-settings.ps1 -UiTest -BuildRoot <build>`
+and run `scripts/test-settings-exit-logging.ps1 -SettingsBuild <build>/Release`
+to check normal exits, recoverable HRESULTs, real async fail-fast and
+`std::terminate`, privacy and logging-off behavior. This test uses dedicated
+child processes and log directories without connecting to Core or stopping any
+running Settings instance. Its fatal cases intentionally terminate test children.
+
 Events contain diagnostic metadata, HRESULT/error codes, counts, lengths and
 geometry. Input text, candidate contents, raw keys/payloads, titles and user paths
 are excluded. Upstream Fcitx messages are represented only by severity and byte

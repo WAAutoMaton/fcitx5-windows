@@ -69,6 +69,7 @@
     <ClInclude Include="App.h" />
     <ClInclude Include="SettingsWindow.h" />
     <ClInclude Include="keycapture.h" />
+    <ClInclude Include="diagnostics.h" />
     <ClCompile Include="App.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SettingsWindow.cpp" />

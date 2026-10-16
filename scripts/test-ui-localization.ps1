@@ -89,6 +89,7 @@ function Open-Settings([string]$Title) {
 function Close-Settings([string]$CloseLabel) {
     Invoke (Find-Name $CloseLabel)
     if (!$script:settings.WaitForExit(10000)) { throw 'Test Settings did not close.' }
+    if ($script:settings.ExitCode -ne 0) { throw "Test Settings exited abnormally: $($script:settings.ExitCode)" }
 }
 function Stop-Fixture {
     if ($script:fixture -and !$script:fixture.HasExited) {
@@ -181,7 +182,23 @@ try {
         Assert-Logging $false
         if ((Get-Content $file -Raw) -notmatch 'DetailedLogging=true') { throw 'Reset saved a draft.' }
         Discard-LoggingDraft
-        Close-Settings 'Close'; Stop-Fixture
+        Close-Settings 'Close'
+        $exitEvents = @(Get-ChildItem -LiteralPath $env:FCITX5_DIAGNOSTIC_TEST_DIRECTORY -Filter "settings-$($settings.Id)-*.log*" -File |
+            ForEach-Object { Get-Content -LiteralPath $_.FullName -Encoding UTF8 | ConvertFrom-Json })
+        foreach ($eventName in @('settings_close_requested', 'settings_window_closed', 'settings_dispatcher_returned', 'settings_runtime_shutdown_begin', 'settings_exit')) {
+            if (!($exitEvents | Where-Object event -eq $eventName)) { throw "Missing actual WinUI shutdown event: $eventName" }
+        }
+        $normalExit = @($exitEvents | Where-Object event -eq 'settings_exit')
+        if ($normalExit.Count -ne 1 -or $normalExit[0].exit_code -ne 0 -or $normalExit[0].reason -ne 'dispatcher_returned') {
+            throw 'Actual WinUI shutdown did not report normal dispatcher exit.'
+        }
+        foreach ($operationName in @('render_global', 'render_config')) {
+            if (!($exitEvents | Where-Object { $_.event -eq 'settings_operation_end' -and $_.operation -eq $operationName })) {
+                throw "Missing actual WinUI page render: $operationName"
+            }
+        }
+        if ($exitEvents | Where-Object { $_.event -eq 'settings_exception' -and $_.fatal }) { throw 'Unexpected fatal WinUI exception.' }
+        Stop-Fixture
         Start-Fixture; Open-Settings 'Input Method Settings'; Global; Developer
         Assert-Logging $true
         Toggle-Logging

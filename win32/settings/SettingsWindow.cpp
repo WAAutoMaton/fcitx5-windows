@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 #include "../ipc/diagnostic_log.h"
 #include "../ipc/transport.h"
+#include "diagnostics.h"
 #include "keycapture.h"
 #include <commctrl.h>
 #undef GetCurrentTime
@@ -318,24 +319,30 @@ void SettingsWindow::translateStatic() {
 }
 
 void SettingsWindow::renderGlobal() {
+    const settings::diagnostic::Operation operation("render_global");
+    operation.stage("selection");
     page_ = PageKind::Global;
     rendering_ = true;
     methods_.SelectedIndex(-1);
     globalButton_.IsChecked(true);
     rendering_ = false;
     heading_.Text(tr("settings", "Global Settings"));
+    operation.stage("page_visibility");
     tabs_.Visibility(Visibility::Collapsed);
     globalPanel_.Visibility(Visibility::Visible);
+    operation.stage("controls");
     language_.SelectedIndex(static_cast<int>(global_.settings.language));
     detailedLogging_.IsOn(global_.settings.detailedLogging);
     win32::diagnostic::settingsLogger().setEnabled(
         global_.settings.detailedLogging);
     logStatus_.Text(
         tr("settings", global_.settings.detailedLogging ? "Starting" : "Off"));
+    operation.stage("log_status");
     refreshLogStatus();
 }
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
+    const settings::diagnostic::Operation operation("load_global");
     const apartment_context ui;
     ipc::GlobalSettingsReply reply;
     bool connected = false;
@@ -344,8 +351,10 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
         PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.getGlobalSettings(reply);
     } catch (...) {
+        settings::diagnostic::exception("load_global");
     }
     co_await ui;
+    operation.stage(closed_ ? "closed" : "apply_reply");
     if (closed_)
         co_return false;
     if (!connected || reply.error != ipc::SettingsError::None) {
@@ -362,6 +371,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
 }
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
+    const settings::diagnostic::Operation operation("save_global");
     const auto index = language_.SelectedIndex();
     if (index < 0 || index > 3)
         co_return false;
@@ -385,6 +395,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
                 reply.error = ipc::SettingsError::Conflict;
         }
     } catch (...) {
+        settings::diagnostic::exception("save_global");
     }
     co_await ui;
     if (closed_)
@@ -444,7 +455,8 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::resolveDraft() {
     co_return true;
 }
 
-fire_and_forget SettingsWindow::chooseGlobal() {
+fire_and_forget SettingsWindow::chooseGlobal() try {
+    const settings::diagnostic::Operation operation("choose_global");
     const auto lifetime = shared_from_this();
     if (working_ || !loaded_ || page_ == PageKind::Global) {
         globalButton_.IsChecked(page_ == PageKind::Global);
@@ -454,6 +466,9 @@ fire_and_forget SettingsWindow::chooseGlobal() {
     if (!(co_await resolveDraft()) || !(co_await loadGlobal()))
         globalButton_.IsChecked(false);
     busy(false);
+} catch (...) {
+    settings::diagnostic::exception("choose_global", true);
+    throw;
 }
 
 SettingsWindow::~SettingsWindow() {
@@ -463,6 +478,7 @@ SettingsWindow::~SettingsWindow() {
 }
 
 bool SettingsWindow::open() {
+    const settings::diagnostic::Operation operation("window_open");
     const auto name = ipc::settingsActivationBase();
     activation_ =
         CreateEventW(nullptr, FALSE, FALSE, (name + L"-activate").c_str());
@@ -619,18 +635,36 @@ bool SettingsWindow::open() {
     dictionaryStatus_ = root.FindName(L"DictionaryStatus").as<TextBlock>();
     dictionaryFolder_ = root.FindName(L"DictionaryFolder").as<Button>();
     tabs_.SelectionChanged([this](auto &&, auto &&) {
+        win32::diagnostic::settingsLogger().event(
+            win32::diagnostic::Level::Debug, "settings_tab_selected",
+            {{"page", "input_method"}, {"index", tabs_.SelectedIndex()}});
         if (page_ == PageKind::InputMethod && tabs_.SelectedIndex() == 1) {
             refreshDictionaries();
         }
     });
     dictionaryFolder_.Click(
         [this](auto &&, auto &&) { openDictionaryFolder(); });
+    globalPanel_.SelectionChanged([this](auto &&, auto &&) {
+        win32::diagnostic::settingsLogger().event(
+            win32::diagnostic::Level::Debug, "settings_tab_selected",
+            {{"page", "global"}, {"index", globalPanel_.SelectedIndex()}});
+    });
     logFolder_.Click([this](auto &&, auto &&) { refreshLogStatus(true); });
-    root.FindName(L"Cancel").as<Button>().Click(
-        [this](auto &&, auto &&) { window_.Close(); });
+    root.FindName(L"Cancel").as<Button>().Click([this](auto &&, auto &&) {
+        win32::diagnostic::settingsLogger().event(
+            win32::diagnostic::Level::Info, "settings_close_requested",
+            {{"reason", "close_button"}});
+        window_.Close();
+    });
     confirm_.Click([this](auto &&, auto &&) { transfer(true); });
     retry_.Click([this](auto &&, auto &&) { transfer(false); });
     window_.Closed([this](auto &&, auto &&) {
+        win32::diagnostic::settingsLogger().event(
+            win32::diagnostic::Level::Info, "settings_window_closed",
+            {{"page", page_ == PageKind::Global ? "global" : "input_method"},
+             {"working", working_},
+             {"log_refresh", logRefresh_},
+             {"dictionary_refresh", dictionaryRefresh_}});
         closed_ = true;
         timer_.Stop();
         RemovePropW(handle_, activationProperty_.c_str());
@@ -651,6 +685,9 @@ bool SettingsWindow::open() {
     timer_.Interval(std::chrono::milliseconds(200));
     timer_.Tick([this](auto &&, auto &&) {
         if (settingsServiceStopping()) {
+            win32::diagnostic::settingsLogger().event(
+                win32::diagnostic::Level::Info, "settings_close_requested",
+                {{"reason", "service_stop"}});
             window_.Close();
             return;
         }
@@ -669,6 +706,8 @@ bool SettingsWindow::open() {
     });
     timer_.Start();
     window_.Activate();
+    win32::diagnostic::settingsLogger().event(win32::diagnostic::Level::Info,
+                                              "settings_window_opened");
     transfer(false);
     return true;
 }
@@ -694,7 +733,8 @@ void SettingsWindow::busy(bool enabled) {
     retry_.IsEnabled(!enabled);
 }
 
-fire_and_forget SettingsWindow::transfer(bool save) {
+fire_and_forget SettingsWindow::transfer(bool save) try {
+    const settings::diagnostic::Operation operation(save ? "apply" : "reload");
     const auto lifetime = shared_from_this();
     const apartment_context ui;
     if (working_) {
@@ -726,9 +766,11 @@ fire_and_forget SettingsWindow::transfer(bool save) {
                 globalReply.coreActiveLanguage);
         }
     } catch (...) {
+        settings::diagnostic::exception("reload");
         connected = false;
     }
     co_await ui;
+    operation.stage(closed_ ? "closed" : "apply_reply");
     if (closed_) {
         co_return;
     }
@@ -767,6 +809,9 @@ fire_and_forget SettingsWindow::transfer(bool save) {
     status_.Visibility(status_.Text().empty() ? Visibility::Collapsed
                                               : Visibility::Visible);
     busy(false);
+} catch (...) {
+    settings::diagnostic::exception("transfer", true);
+    throw;
 }
 
 const ipc::InputMethodInfo *
@@ -777,6 +822,7 @@ SettingsWindow::method(const std::string &id) const {
 }
 
 void SettingsWindow::renderMethods(const std::string &selected) {
+    const settings::diagnostic::Operation operation("render_methods");
     rendering_ = true;
     methods_.Items().Clear();
     available_.Items().Clear();
@@ -848,7 +894,7 @@ void SettingsWindow::renderMethods(const std::string &selected) {
 }
 
 fire_and_forget SettingsWindow::loadIcon(Image image, TextBlock fallback,
-                                         std::string path) {
+                                         std::string path) try {
     const auto lifetime = shared_from_this();
     try {
         const auto file =
@@ -867,15 +913,22 @@ fire_and_forget SettingsWindow::loadIcon(Image image, TextBlock fallback,
         image.Visibility(Visibility::Visible);
         fallback.Visibility(Visibility::Collapsed);
     } catch (...) {
+        settings::diagnostic::exception("load_icon");
     }
+} catch (...) {
+    settings::diagnostic::exception("load_icon", true);
+    throw;
 }
 
 void SettingsWindow::renderConfig() {
+    const settings::diagnostic::Operation operation("render_config");
+    operation.stage("page_visibility");
     page_ = PageKind::InputMethod;
     globalButton_.IsChecked(false);
     globalPanel_.Visibility(Visibility::Collapsed);
     tabs_.Visibility(Visibility::Visible);
     options_.Children().Clear();
+    operation.stage("controls");
     editors_.clear();
     const auto *info = method(config_.id);
     heading_.Text(to_hstring(info ? info->name : config_.id));
@@ -1077,7 +1130,8 @@ void SettingsWindow::renderConfig() {
 }
 
 fire_and_forget SettingsWindow::recordShortcut(TextBox text,
-                                               std::wstring label) {
+                                               std::wstring label) try {
+    const settings::diagnostic::Operation operation("record_shortcut");
     const auto lifetime = shared_from_this();
     if (working_ || closed_)
         co_return;
@@ -1155,12 +1209,16 @@ fire_and_forget SettingsWindow::recordShortcut(TextBox text,
             text.Text(value + key);
         }
     } catch (const hresult_error &) {
+        settings::diagnostic::exception("record_shortcut");
         recorder->stop();
         if (!closed_) {
             status_.Text(tr("settings", "Cannot record shortcut."));
             status_.Visibility(Visibility::Visible);
         }
     }
+} catch (...) {
+    settings::diagnostic::exception("record_shortcut", true);
+    throw;
 }
 
 std::vector<ipc::ConfigValue> SettingsWindow::configValues() const {
@@ -1205,6 +1263,7 @@ std::vector<ipc::ConfigValue> SettingsWindow::configValues() const {
 
 Windows::Foundation::IAsyncOperation<bool>
 SettingsWindow::loadConfig(const std::string &entry) {
+    const settings::diagnostic::Operation operation("load_config");
     // Copy before the first suspension; callers may pass a vector element.
     const auto id = entry;
     const apartment_context ui;
@@ -1215,8 +1274,10 @@ SettingsWindow::loadConfig(const std::string &entry) {
         PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.getMethodConfig(id, reply);
     } catch (...) {
+        settings::diagnostic::exception("load_config");
     }
     co_await ui;
+    operation.stage(closed_ ? "closed" : "apply_reply");
     if (closed_) {
         co_return false;
     }
@@ -1236,6 +1297,7 @@ SettingsWindow::loadConfig(const std::string &entry) {
 }
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveConfig() {
+    const settings::diagnostic::Operation operation("save_config");
     const apartment_context ui;
     const auto values = configValues();
     if (config_.id.empty() || config_.error != ipc::SettingsError::None) {
@@ -1275,6 +1337,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveConfig() {
             }
         }
     } catch (...) {
+        settings::diagnostic::exception("save_config");
         connected = false;
     }
     co_await ui;
@@ -1295,7 +1358,8 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveConfig() {
     co_return true;
 }
 
-fire_and_forget SettingsWindow::chooseMethod() {
+fire_and_forget SettingsWindow::chooseMethod() try {
+    const settings::diagnostic::Operation operation("choose_method");
     const auto lifetime = shared_from_this();
     const auto index = methods_.SelectedIndex();
     if (index < 0) {
@@ -1318,9 +1382,16 @@ fire_and_forget SettingsWindow::chooseMethod() {
         }
     }
     busy(false);
+} catch (...) {
+    settings::diagnostic::exception("choose_method", true);
+    throw;
 }
 
-fire_and_forget SettingsWindow::changeSelection(int action) {
+fire_and_forget SettingsWindow::changeSelection(int action) try {
+    const settings::diagnostic::Operation operation("change_selection");
+    win32::diagnostic::settingsLogger().event(win32::diagnostic::Level::Debug,
+                                              "settings_selection_action",
+                                              {{"action", action}});
     const auto lifetime = shared_from_this();
     if (working_ || !loaded_) {
         co_return;
@@ -1385,6 +1456,7 @@ fire_and_forget SettingsWindow::changeSelection(int action) {
             }
         }
     } catch (...) {
+        settings::diagnostic::exception("change_selection");
         connected = false;
     }
     co_await ui;
@@ -1405,9 +1477,12 @@ fire_and_forget SettingsWindow::changeSelection(int action) {
         retry_.Visibility(Visibility::Visible);
     }
     busy(false);
+} catch (...) {
+    settings::diagnostic::exception("change_selection", true);
+    throw;
 }
 
-fire_and_forget SettingsWindow::refreshDictionaries() {
+fire_and_forget SettingsWindow::refreshDictionaries() try {
     if (dictionaryRefresh_ || closed_) {
         co_return;
     }
@@ -1421,6 +1496,7 @@ fire_and_forget SettingsWindow::refreshDictionaries() {
         PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
         connected = client.connect() && client.getDictionaries(reply);
     } catch (...) {
+        settings::diagnostic::exception("refresh_dictionaries");
     }
     co_await ui;
     dictionaryRefresh_ = false;
@@ -1470,9 +1546,13 @@ fire_and_forget SettingsWindow::refreshDictionaries() {
         }
         dictionaryReply_ = std::move(reply);
     }
+} catch (...) {
+    settings::diagnostic::exception("refresh_dictionaries", true);
+    throw;
 }
 
-fire_and_forget SettingsWindow::openDictionaryFolder() {
+fire_and_forget SettingsWindow::openDictionaryFolder() try {
+    const settings::diagnostic::Operation operation("open_dictionary_folder");
     const auto lifetime = shared_from_this();
     const apartment_context ui;
     dictionaryFolder_.IsEnabled(false);
@@ -1481,6 +1561,7 @@ fire_and_forget SettingsWindow::openDictionaryFolder() {
     try {
         result = openDictionariesDirectory();
     } catch (...) {
+        settings::diagnostic::exception("open_dictionary_folder");
     }
     co_await ui;
     if (!closed_) {
@@ -1491,11 +1572,17 @@ fire_and_forget SettingsWindow::openDictionaryFolder() {
                 tr("settings", "Cannot open the dictionary folder."));
         }
     }
+} catch (...) {
+    settings::diagnostic::exception("open_dictionary_folder", true);
+    throw;
 }
 
-fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) {
+fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) try {
     if (logRefresh_ || closed_)
         co_return;
+    if (openFolder)
+        win32::diagnostic::settingsLogger().event(
+            win32::diagnostic::Level::Info, "settings_log_folder_requested");
     const auto lifetime = shared_from_this();
     const apartment_context ui;
     logRefresh_ = true;
@@ -1531,6 +1618,7 @@ fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) {
             }
         }
     } catch (...) {
+        settings::diagnostic::exception("refresh_log_status");
         unavailable = true;
     }
     co_await ui;
@@ -1551,5 +1639,8 @@ fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) {
         .as<TextBlock>()
         .Text(translator_.format("settings", "{0} log files, {1} bytes",
                                  state.fileCount, state.totalBytes));
+} catch (...) {
+    settings::diagnostic::exception("refresh_log_status", true);
+    throw;
 }
 } // namespace fcitx
