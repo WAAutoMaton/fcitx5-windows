@@ -525,8 +525,33 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
             candidateElement_->setVisible(candidates_.visible());
         return;
     }
-    if (FAILED(result) || clipped || anchor.bottom <= anchor.top ||
-        anchor.right < anchor.left) {
+    bool clippedCaretVisible = false;
+    if (SUCCEEDED(result) && clipped && fallback &&
+        anchor.bottom > anchor.top && anchor.right >= anchor.left) {
+        // Some hosts flag even a visible collapsed caret as clipped. Validate
+        // its geometry against the document display before hiding the popup.
+        RECT screen{};
+        const auto screenResult = view->GetScreenExt(&screen);
+        diagnosticResult(L"GetScreenExt", screenResult);
+        const bool horizontalOverlap =
+            anchor.left == anchor.right
+                ? anchor.left >= screen.left && anchor.left < screen.right
+                : anchor.left < screen.right && anchor.right > screen.left;
+        clippedCaretVisible =
+            SUCCEEDED(screenResult) && screen.right > screen.left &&
+            screen.bottom > screen.top && horizontalOverlap &&
+            anchor.top < screen.bottom && anchor.bottom > screen.top;
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "candidate_clipped_caret",
+            {{"hr", static_cast<uint32_t>(screenResult)},
+             {"visible", clippedCaretVisible ? "true" : "false"},
+             {"left", screen.left},
+             {"top", screen.top},
+             {"right", screen.right},
+             {"bottom", screen.bottom}});
+    }
+    if (FAILED(result) || (clipped && !clippedCaretVisible) ||
+        anchor.bottom <= anchor.top || anchor.right < anchor.left) {
         win32::diagnostic::tsfLogger().event(
             win32::diagnostic::Level::Debug, "candidate_hidden",
             {{"reason", FAILED(result) ? "extent_failed"

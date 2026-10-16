@@ -38,8 +38,13 @@ valid text extents when modern hosts such as Windows Terminal use a visible,
 zero-sized input-site HWND. Conversion failures hide the popup and log the failed
 corner, owner awareness/DPI/client dimensions and anchor coordinates when detailed
 logging is enabled. A null owner assumes physical coordinates. A clipped
-composition falls back to the collapsed selection range; clipped/empty geometry,
-hidden/minimized owners, invalid UTF-8 and empty candidates hide the popup.
+composition falls back to the collapsed selection range. If that caret is also
+reported as clipped, valid geometry overlapping the document display returned by
+`GetScreenExt` can still anchor the popup. This accommodates hosts that report a
+visible caret as clipped. Empty or non-overlapping geometry, unavailable document
+display bounds, hidden/minimized owners, invalid UTF-8 and empty candidates hide
+the popup. Detailed logging records the display bounds and the clipped-caret
+acceptance decision as `candidate_clipped_caret`.
 
 `TS_E_NOLAYOUT` after a preedit write is temporary: keep the visible popup at its
 last physical anchor and update it with the applied snapshot for up to 250 ms.

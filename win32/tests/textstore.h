@@ -33,6 +33,9 @@ class TextStore : public ITextStoreACP, public ITfInputScope {
     ULONG readLocks = 0;
     ULONG geometryCalls = 0;
     HRESULT geometryResult = S_OK;
+    HRESULT screenResult = S_OK;
+    RECT screenRectangle{0, 0, 400, 200};
+    LONG caretWidth = 0;
     bool clipComposition = false;
     bool clipCaret = false;
     bool emptyRectangle = false;
@@ -328,15 +331,17 @@ class TextStore : public ITextStoreACP, public ITfInputScope {
         ++geometryCalls;
         *rect = emptyRectangle
                     ? RECT{}
-                    : RECT{anchorX + start * 10, 10, anchorX + end * 10, 30};
+                    : RECT{anchorX + start * 10, 10,
+                           anchorX + end * 10 + (start == end ? caretWidth : 0),
+                           30};
         *clipped = start == end ? clipCaret : clipComposition;
         return geometryResult;
     }
     STDMETHODIMP GetScreenExt(TsViewCookie, RECT *rect) override {
         if (!rect)
             return E_INVALIDARG;
-        *rect = {0, 0, 400, 200};
-        return S_OK;
+        *rect = screenRectangle;
+        return screenResult;
     }
     STDMETHODIMP GetWnd(TsViewCookie, HWND *window) override {
         if (!window)

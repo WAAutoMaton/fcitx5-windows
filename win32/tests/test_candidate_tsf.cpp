@@ -209,7 +209,32 @@ void tests() {
     assert(window.visible());
     store->clipCaret = true;
     Access::refresh(*tsf);
+    assert(window.visible());
+    store->caretWidth = 1;
+    Access::refresh(*tsf);
+    assert(window.visible());
+    // Clipped caret geometry must still overlap a valid document display.
+    const auto caretX = store->anchorX + store->selection().acpEnd * 10;
+    for (const RECT screen :
+         {RECT{}, RECT{400, 0, 0, 200}, RECT{0, 30, 400, 200},
+          RECT{0, 0, 400, 10}, RECT{caretX + 1, 0, 400, 200},
+          RECT{0, 0, caretX, 200}}) {
+        store->screenRectangle = screen;
+        Access::refresh(*tsf);
+        assert(!window.visible());
+    }
+    store->screenRectangle = {0, 0, 400, 200};
+    store->screenResult = E_FAIL;
+    Access::refresh(*tsf);
     assert(!window.visible());
+    store->screenResult = S_OK;
+    store->emptyRectangle = true;
+    Access::refresh(*tsf);
+    assert(!window.visible());
+    store->emptyRectangle = false;
+    store->caretWidth = 0;
+    Access::refresh(*tsf);
+    assert(window.visible());
     store->clipComposition = store->clipCaret = false;
     assert(Access::submit(*tsf, snapshot(5, "niha", "visible")));
     assert(window.visible());
