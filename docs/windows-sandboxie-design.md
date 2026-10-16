@@ -25,6 +25,8 @@ Fcitx5 当前在 TSF 进程中根据命名 mutex 和 LocalAppData 状态文件�
 
 连接使用现有 SID/session Pipe 名称和 ACL。沙箱内客户端检查 Pipe 服务端 PID，使用 Sandboxie API 排除沙箱服务端；无法确认时拒绝连接并记录错误。保留协议握手、有限超时和重连间隔；失败时不消费按键，取消旧预编辑，超时请求不重放。
 
+启用 `UseSecurityMode=y` 时，Sandboxie 内查询到的用户 token 与宿主通过 Pipe 模拟查询到的 token 可能不同：宿主看到匿名 SID `S-1-5-7` 和匿名登录 LUID。因此，原管理 Pipe 在连接已通过现有用户专用 DACL、token 查询成功且客户端不是 AppContainer 时，允许匿名 token 按系统 `GetNamedPipeClientSessionId` 核对实际客户端 session，不要求匿名 token 与 Core 的登录 LUID 相同。普通匿名进程仍不能直接通过该 DACL；不增加匿名 ACE，也不放宽 Pipe 权限。其余客户端和 AppContainer 输入 Pipe 继续要求 `sameLogin`，匿名例外不适用于受限输入入口。
+
 ## Sandboxie 兼容规则
 
 辅助脚本仅输出当前用户的配置片段，默认不修改系统。规则形如：
@@ -131,6 +133,8 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 | Settings 在沙箱内启动或出现另一份 Core | 检查是否仍在使用旧构建、残留沙箱进程或强制沙箱规则；当前实现要求 Core 和 Settings 在沙箱外运行。 |
 
 若已有构建产物，可在沙箱外和目标沙箱内分别运行 `ipc_probe.exe --diagnose`（使用实际文件路径），比较 Pipe 名称、连接阶段、Windows 错误码和服务端 PID。该命令不启动服务或修改配置。错误 `2/3` 只说明当前 Pipe 不可见，可能是宿主未启动、规则未生效或应用未重启；不能仅凭错误码判断原因。诊断成功只证明 IPC 连接，真实输入和候选窗仍需按上面的应用步骤验证。
+
+诊断输出同时包含 `sandboxState`（`0` 宿主、`1` 沙箱、`2` 未知）、`isolation`、`tokenKnown`、AppContainer/完整性状态、SID、session 和登录 LUID。`sandboxState=1`、`hostOnly=1` 但在 `Hello read` 返回错误 `233`，表示已经识别沙箱并打开 Pipe，随后被服务端断开；应检查协议和握手身份校验，不能据此判断为沙箱检测失败。安全模式下尤其需要确认宿主 Core 包含匿名 token 兼容逻辑。
 
 ### 6. 撤销规则
 

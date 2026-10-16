@@ -437,8 +437,7 @@ void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId,
     if (!ipc::readFrame(pipe, hello, 2000, stopEvent_, 4096) ||
         hello.type != ipc::MessageType::Hello || hello.contextId ||
         !hello.payload.empty() || !hello.requestId ||
-        !ipc::pipeClientIdentity(pipe, caller) ||
-        !ipc::sameLogin(host, caller)) {
+        !ipc::authorizedPipeClient(pipe, host, caller, inputOnly)) {
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
         return;

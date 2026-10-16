@@ -47,7 +47,22 @@ int main(int argumentCount, char **arguments) {
     try {
         fcitx::PipeClient client;
         if (argumentCount == 2 && std::string(arguments[1]) == "--diagnose") {
-            std::wcout << L"pipe=" << fcitx::win32::ipc::pipeName() << L"\n";
+            namespace ipc = fcitx::win32::ipc;
+            const ipc::SandboxieApi sandbox;
+            const auto environment = ipc::clientEnvironment(sandbox);
+            std::wcout << L"sandboxState="
+                       << static_cast<unsigned>(
+                              sandbox.process(GetCurrentProcessId()))
+                       << L"\nisolation="
+                       << static_cast<unsigned>(environment.isolation)
+                       << L"\ntokenKnown=" << environment.tokenKnown
+                       << L"\nappContainer=" << environment.appContainer
+                       << L"\nlowIntegrity=" << environment.lowIntegrity
+                       << L"\nuserSid=" << environment.userSid << L"\nsession="
+                       << environment.sessionId << L"\nauthenticationId="
+                       << environment.authenticationId.HighPart << L":"
+                       << environment.authenticationId.LowPart << L"\n";
+            std::wcout << L"pipe=" << ipc::pipeName() << L"\n";
             const bool connected = client.connect();
             std::wcout << L"pid=" << GetCurrentProcessId() << L"\nhostOnly="
                        << fcitx::win32::ipc::hostOnlyClient() << L"\nserverPid="

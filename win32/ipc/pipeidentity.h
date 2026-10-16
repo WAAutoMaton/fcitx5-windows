@@ -100,6 +100,22 @@ inline bool pipeClientIdentity(HANDLE pipe, ClientEnvironment &identity) {
     return success && identity.tokenKnown;
 }
 
+inline bool authorizedPipeClient(HANDLE pipe, const ClientEnvironment &host,
+                                 ClientEnvironment &caller, bool inputOnly) {
+    ULONG session = 0;
+    if (!host.tokenKnown || !pipeClientIdentity(pipe, caller) ||
+        !GetNamedPipeClientSessionId(pipe, &session) ||
+        session != host.sessionId)
+        return false;
+    if (sameLogin(host, caller))
+        return true;
+    // Sandboxie security mode exposes an anonymous token to the host after
+    // opening the management pipe with the original user's authority. Its
+    // existing user-only DACL authorizes that open; use the kernel peer session
+    // here because the sandbox token does not retain the user's logon identity.
+    return !inputOnly && !caller.appContainer && caller.userSid == L"S-1-5-7";
+}
+
 inline bool pipeServerIdentity(HANDLE pipe, const ClientEnvironment &client,
                                DWORD &serverId) {
     ULONG pid = 0, session = 0;
