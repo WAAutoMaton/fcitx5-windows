@@ -283,11 +283,34 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
         hide();
         return;
     }
-    if (owner) {
+    const auto ownerAwareness = owner ? GetAwarenessFromDpiAwarenessContext(
+                                            GetWindowDpiAwarenessContext(owner))
+                                      : DPI_AWARENESS_INVALID;
+    // Per-monitor-aware owners already use physical screen coordinates. An
+    // input-site HWND can have a zero-sized client area and reject conversion.
+    if (owner && ownerAwareness != DPI_AWARENESS_PER_MONITOR_AWARE) {
         POINT start{anchor.left, anchor.top};
         POINT end{anchor.right, anchor.bottom};
-        if (!LogicalToPhysicalPointForPerMonitorDPI(owner, &start) ||
+        const auto startConverted =
+            LogicalToPhysicalPointForPerMonitorDPI(owner, &start);
+        if (!startConverted ||
             !LogicalToPhysicalPointForPerMonitorDPI(owner, &end)) {
+            if (win32::diagnostic::tsfLogger().enabled()) {
+                RECT client{};
+                GetClientRect(owner, &client);
+                win32::diagnostic::tsfLogger().event(
+                    win32::diagnostic::Level::Warning,
+                    "popup_coordinate_conversion_failed",
+                    {{"corner", startConverted ? "end" : "start"},
+                     {"owner_awareness", static_cast<int>(ownerAwareness)},
+                     {"owner_dpi", GetDpiForWindow(owner)},
+                     {"owner_width", client.right - client.left},
+                     {"owner_height", client.bottom - client.top},
+                     {"left", anchor.left},
+                     {"top", anchor.top},
+                     {"right", anchor.right},
+                     {"bottom", anchor.bottom}});
+            }
             hide();
             return;
         }
@@ -296,7 +319,8 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
     ScopedDpiAwareness scope(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     win32::diagnostic::tsfLogger().event(
         win32::diagnostic::Level::Debug, "popup_dpi_awareness",
-        {{"valid", scope.valid() ? "true" : "false"}});
+        {{"valid", scope.valid() ? "true" : "false"},
+         {"owner_awareness", static_cast<int>(ownerAwareness)}});
     if (!scope.valid() || !initialize() || !updateRows(reply)) {
         hide();
         return;

@@ -31,11 +31,15 @@ invalidate the window. This is not an independent Windows 11 dark theme.
 ## DPI and Lifecycle
 
 The edit session queries `GetTextExt` under the owner's DPI awareness, then
-restores the thread context. `show` accepts owner-space logical screen coordinates
-and converts both corners with `LogicalToPhysicalPointForPerMonitorDPI`.
-A null owner assumes physical coordinates. A clipped composition falls back to
-the collapsed selection range; clipped/empty geometry, hidden/minimized owners,
-invalid UTF-8 and empty candidates hide the popup.
+restores the thread context. `show` accepts owner-space logical screen coordinates.
+Per-Monitor-aware owners already use physical coordinates; other owners convert
+both corners with `LogicalToPhysicalPointForPerMonitorDPI`. This avoids rejecting
+valid text extents when modern hosts such as Windows Terminal use a visible,
+zero-sized input-site HWND. Conversion failures hide the popup and log the failed
+corner, owner awareness/DPI/client dimensions and anchor coordinates when detailed
+logging is enabled. A null owner assumes physical coordinates. A clipped
+composition falls back to the collapsed selection range; clipped/empty geometry,
+hidden/minimized owners, invalid UTF-8 and empty candidates hide the popup.
 
 `TS_E_NOLAYOUT` after a preedit write is temporary: keep the visible popup at its
 last physical anchor and update it with the applied snapshot for up to 250 ms.

@@ -281,6 +281,66 @@ void windowTests() {
     assert(SetThreadDpiAwarenessContext(initial));
 }
 
+void inputSiteWindowTests() {
+    const auto initial = GetThreadDpiAwarenessContext();
+    for (const auto ownerContext :
+         {DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE,
+          DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2}) {
+        assert(SetThreadDpiAwarenessContext(ownerContext));
+        const auto parent =
+            CreateWindowExW(0, L"STATIC", L"Input site test parent",
+                            WS_OVERLAPPEDWINDOW, 100, 100, 600, 400, nullptr,
+                            nullptr, GetModuleHandleW(nullptr), nullptr);
+        assert(parent);
+        ShowWindow(parent, SW_SHOWNOACTIVATE);
+        // Terminal's input site is visible but has no client area.
+        const auto owner = CreateWindowExW(
+            0, L"STATIC", L"Input site test owner", WS_CHILD | WS_VISIBLE, 0, 0,
+            0, 0, parent, nullptr, GetModuleHandleW(nullptr), nullptr);
+        assert(owner && IsWindowVisible(owner));
+        RECT client{};
+        assert(GetClientRect(owner, &client));
+        assert(client.right == 0 && client.bottom == 0);
+        POINT point{40, 60};
+        assert(ClientToScreen(parent, &point));
+        const RECT anchor{point.x, point.y, point.x + 1, point.y + 20};
+        POINT converted{anchor.left, anchor.top};
+        assert(!LogicalToPhysicalPointForPerMonitorDPI(owner, &converted));
+        for (const auto callerContext :
+             {DPI_AWARENESS_CONTEXT_UNAWARE, DPI_AWARENESS_CONTEXT_SYSTEM_AWARE,
+              DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2}) {
+            assert(SetThreadDpiAwarenessContext(callerContext));
+            const auto foreground = GetForegroundWindow();
+            fcitx::CandidateWindow view;
+            auto reply = fixture();
+            view.show(reply, owner, anchor);
+            assert(view.visible());
+            assert(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),
+                                                callerContext));
+            assert(GetForegroundWindow() == foreground);
+            const auto window = Access::window(view);
+            assert(!GetUpdateRect(window, nullptr, FALSE));
+            assert(SetThreadDpiAwarenessContext(
+                DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+            RECT bounds{};
+            assert(GetWindowRect(window, &bounds));
+            assert(bounds.left == anchor.left && bounds.top == anchor.bottom);
+            assert(SetThreadDpiAwarenessContext(callerContext));
+            reply.selected = 2;
+            view.show(reply, owner, anchor);
+            assert(view.visible() && view.update(reply));
+            ShowWindow(parent, SW_HIDE);
+            view.show(reply, owner, anchor);
+            assert(!view.visible());
+            ShowWindow(parent, SW_SHOWNOACTIVATE);
+            view.show(reply, owner, anchor);
+            assert(view.visible());
+        }
+        assert(DestroyWindow(parent));
+    }
+    assert(SetThreadDpiAwarenessContext(initial));
+}
+
 void preview(IWICImagingFactory *factory,
              const std::filesystem::path &directory) {
     const auto previous = SetThreadDpiAwarenessContext(
@@ -387,6 +447,7 @@ int main(int argc, char **argv) {
         }
         renderTests(factory, directory);
         windowTests();
+        inputSiteWindowTests();
         if (!directory.empty()) {
             preview(factory, directory);
         }

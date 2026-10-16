@@ -369,6 +369,30 @@ void tests() {
     Access::refresh(*tsf);
     assert(window.visible());
     assert(ui.element->IsShown(&shown) == S_OK && shown);
+    for (const auto ownerContext : {DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+                                    DPI_AWARENESS_CONTEXT_UNAWARE}) {
+        const auto previousDpi = SetThreadDpiAwarenessContext(ownerContext);
+        assert(previousDpi);
+        const auto inputSite = CreateWindowExW(
+            0, L"STATIC", L"Input site test owner", WS_POPUP | WS_VISIBLE, 0, 0,
+            0, 0, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        assert(inputSite && IsWindowVisible(inputSite));
+        assert(SetThreadDpiAwarenessContext(previousDpi));
+        store->windowOverride = inputSite;
+        const auto inputSiteWrites = store->writes;
+        Access::refresh(*tsf);
+        const bool expected =
+            ownerContext == DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2;
+        assert(window.visible() == expected);
+        assert(ui.element->IsShown(&shown) == S_OK &&
+               (shown != FALSE) == expected);
+        assert(store->writes == inputSiteWrites &&
+               store->text == hostedDocument);
+        store->windowOverride = nullptr;
+        Access::refresh(*tsf);
+        assert(window.visible());
+        assert(DestroyWindow(inputSite));
+    }
     assert(ui.element->Show(FALSE) == S_OK && !window.visible());
     ++hosted.revision;
     assert(Access::submit(*tsf, hosted));
@@ -470,9 +494,10 @@ int main(int argc, char **argv) {
             std::ifstream input(file.path());
             text.append(std::istreambuf_iterator<char>(input), {});
         }
-        for (const auto event : {"candidate_layout_pending", "candidate_hidden",
-                                 "ui_element_begin", "edit_execute",
-                                 "popup_position", "edit_stale"})
+        for (const auto event :
+             {"candidate_layout_pending", "candidate_hidden",
+              "ui_element_begin", "edit_execute", "popup_position",
+              "edit_stale", "popup_coordinate_conversion_failed"})
             assert(text.find(event) != std::string::npos);
         for (const auto secret : {"\"committed\"", "\"unapplied\"", "\"nih\""})
             assert(text.find(secret) == std::string::npos);
