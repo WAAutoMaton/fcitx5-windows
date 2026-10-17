@@ -1,19 +1,19 @@
 # Windows 输入法占用时的延迟升级设计
 
-状态：实验性实现已接入，默认发行包关闭。本文规定“完整暂存新版，重启前继续使用旧版”的实现方案；打包时使用 `scripts/build-installer.ps1 -RebootUpgrade` 才开启受管理升级的暂存分支。文件/映像保护、状态机、恢复、卸载清单和真实 Inno 编译有自动化覆盖；SYSTEM 开机时序、完整安装与系统重启仍需 VM 验收，不能据此声明已经通过产品验收。现有支持范围见 [Windows 安装包实现与设计](windows-installer-design.md)。
+状态：延迟升级实现已接入，默认发行包启用，CI/Nightly 使用相同默认值。本文规定“完整暂存新版，重启前继续使用旧版”的实现方案；打包时可使用 `scripts/build-installer.ps1 -RebootUpgrade:$false` 关闭受管理升级的暂存分支。文件/映像保护、状态机、恢复、卸载清单和真实 Inno 编译有自动化覆盖；SYSTEM 开机时序、完整安装与系统重启仍需 VM 验收，不能据此声明已经通过产品验收。现有支持范围见 [Windows 安装包实现与设计](windows-installer-design.md)。
 
 ## 实现入口与试验包
 
 维护程序为 `setup/maintenance-host/Fcitx5Upgrade.exe`，运行时文件所有权位于 `setup/runtime-manifest.json`。一次只允许一个 `setup/upgrades/current` 事务，其随机 ID 同时绑定开机任务。输入协议不变，旧运行清单允许记录历史协议版本，目标清单必须与新维护程序的协议版本相符。
 
 ```powershell
-./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer -SkipRuntimes -RebootUpgrade
+./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer -SkipRuntimes
 ./scripts/test-build-installer.ps1
 ./scripts/test-reboot-upgrade-package.ps1 -TsfBuild ./build/installer/tsf
 ctest --test-dir ./build/installer/tsf --output-on-failure
 ```
 
-`test-reboot-upgrade-package.ps1` 仅编译带测试载荷的两种安装包，不执行安装程序。安装后的只读查询可使用以下入口；不带 `--silent` 时显示状态对话框：
+`test-reboot-upgrade-package.ps1` 仅编译带测试载荷的两种默认安装包和显式关闭延迟升级的安装包，不执行安装程序。安装后的只读查询可使用以下入口；不带 `--silent` 时显示状态对话框：
 
 ```powershell
 & 'C:/Program Files/Fcitx5/setup/maintenance-host/Fcitx5Upgrade.exe' query-upgrade --prefix 'C:/Program Files/Fcitx5'
@@ -331,7 +331,7 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 
 发布前必须完成：占用准备时旧版持续可用、正常一次重启升级、抢先加载时安全保留旧版、断电恢复、待升级卸载，以及旧包首次迁移。Task Scheduler 不保证任务先于登录程序运行是本方案的主要剩余风险，原型结果决定方案能否进入产品。
 
-目前代码和隔离测试已接入，尚未执行本机真实安装、任务注册或系统重启验收。默认包保留现有升级行为，不能在 VM 矩阵通过前默认启用 `-RebootUpgrade` 或把免注册测试描述成真实应用升级验收。
+目前代码和隔离测试已接入，默认包已启用延迟升级，尚未执行本机真实安装、任务注册或系统重启验收。默认启用不代表 VM 矩阵已通过，不能把免注册测试描述成真实应用升级验收。
 
 ## 参考
 

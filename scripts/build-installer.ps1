@@ -7,7 +7,7 @@ param(
     [string]$PackageName = '',
     [string]$IsccPath = '',
     [switch]$SkipRuntimes,
-    [switch]$RebootUpgrade
+    [switch]$RebootUpgrade = $true
 )
 
 $ErrorActionPreference = 'Stop'

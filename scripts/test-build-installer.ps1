@@ -68,6 +68,7 @@ try {
     try {
         & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -WhatIf
         & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -RebootUpgrade -WhatIf
+        & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -RebootUpgrade:$false -WhatIf
         if ((Test-Path $output) -or (Test-Path "$prefix/setup/managed-install") -or $testState.CompilerCalls.Count -or $testState.Lookups.Count) {
             throw 'WhatIf wrote packaging files or invoked the compiler.'
         }
@@ -113,8 +114,12 @@ try {
         }
         foreach ($package in @($lite, $bundled)) {
             $runtimeFlag = if ($package -eq $lite) { 0 } else { 1 }
+            $compilerCall = $testState.CompilerCalls[$runtimeFlag]
+            if ($compilerCall -notcontains '/DRebootUpgrade=1') {
+                throw "Reboot upgrade was not enabled by default for $package."
+            }
             $manifest = Get-Content -LiteralPath "$output/$package.manifest.txt"
-            if ($manifest -notcontains "package=$package" -or $manifest -notcontains "bundle-runtimes=$runtimeFlag" -or $manifest -notcontains 'inno=7.1.0') {
+            if ($manifest -notcontains "package=$package" -or $manifest -notcontains "bundle-runtimes=$runtimeFlag" -or $manifest -notcontains 'inno=7.1.0' -or $manifest -notcontains 'reboot-upgrade=1') {
                 throw "Incorrect or overwritten manifest for $package."
             }
             $hash = (Get-FileHash -LiteralPath "$output/$package.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -124,10 +129,15 @@ try {
         }
         & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -PackageName 'custom-no-runtime' -SkipRuntimes -RebootUpgrade | Out-Null
         if (!(Test-Path -LiteralPath "$output/custom-no-runtime.manifest.txt")) { throw 'Custom package name was ignored.' }
-        if ($testState.CompilerCalls[-1] -notcontains '/DRebootUpgrade=1') { throw 'Reboot-upgrade opt-in was not passed to Inno.' }
+        if ($testState.CompilerCalls[-1] -notcontains '/DRebootUpgrade=1') { throw 'Explicit reboot-upgrade enablement was not passed to Inno.' }
+        & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -PackageName 'disabled-reboot-upgrade' -SkipRuntimes -RebootUpgrade:$false | Out-Null
+        if ($testState.CompilerCalls[-1] -notcontains '/DRebootUpgrade=0' -or
+            (Get-Content -LiteralPath "$output/disabled-reboot-upgrade.manifest.txt") -notcontains 'reboot-upgrade=0') {
+            throw 'Explicit reboot-upgrade disablement was not reflected in Inno and the manifest.'
+        }
         $testState.CompilerExitCode = 9
         Assert-Failure { & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -SkipRuntimes } 'ISCC failed (9)'
-        Write-Output 'PASS: explicit compiler path, Inno Setup 6 rejection, actual compiler version, runtime variants, missing dependencies, distinct manifests/checksums, custom names, compiler failure, arbitrary-CWD/space/quote paths and WhatIf.'
+        Write-Output 'PASS: explicit compiler path, Inno Setup 6 rejection, actual compiler version, runtime variants, reboot-upgrade defaults and overrides, missing dependencies, distinct manifests/checksums, custom names, compiler failure, arbitrary-CWD/space/quote paths and WhatIf.'
     } finally { Pop-Location }
 } finally {
     $resolved = [IO.Path]::GetFullPath($temporary)

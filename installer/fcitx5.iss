@@ -19,7 +19,7 @@
   #define PackageName "Fcitx5-0.1.0-x64-setup"
 #endif
 #ifndef RebootUpgrade
-  #define RebootUpgrade 0
+  #define RebootUpgrade 1
 #endif
 #ifndef RuntimeManifest
   #error RuntimeManifest is required

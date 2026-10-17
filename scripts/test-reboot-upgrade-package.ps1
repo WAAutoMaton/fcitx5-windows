@@ -27,14 +27,14 @@ try {
     foreach ($bundled in @($false, $true)) {
         $options = @{
             Prefix = $prefix; Output = "$temporary/output"; Dependencies = $dependencies
-            IsccPath = $IsccPath; PackageVersion = '1.2.3.4'; RebootUpgrade = $true
+            IsccPath = $IsccPath; PackageVersion = '1.2.3.4'
         }
         if (!$bundled) { $options.SkipRuntimes = $true }
         & "$PSScriptRoot/build-installer.ps1" @options | Out-Null
     }
     & "$PSScriptRoot/build-installer.ps1" -Prefix $prefix -Output "$temporary/output" `
-        -IsccPath $IsccPath -PackageVersion '1.2.3.4' -PackageName 'default-no-runtime' -SkipRuntimes | Out-Null
-    Write-Output 'PASS: real Inno compilation of both reboot-upgrade variants and the default package (fixture payload; no installation).'
+        -IsccPath $IsccPath -PackageVersion '1.2.3.4' -PackageName 'disabled-reboot-upgrade' -SkipRuntimes -RebootUpgrade:$false | Out-Null
+    Write-Output 'PASS: real Inno compilation of both default reboot-upgrade variants and an explicitly disabled package (fixture payload; no installation).'
 } finally {
     $resolved = [IO.Path]::GetFullPath($temporary)
     if (!$resolved.StartsWith(($root + '\build\'), [StringComparison]::OrdinalIgnoreCase)) {

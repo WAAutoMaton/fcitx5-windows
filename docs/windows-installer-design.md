@@ -90,9 +90,9 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 `InstallLayoutOrTip` 使用既有简体中文 profile 描述，不使用会禁用其他输入项的 `ILOT_CLEANINSTALL`，也不配置登录屏幕。首次激活记录 `ChangeCurrentLanguage` 和 `ActivateProfile` 的实际结果；不能推断非中文系统、每应用输入模式和已有应用窗口必然立即切换。API 参考：[InstallLayoutOrTip](https://learn.microsoft.com/en-us/windows/win32/tsf/installlayoutortip)、[SetDefaultLayoutOrTip](https://learn.microsoft.com/en-us/windows/win32/tsf/setdefaultlayoutortip)、[ActivateProfile](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfinputprocessorprofilemgr-activateprofile)。
 
-默认包在固定目录升级遇到 DLL 占用时仍拒绝覆盖。helper 会扫描 `PendingFileRenameOperations` 中安装根下的条目；若被预检发现则返回 `3010`。完整卸载后旧 helper 不再存在时的同路径重装保护仍需系统验收，不能仅凭 helper 单独检查宣称全部重装分支已经安全。
+通过 `-RebootUpgrade:$false` 关闭延迟升级的包在固定目录升级遇到 DLL 占用时仍拒绝覆盖。helper 会扫描 `PendingFileRenameOperations` 中安装根下的条目；若被预检发现则返回 `3010`。完整卸载后旧 helper 不再存在时的同路径重装保护仍需系统验收，不能仅凭 helper 单独检查宣称全部重装分支已经安全。
 
-通过打包开关 `-RebootUpgrade` 可生成实验性升级包：受管理升级统一完整暂存，等待重启期间继续使用旧版，重启后在维护门控下提交与恢复。实现和限制见 [Windows 输入法占用时的延迟升级设计](windows-reboot-upgrade-design.md)。开机时序和系统验收仍是默认启用的前提；当前 CI/Nightly 不传此开关。
+打包默认启用延迟升级，CI/Nightly 使用相同默认值：受管理升级统一完整暂存，等待重启期间继续使用旧版，重启后在维护门控下提交与恢复。可通过 `-RebootUpgrade:$false` 显式关闭。实现和限制见 [Windows 输入法占用时的延迟升级设计](windows-reboot-upgrade-design.md)。开机时序和真实系统重启仍需 VM 验收。
 
 ## 卸载与 DLL 占用
 

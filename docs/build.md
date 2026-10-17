@@ -323,11 +323,12 @@ the output's `metadata` directory. The runtime manifest is installed as
 `setup/runtime-manifest.json`; maintenance binaries and transaction state are
 excluded from that payload.
 
-`-RebootUpgrade` explicitly enables the experimental deferred upgrade branch.
+Deferred reboot upgrades are enabled by default; use `-RebootUpgrade:$false`
+to disable this branch for a package.
 It stages the entire new runtime while the installed version remains usable,
 returns `3010`, and schedules protected machine work for a subsequent full
-Windows restart. CI/Nightly leaves this switch off pending real reboot/VM
-acceptance. See [reboot upgrade design](windows-reboot-upgrade-design.md) for
+Windows restart. CI/Nightly uses the same enabled default. Real reboot/VM
+acceptance remains outstanding. See [reboot upgrade design](windows-reboot-upgrade-design.md) for
 recovery, uninstall coordination and remaining system validation.
 The script regression can run without system installation:
 
@@ -336,7 +337,7 @@ The script regression can run without system installation:
 ./scripts/test-reboot-upgrade-package.ps1 -TsfBuild ./build/installer/tsf
 ```
 
-The second script compiles both experimental variants using fixture binaries;
+The second script compiles both default variants and an explicitly disabled package using fixture binaries;
 it never executes an installer or changes system registration.
 
 The GitHub Actions `installer-smoke-x64` job executes the no-runtime package on
