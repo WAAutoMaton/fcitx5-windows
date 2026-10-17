@@ -1,8 +1,8 @@
 # Windows Input-Method Integration
 
 This guide describes the AMD64 integration for Pinyin, Shuangpin and the
-`chinese-addons` table input methods, together with its current validation scope
-as of 2026-10-11. For installation, see [Install in the README](../README.md#install);
+`chinese-addons` table input methods, together with its current validation scope.
+For installation, see [Install in the README](../README.md#install);
 for input usage, see [Run](../README.md#run).
 For build options, deployment and registration details, see the
 [build guide](build.md).
@@ -99,9 +99,12 @@ TSF activation starts Core in the background, and Core must remain running for
 engine input. Registration itself
 does not start services.
 
-The desktop TIP registers `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT` so Windows can
-recognize its input-indicator support without declaring unverified Windows Store
-compatibility. The branding icon is embedded in the TSF DLL as `IDI_FCITX5`, the
+The desktop TIP registers `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT` for its input indicator.
+`ENABLE_MODERN_TSF_CATEGORIES` (the unified script's `-ModernApps`) additionally
+declares `UIELEMENTENABLED` and `IMMERSIVESUPPORT`. CI/Nightly enables this option;
+local builds default to off. These declarations do not establish real modern-app
+compatibility; see [modern app acceptance](build.md#modern-app-acceptance).
+The branding icon is embedded in the TSF DLL as `IDI_FCITX5`, the
 only group icon, and the profile refers to the DLL path with icon index 0.
 `RegisterProfile` receives character counts for the description and DLL path.
 The generated `penguin.ico` remains a build input; it is no longer the profile's
@@ -133,6 +136,8 @@ conflicting changes. It does not reset submodules or create commits.
 - `chinese-addons-windows.patch`: dictionary loading accepts filesystem paths,
   allowing Windows' wide native paths to reach `std::ifstream`; the addon also
   exposes extra dictionary loading states through a read-only subconfiguration.
+- `chinese-addons-windows-table.patch`: enables the bundled Cangjie entry on
+  Windows and resolves built-in table data from the deployed `share/libime` tree.
 
 The submodule working trees are intentionally patched. Record Windows changes
 in the main-repository patch files; do not create local submodule commits or
@@ -236,11 +241,21 @@ For CTest alone, without starting Core:
 ctest --test-dir win32/build/pinyin-tsf --output-on-failure
 ```
 
-The default thirteen tests are `test_dll`, `test_protocol`, `test_settingsfile`, `test_input`,
-`test_candidate`, `test_candidate_tsf`, `test_transport`, `test_service`, `test_setup`,
-`test_uninstall`, `test_langbar`, `test_about` and `test_register`. Root/upstream tests are
-disabled by the default build configuration; these thirteen tests are not the full
-upstream test suite.
+The default suite currently contains 27 tests, declared in
+[`win32/tests/CMakeLists.txt`](../win32/tests/CMakeLists.txt):
+
+| Scope | Tests |
+| --- | --- |
+| DLL, protocol and input | `test_dll`, `test_protocol`, `test_input` |
+| Persistence, UI language and diagnostics | `test_settingsfile`, `test_i18n`, `test_diagnostic_log`, `test_keycapture` |
+| Candidate rendering and host UI | `test_candidate`, `test_candidate_tsf`, `test_candidateuielement` |
+| Transport and isolation | `test_transport`, `test_pipeidentity`, `test_isolationpolicy`, `test_sandbox`, `test_sandboxie_template`, `test_hostcommands` |
+| Services and setup | `test_service`, `test_startup`, `test_setup`, `test_uninstall` |
+| Language bar, About and registration | `test_langbar`, `test_about`, `test_register`, `test_register_other` |
+| Host runtime compatibility | `test_tsf_runtime_imports`, `test_tsf_runtime_host`, `test_tsf_runtime_audit` |
+
+Use `ctest --test-dir <build> -N` for the actual configured list. Root/upstream
+tests are disabled by default; this is not the full upstream test suite.
 
 - `ipc_probe`: real `nihao` candidates and Chinese commits, number/space
   selection, backspace, cancellation, Ctrl+C pass-through, Ctrl+Space switching,
@@ -282,22 +297,27 @@ upstream test suite.
 - `test_candidate_tsf`: a real TSF context checks retained candidate content and
   anchor during `TS_E_NOLAYOUT`, merged `ITfTextLayoutSink` repositioning through
   read-only sessions, caret fallback for clipped composition, timeout/recovery,
-  commit/cancel, hidden owners and late focus/deactivation sessions.
+  commit/cancel, hidden owners and late focus/deactivation sessions. It also
+  covers host UIElement show/hide, no-HWND data publication, optional language
+  bar failure and sensitive/disabled context policy. Geometry regressions include
+  zero-sized per-monitor input sites and clipped carets inside document bounds.
 - `test_register`: actual DLL branding resource and Shell icon extraction,
   plus profile/category calls captured by fake COM managers to verify character
-  lengths, DLL path, icon index, `SYSTRAYSUPPORT` and failure handling. It never
-  invokes system registration and does not prove taskbar rendering.
+  lengths, DLL path, icon index, `SYSTRAYSUPPORT` and failure handling.
+  `test_register_other` checks the opposite modern-category build setting. Neither
+  test invokes system registration or proves taskbar rendering.
 - `test_setup` and `test_uninstall`: user-profile backup/restore, registration
   ownership and maintenance checks, plus the production uninstall launcher with
   mocked system calls, including elevation, cancellation, silent operation and
   successful removal requiring restart (`3010`). No real installation occurs.
 
-Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` registers all three probes with CTest;
-a deployed Core must already be running, bringing the total to sixteen.
-`dictionaries_probe`, `inputmethods_probe` and `service_probe` are built but
-invoked by their separate scripts, rather than registered by this option. The recorded candidate-rendering
-validation includes historical Pinyin probes and the then-current twelve-test
-TSF-only regression; see [the recorded scope](windows-candidate-rendering.md#verification).
+Optional `ENABLE_PINYIN_INTEGRATION_TESTS=ON` adds three probes to CTest;
+a deployed Core must already be running. `TSF_PRELOAD_RUNTIME` adds a separate
+old-runtime host regression. `dictionaries_probe`, `inputmethods_probe`,
+`service_probe`, `appcontainer_probe`, `modern_input_probe` and `logging_probe`
+are invoked separately; see [validation](build.md#validation),
+[modern app acceptance](build.md#modern-app-acceptance) and
+[developer logging](build.md#developer-logging).
 
 `scripts/test-pinyin.ps1` accepts `-Prefix` and `-TsfBuild` for other deployment
 and TSF build directories. Logs are written to `build/pinyin-test/core.stdout.log`
@@ -318,13 +338,23 @@ these helpers stops Core/Settings as services; use the input indicator menu firs
 
 ## Protocol and Behavior
 
-Protocol v6 uses a pipe name scoped to the user's SID and Windows session. Its
-ACL permits only the current user, rejects remote clients, isolates context IDs
+Protocol v10 uses a desktop pipe name scoped to the user's SID and Windows session.
+Its ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
 overlapped I/O with a 500 ms wait limit per read/write operation; this is not a
 single 500 ms deadline for the entire request. Disconnected clients' contexts
 are destroyed. The pipe name retains the historical `fcitx5-windows-v2-` prefix;
-compatibility is checked using the framing/handshake version, which is v6.
+compatibility is checked using the framing/handshake version, which is v10.
+Core verifies actual peer identity after Hello. Sandboxie security-mode anonymous
+tokens have a narrowly scoped management-pipe exception described in the
+[host-sharing guide](windows-sandboxie-design.md#进程策略).
+
+AppContainer clients use a separate `-input` pipe with authenticated peer identity,
+an input-only request allowlist and resource limits. They verify the fixed host
+Core through a query-only process-handle handshake before sending input. Sandboxie
+and AppContainer clients never start their own Core/Settings or access local
+service state; the host Core must already be running. See
+[modern transport and UI policy](windows-modern-apps-design.md).
 
 `SetMode` chooses a selected keyboard/non-keyboard entry for the Windows
 open/close compartment. Ctrl+Space and indicator clicks use `CycleInputMethod`
@@ -343,11 +373,12 @@ a running Core; it does not verify real OS keyboard dispatch. The input-method
 regression script runs it with the persisted three-method list.
 
 Core, TSF and Settings must be rebuilt
-and deployed together; older versions do not connect to v6.
+and deployed together; older protocol versions do not connect to v10.
 
 Each key response contains consumption, mode, the actual input-method ID/name,
 icon label/path and settings-panel ID, commit, preedit, UTF-8 byte cursor,
-revision, settings epoch and the current candidate page. Reset cancels Core composition. PollState
+revision, settings epoch, detailed-logging state, stable candidate generation
+and the current candidate page. Reset cancels Core composition. PollState
 collects deferred engine updates on Core's event loop. TSF's 100 ms owning-thread
 timer polls while a foreground document context exists, including during pending
 edits so settings changes invalidate old preedit; it is not a guaranteed output latency. Disconnected clients retry
@@ -366,8 +397,12 @@ on focus loss. A nonactivating Win32 candidate popup uses DirectWrite layouts,
 Direct2D color-font drawing and Per-Monitor V2 DPI/work-area bounds. Label, body
 and comment columns use measured text heights and native ellipsis trimming.
 See [candidate rendering](windows-candidate-rendering.md) for design, previews
-and remaining validation. Candidate selection and paging are handled
-by the Pinyin engine; the popup does not insert candidate text itself.
+and remaining validation. `ITfCandidateListUIElementBehavior` exposes host
+selection/finalize/abort actions independently of popup geometry; Core checks
+context ownership, focus, candidate generation and index before invoking the
+real engine. The published list is the current bounded batch, not the entire
+engine candidate set. The popup itself has no mouse selection and does not
+insert candidate text.
 Focus changes create/destroy remote contexts; the current implementation does
 not persist separate unfinished preedits for multiple input fields.
 
@@ -381,6 +416,12 @@ separate steps: a running Core can accept IPC while the settings window is
 missing or unable to initialize. The real OS right-click dispatch still
 requires registered-TIP validation; unit tests exercise menu construction and
 commands.
+
+Immersive/UIElement-only hosts use the system TSF menu; AppContainer clients
+expose only Settings. Desktop menus and About also negotiate UIElement display
+permission. Unsupported secure/COM-less activation and explicit password scopes,
+read-only or disabled contexts pass through without sending engine input. This
+policy does not establish support for every password or custom text control.
 
 Build and deploy the x64 settings application separately:
 
@@ -472,6 +513,13 @@ or cancel; closing the window discards unapplied edits. Pinyin options include
 eight built-in Shuangpin profiles and fuzzy Pinyin; an existing custom profile
 is preserved but cannot be created/imported here. The app supports
 single-instance activation, system theme resources and PerMonitorV2 DPI.
+Key-list options support [shortcut recording](windows-settings-design.md#快捷键录制).
+Global Settings has General and Developer options tabs: UI language applies to
+Core/Settings after restarting services, while detailed logging applies immediately.
+These settings share a revision in `conf/windows-ui.conf` v2, separate from
+input-method settings; v1 loads with logging disabled. Native menus/About refresh
+their language in the background. See [UI localization](windows-ui-localization-design.md)
+and [developer diagnostics](windows-developer-logging-design.md).
 
 ### Third-Party Dictionaries
 
@@ -509,7 +557,7 @@ from loading. A file modified again is retried after it becomes stable.
 
 The small addon status-query extension is recorded in
 `patches/chinese-addons-windows.patch`; submodule revisions are unchanged. Core,
-TSF and Settings must be rebuilt and deployed together for protocol v6.
+TSF and Settings must be rebuilt and deployed together for protocol v10.
 
 With Core and Settings stopped, run:
 
@@ -573,12 +621,8 @@ registration. The settings variant requires the installed WinUI runtime and
 also models a Settings process hosting TSF. It is separate from default CTest
 because it requires a complete deployment and starts real service processes.
 
-The earlier service-control validation passed AMD64 Core, TSF Release and WinUI Release
-builds, the then-current eight-test CTest suite, the service probe with actual
-WinUI, and the three Pinyin/TSF probes. The default suite now has thirteen
-tests. The WinUI save/cancel, restart and single-instance test passed again with
-screenshots in `build/service-settings-ui-test`.
-Registered-TIP OS menu dispatch remains unverified.
+These service/UI probes use explicit adapter callbacks; registered-TIP OS menu
+dispatch remains unverified.
 
 ## Remaining Validation and Limits
 
@@ -587,24 +631,27 @@ Registered-TIP OS menu dispatch remains unverified.
   and input in Notepad, browsers and other hosts still need broader validation;
   the test application and Windows-version matrix were not recorded.
 - Candidate rendering, DPI behavior and screen-reader integration are not
-  verified in those applications; the window does not implement ITfUIElement.
+  verified in those applications. Candidate UIElement/Behavior is implemented
+  and covered by unregistered probes; full accessibility remains unverified.
 - Input-indicator theme coloring, Explorer restart, multiple-monitor DPI and
   broader Windows-version coverage still need registered-TIP validation.
   The automated probes do not verify taskbar rendering.
-- Candidates currently have keyboard-only selection, with no candidate mouse
-  interaction or ordinary notification-area tray.
+- The popup has keyboard-only selection; host candidate actions are implemented
+  through UIElement/Behavior. Popup mouse interaction and an ordinary
+  notification-area tray are not implemented.
 - Unified Windows 11 x64 installers package Core/TSF/Settings in two variants,
   with and without bundled runtimes. Packaging and mocked setup/uninstall paths
   have been validated; real installation, upgrades and reboot cleanup still
   need system testing. See [installer status](windows-installer-design.md).
 - Xiaohe and Ziranma Shuangpin commits are validated by probes; input-method
   probes also cover real Wubi commits. Other profiles, Wubi and other table
-  methods in real applications, Rime and Windows Store compatibility need
-  broader validation.
-  `SYSTRAYSUPPORT` does not declare `IMMERSIVESUPPORT`.
-- Password/secure contexts, dead keys, AltGr/non-US layouts, forwarded keys and
-  surrounding-text editing are not claimed as supported. Secure-mode and other
-  unimplemented TSF categories are no longer declared.
+  methods in real applications, Rime and registered modern-app compatibility need
+  broader validation. CI/Nightly declares modern categories, but does not sign
+  the DLL or validate real UWP dispatch.
+- Password scopes and disabled contexts have pass-through checks, but complete
+  password/secure input, dead keys, AltGr/non-US layouts, forwarded keys and
+  surrounding-text editing are not claimed as supported. `SECUREMODE` and
+  `COMLESS` are not declared.
 - Polling is a minimal deferred-output mechanism, not an asynchronous push queue
   or transactional exactly-once delivery across process failures. An IPC timeout
   can lose the pending input; it does not guarantee recovery of a consumed key.

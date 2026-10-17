@@ -2,13 +2,20 @@
 
 ## Decision and Scope
 
-Keep the nonactivating Win32 popup, replace GDI font measurement/drawing with
-DirectWrite layouts and a Direct2D HWND render target. Language-bar icons and
-document composition are unchanged. The TSF target links Windows `d2d1` and
-`dwrite`; no Core, submodule, IPC or registration metadata changes are needed.
+The nonactivating Win32 popup uses DirectWrite layouts and a Direct2D HWND
+render target. Language-bar icons and document composition use separate paths.
+The TSF target links Windows `d2d1` and `dwrite`; rendering alone does not require
+Core, submodule, IPC or registration metadata changes.
 The window and graphics resources stay on the TSF owning thread. Initialization
 is lazy, outside `DllMain`. Snapshots still come from Core; rendering never
 commits text. There is no render thread or continuous animation loop.
+
+Candidate data is published independently through TSF UIElement/Behavior.
+The host's BeginUIElement/Show permission gates popup display; missing HWND or
+layout does not discard the host-readable snapshot. Host selection/finalize/abort
+actions go to Core with the original context and stable candidate generation.
+The popup itself has no mouse interaction. See
+[modern UI policy](windows-modern-apps-design.md#候选-uielement-与自绘窗口).
 
 ## Typography and Layout
 
@@ -89,62 +96,38 @@ and [presentation options](https://learn.microsoft.com/en-us/windows/win32/api/d
 
 ## Verification
 
-The runs recorded below used the test set available at the time. The current
-default TSF suite has thirteen tests, including the later `test_uninstall`;
-see [the current test list](pinyin.md#build-and-test-tsf). This documentation
-update does not rerun candidate previews or Pinyin probes.
-
 `test_candidate` is a default CTest with no Core or registration requirement.
 The production draw function runs through a software WIC target at 96/120/144/
-192/288 DPI. Emoji colored pixels are compared with a monochrome control;
-VS15 heart presentation, ellipsis and layout reuse are checked. Window tests
-cover three owner awareness modes, thread-state restoration, focus, owner
-lifetime, empty/invalid input, resource recreation and work-area bounds.
-They also check immediate paint, same-anchor updates under all three awareness
-modes, target-loss recovery and bounded repaint failure handling.
+192/288 DPI. It compares color emoji with monochrome controls and checks VS15,
+ellipsis and layout reuse. Window tests cover three owner awareness modes,
+thread-state restoration, focus, owner lifetime, empty/invalid input, work-area
+bounds, immediate paint, target-loss recovery and bounded repaint retries.
+Zero-sized per-monitor input sites are accepted without logical coordinate
+conversion; zero-sized owners requiring failed conversion remain hidden.
 
-`test_candidate_tsf` uses a real TSF context with the shared in-memory text store
-from `tsf_probe`, but no Core, IPC connection or input-method registration. It
-checks repeated `TS_E_NOLAYOUT`, content updates at the retained anchor, merged
-layout notifications and read-only repositioning, applied versus queued
-snapshots, caret fallback, invisible geometry, timeout/recovery, commit, cancel,
-hidden owners and late asynchronous position sessions after focus loss.
-The 2026-10-11 AMD64 Release build and all 12 default CTests passed. An existing
-Core was running, so the real Pinyin probes were not rerun and no services were
-stopped. This does not establish visual behavior in registered applications.
-The native 192 DPI preview and five offscreen images are in
-`build/candidate-flicker-preview`. The native image passed colored-pixel and
-selection-color assertions; warm show + paint measured P50 2.217 ms / P95
-3.268 ms in this run. One preview attempt hit the foreground-window assertion
-on the interactive desktop; the subsequent complete preview passed.
+`test_candidate_tsf` uses a real TSF context backed by the shared in-memory text
+store, without Core, IPC or registration. It checks repeated TS_E_NOLAYOUT,
+content at retained anchors, merged read-only layout sessions, applied versus
+queued snapshots, clipped-composition caret fallback, clipped carets overlapping
+document bounds, invalid/empty/offscreen geometry, timeout/recovery, commit,
+cancel, hidden owners and late sessions after focus loss/deactivation.
+It also checks host UIElement show/hide and candidate publication without HWND
+or usable popup geometry. These are explicit adapter callbacks, not OS dispatch.
 
-After building, generate PNGs and briefly show a native preview:
+For the current default suite and real engine probes, see
+[TSF tests](pinyin.md#build-and-test-tsf). Generate synthetic-DPI PNGs and briefly
+show a native preview after building:
 
 ```powershell
-./win32/build/candidate-d2d/tests/test_candidate.exe build/candidate-d2d-preview
+./build/all/tsf/tests/test_candidate.exe build/candidate-preview
 ```
 
-The directory contains five synthetic-DPI images and a native HWND capture
-using `PrintWindow(PW_RENDERFULLCONTENT)`, independent of occlusion. These use
-synthetic snapshots, not live engine candidates or registered-TIP OS dispatch.
-The 2026-10-11 AMD64 Release run passed twelve CTests and formatting checks.
-The 192 DPI native window measured 360 x 432 pixels. One local run of 100 warm
-selection updates measured show + UpdateWindow P50 2.086 ms, P95 3.323 ms.
-These are call durations, not end-to-end input latency or a GDI comparison.
-
-After the user stopped Core, the real engine/DLL integration also passed:
-
-```powershell
-./scripts/test-pinyin.ps1 -Prefix ./dist/pinyin -TsfBuild ./win32/build/candidate-d2d
-```
-
-The earlier 2026-10-10 run passed `ipc_probe`, `settings_probe`, `tsf_probe`
-with the new DLL and nine CTests, covering real full/Xiaohe/Ziranma Chinese
-commits, settings, TSF context writes, asynchronous edits, cancellation and
-focus isolation. The 2026-10-11 candidate-layout change was validated by the
-additional TSF-only test above; the real Core probes were not rerun because a
-user Core was already running. No default DLL was replaced and no input-method
-registration was performed.
+The output includes five offscreen images and a native HWND capture using
+PrintWindow(PW_RENDERFULLCONTENT), independent of occlusion. Preview snapshots
+are synthetic, not live engine candidates. Call-duration measurements from this
+fixture do not establish end-to-end input latency, registered-app behavior or a
+GDI performance comparison. Interactive desktop focus and installed fonts can
+affect the native preview.
 
 ## Remaining Validation
 
@@ -153,5 +136,6 @@ themes/high contrast and accessibility text scaling remain unverified. Font
 coverage and newer color-font formats depend on the OS and installed fonts.
 Physical scrolling/moving behavior still needs application testing despite the
 layout-change subscription. Oversized pages are height-clamped
-without scrolling. Candidate mouse interaction and TSF UIElement/accessibility
-remain separate work.
+without scrolling. Popup mouse interaction and full accessibility remain
+incomplete. UIElement/Behavior has unregistered coverage, but real host rendering,
+candidate actions and screen-reader behavior still need system acceptance.

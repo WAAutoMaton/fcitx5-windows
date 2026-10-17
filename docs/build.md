@@ -63,7 +63,7 @@ builds Core/libime/chinese-addons, TSF and WinUI Settings. The resulting runtime
 contains Pinyin, Shuangpin and the available chinese-addons table entries
 (Wubi, Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan, Wanfeng and Ziranma).
 It stages the complete
-runtime under `build/all/prefix`, runs the fourteen default TSF CTest tests, then
+runtime under `build/all/prefix`, runs the default TSF CTest suite, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
 
@@ -152,8 +152,10 @@ child processes and log directories without connecting to Core or stopping any
 running Settings instance. Its fatal cases intentionally terminate test children.
 
 Events contain diagnostic metadata, HRESULT/error codes, counts, lengths and
-geometry. Input text, candidate contents, raw keys/payloads, titles and user paths
-are excluded. Upstream Fcitx messages are represented only by severity and byte
+geometry. TSF key results include scan codes, modifiers and consumption state,
+but not translated characters/Unicode. Input text, candidate contents, raw
+payloads, titles and user paths are excluded. Upstream Fcitx messages are
+represented only by severity and byte
 count; no addon Debug categories are enabled, and `key_trace` stays disabled.
 The background worker pins the DLL until its thread-pool callback returns.
 
@@ -166,6 +168,28 @@ for real engine/IPC and unregistered TSF checks, and
 for the developer page. These runners set `FCITX5_DIAGNOSTIC_TEST_DIRECTORY` to
 an isolated directory; production builds ignore that variable. They do not
 register TSF or validate real application dispatch, physical DPI or installers.
+
+See [developer logging design and event scope](windows-developer-logging-design.md)
+for the shared logger, privacy boundaries and Settings exit diagnostics.
+
+## Settings Shortcut Recording
+
+Engine key-list options have a record button alongside the editable text list.
+Recording changes the draft; use **Apply** to save it through Core. The UI keeps
+manual input for unsupported keys and layouts. See
+[shortcut behavior](windows-settings-design.md#快捷键录制).
+
+Build Settings with `scripts/build-settings.ps1 -UiTest -BuildRoot <build>` and
+the TSF `ui_fixture` target, then run on an interactive desktop:
+
+```powershell
+./scripts/test-settings-keycapture.ps1 -SettingsExe <build>/Release/Fcitx5Settings.exe -FixtureExe <tsf-build>/tests/ui_fixture.exe
+```
+
+The runner uses isolated test endpoints and configuration and sends synthetic
+keyboard input to the recorder. It does not register TSF or change the user's
+engine settings. `test_keycapture` covers key conversion without WinUI; neither
+test establishes support for every keyboard layout or IME interaction.
 
 ## Modern App Acceptance
 
@@ -238,7 +262,7 @@ run in separate jobs:
 | Job | Responsibility |
 | --- | --- |
 | `build-x64` | Run the unified build with `-ModernApps -SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
-| `test-x64` | Download the x64 runtime and tests; run build-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/table-method/Wubi regressions, default CTest and dictionary integration checks |
+| `test-x64` | Download the x64 runtime and tests; run build-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, relocated engine translations, default CTest and dictionary integration checks |
 | `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
 | `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install, require modern TSF registration, uninstall and check registration cleanup, and upload the installer log |
 | `release` | Wait for the x64 build, tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |

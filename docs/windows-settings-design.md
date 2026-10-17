@@ -1,6 +1,6 @@
 # Windows 输入法设置设计与实现
 
-当前协议为 v7。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页还包含只读“词库”tab。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
+当前协议为 v10。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页包含只读“词库”tab，全局页包含“常规”和“开发者选项”tab。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
 
 ## 当前方案
 
@@ -21,6 +21,7 @@
 - `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。
 - `src/windowsdictionaries.cpp`：扫描第三方词库目录，在 Core 主事件循环触发上游重载并查询实际加载状态。
 - `win32/settings/SettingsWindow.cpp`：通过 `XamlReader` 创建有序输入法列表、共享设置面板和拼音词库 tab，后台执行 IPC，支持应用选项、草稿处理和连接重试。
+- `win32/settings/keycapture.h`：快捷键录制状态与 portable key 转换；`win32/settings/diagnostics.h`、`main.cpp`、`App.cpp`：操作阶段、异常及窗口/进程退出诊断。
 - `chinese-addons/im/pinyin/`：复用上游 `setUseShuangpin()`、`ShuangpinProfile`、`setConfig()` 和已安装的 `shuangpin.conf`。
 
 子模块版本保持固定；词库加载状态查询扩展记录在主仓库 `patches/chinese-addons-windows.patch`，不创建本地子模块提交。
@@ -98,7 +99,8 @@ flowchart LR
 | --- | --- |
 | 标题 | “输入法设置”，使用系统标题栏 |
 | 输入法列表 | `ListView`：按用户顺序显示图标和名称；添加、删除、上移、下移 |
-| 全局设置 | 左侧操作按钮下方的独立导航项；右侧语言下拉框提供跟随系统、简体中文、繁體中文、English，使用“应用”保存 |
+| 全局设置 | 左侧操作按钮下方的独立导航项；“常规”tab 提供语言下拉框：跟随系统、简体中文、繁體中文、English |
+| 开发者选项 | 详细日志开关、状态、日志目录/数量/大小和目录按钮；开关与语言共用全局草稿，使用“应用”保存 |
 | 页面 | 根据 entry 的 panel 标识显示拼音、码表或键盘设置；拼音/双拼共用拼音面板，码表共用控件布局但选项值按各自 entry 保存 |
 | 选项 | 通过上游 `Configuration::dumpDescription()` 生成布尔开关、整数步进框、枚举菜单、文本/按键列表控件；递归展示模糊拼音等子配置 |
 | 双拼键位 | `ComboBox`：小鹤、自然码、微软、紫光、智能 ABC、中文之星、拼音加加、国标 |
@@ -119,17 +121,18 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 
 ## IPC 与配置所有权
 
-v6 增加输入法目录、有序选择、配置描述和循环/指定切换，并在 `KeyReply` 返回实际 entry、名称、标签及图标路径。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 则验证 context 归属和焦点。
+当前 v10 协议包含输入法目录、有序选择、配置描述、全局语言/日志设置、宿主命令及候选动作，`KeyReply` 返回实际 entry、显示信息、日志状态和候选代次。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 和候选动作则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求。
 
 | 请求 | 内容 / 回复 |
 | --- | --- |
 | `OpenSettings` | 无可执行路径参数；返回启动/激活结果 |
 | `GetSettings` | 返回 `PinyinSettings`（scheme、profile、revision）及 `pinyinAvailable` / `shuangpinAvailable` |
-| `GetGlobalSettings` / `SetGlobalSettings` | v7：查询/保存独立 revision 的 UI 语言偏好，回复解析后的目标语言与 Core 当前语言 |
+| `GetGlobalSettings` / `SetGlobalSettings` | 查询/保存 UI 语言与 `detailedLogging`，两者共享独立 revision；回复解析后的目标语言与 Core 当前语言 |
 | `SetSettings` | 提交 scheme、profile、revision（草稿读取时的版本）；返回实际配置、新 revision 或错误 |
 | `GetDictionaries` | 返回第三方词库目录、实际发现的扩展词库路径和加载状态 |
 | `GetInputMethods` / `SetInputMethods` | 目录及有序选择，字段包含 id、name、icon、iconLabel、panel、available、keyboard；写入使用共享 revision，拒绝空列表和重复 id |
 | `GetMethodConfig` / `SetMethodConfig` | 获取引擎声明的可编辑选项或提交 path/value；校验声明、类型、范围、枚举、按键语法及 revision |
+| `OpenUserDataFolder` / `RestartServices` / `StopServices` | Sandboxie 等 HostOnly 客户端请求宿主执行固定操作；空 payload，回复接受结果后再调度 |
 
 scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串标识，不依赖 ComboBox 索引。映射到 `Xiaohe`、`Ziranma`、`MS`、`Ziguang`、`ABC`、`Zhongwenzhixing`、`PinyinJiajia`、`GB`，服务器严格校验。
 
@@ -158,6 +161,16 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 `patches/chinese-addons-windows-table.patch` 在 Windows 中启用已带数据的仓颉条目，并将内置码表路径优先解析到部署树 `share/libime`；码表不存在时配置接口返回不可用。兼容补丁由 `apply-pinyin-patches.ps1` 按固定版本幂等应用。
 
 输入引擎设置即时生效，不要求重启 Core、重新注册 DLL 或重启应用。UI 语言是独立的全局设置，Core / Settings 在重启服务后生效；菜单在后台刷新后下次打开生效，已有关于窗口在再次点击时刷新。语言设置不触发预编辑重置，也不要求重新注册。
+
+## 开发日志与 Settings 退出诊断
+
+全局配置保存在 `conf/windows-ui.conf` v2，与 `windows.conf` 的输入设置 revision 独立。v1 读取时日志默认关闭，下次成功保存写入 v2。语言和详细日志共享全局 revision，跨 tab 修改都计入草稿、重置和冲突检查。重置全局页恢复跟随系统并关闭日志，不立即保存。
+
+日志开关应用后 Core 和 Settings 立即更新，TSF 从下一次 Core 回复同步。开发者页显示本进程 logger 状态以及目录统计；打开目录不自动启用日志。日志位于 `%LOCALAPPDATA%/Fcitx5/logs`，按角色/PID 分文件并自动轮转和清理。具体格式、容量和隐私约束见 [开发日志设计](windows-developer-logging-design.md)。
+
+启用详细日志后，Settings 记录窗口开关、关闭按钮/服务停止、dispatcher 返回、runtime shutdown 及带 reason/exit code 的 `settings_exit`。页面和操作通过 `operation_id` 关联 begin/stage/end；异常记录操作、类型和 HRESULT，不记录异常消息、用户路径、配置值或输入文本。XAML 未处理异常、异步 fail-fast 和 `std::terminate` 保持原有失败行为，致命路径尽力在 250 ms 内排空日志。原生访问违规、外部终止或 logger 故障可能没有退出事件，不能仅凭缺失事件认定崩溃。
+
+`scripts/test-settings-exit-logging.ps1 -SettingsBuild <build>/Release` 使用 `-UiTest` Settings 的专用子进程和日志目录，覆盖正常退出、可恢复 HRESULT、真实异步 fail-fast、`std::terminate`、隐私和日志关闭行为；不连接生产 Core，也不停止已有 Settings。UI 开关和目录行为由 `scripts/test-ui-localization.ps1 -TestLogging` 覆盖。
 
 ## 快捷键录制
 
@@ -210,11 +223,4 @@ Core 和 TSF 使用两套独立 CMake 工程；MSBuild 设置程序由统一脚�
 
 probes 的适配器回调不能代替实际 OS 菜单派发和真实应用验证。第一阶段不宣称 Windows 10、ARM64 TSF、双拼自定义方案和全部 Windows 输入兼容性已经受支持。
 
-## 已记录的验证
-
-- 设置功能的 AMD64 Core、TSF Release、WinUI Release 构建和当时的 8 项默认 CTest 已通过。后续候选窗、关于及安装/卸载回归扩展后，当前默认为 13 项；完整清单见 [TSF 测试](pinyin.md#build-and-test-tsf)，候选布局的历史验证范围见 [候选窗验证记录](windows-candidate-rendering.md#verification)。这些是既有验证记录，本次文档更新不代表重新执行 Core 集成 probes。
-- `ipc_probe`、`settings_probe` 和扩展后的 `tsf_probe` 通过，真实全拼/小鹤/自然码中文提交、英文保持、存储失败保留解码上下文和迟到编辑取消均验证。
-- 按用户明确授权安装当前用户的 x64 DDLM `8000.994.2142.0` 后，`scripts/test-settings-ui.ps1` 验证实际窗口、确定/取消、自然码/小鹤、重启恢复和单实例，截图在 `build/settings-ui-test`。窗口当前 200% 缩放正常；跨屏、文本缩放、高对比度和其他主题仍未全面验证。
-- 未执行输入法注册/注销，真实任务栏指示器右键菜单派发尚未实测。
-- 服务控制新增验证：`win32/build/service-tsf`、`dist/pinyin/tsf` 的实际 DLL 自动启动 Core、模拟菜单停止/重启、重新激活时保持暂停、按需启动 WinUI、重开原设置窗口、Settings 宿主委托退出和迟到 Settings 启动拒绝均通过。原有三个拼音 probes 和实际 WinUI 保存/取消、重启恢复、单实例重新通过，截图位于 `build/service-settings-ui-test`。
-- 第三方词库验证包含真实启动加载、热增删改、Unicode 路径、坏文件、停用标记、全拼/小鹤/自然码候选和预编辑保留；WinUI 自动化覆盖实际加载/失败状态及 Explorer 目录打开。200% 缩放的正常/最小窗口截图位于 `build/dictionaries-settings-ui-test`，使用 `dist/dictionaries-test` 隔离部署。
+完整默认测试列表及可复现的运行命令见 [TSF 测试](pinyin.md#build-and-test-tsf) 和 [构建与验证](build.md#validation)。快捷键、全局语言和开发日志的 UI 自动化使用隔离 `-UiTest` Settings；它们不能代替真实任务栏菜单、安装版服务和跨宿主验证。

@@ -1,10 +1,10 @@
 # Windows 安装包实现与设计
 
-核对日期：2026-10-11。第一阶段安装实现、双版本打包和 CI/Nightly 发布流程已接入；真实系统安装、升级、卸载和重启清理仍需验收。本文区分当前代码行为、已记录的验证与后续设计，不能将打包成功描述为安装后已可直接使用。
+安装实现、双版本打包、可选登录启动和 CI/Nightly 发布流程已接入。CI 提供不含运行库包的机器级安装/注册/卸载 smoke；完整用户初始化、升级和重启清理仍需验收，不能将打包或机器级 smoke 成功描述为安装后已可直接使用。
 
 ## 当前交付与支持范围
 
-使用 Inno Setup 7 生成 Windows 11 x64 EXE，安装到 Program Files 下的 `Fcitx5`。当前不提供 MSI、x86 TSF 或 ARM64 TSF；ARM64 Core 编译检查不代表原生 ARM64 应用可以加载输入法。
+使用 Inno Setup 7 生成 Windows 11 x64 EXE，安装到 Program Files 下的 `Fcitx5`。当前不提供 MSI、x86 TSF 或 ARM64 TSF；CI 不再构建 ARM64，单独的 ARM64 Core 编译也不代表原生 ARM64 应用可以加载输入法。
 
 | CI 包名 | 运行库要求 |
 | --- | --- |
@@ -38,6 +38,7 @@
   bin/Fcitx5.exe + Core/MSYS2 运行 DLL
   lib/fcitx5/ + lib/libime/zh_CN.lm
   share/fcitx5/ + share/libime/sc.dict
+  share/locale/ （Windows 与上游简体/繁体翻译目录）
   tsf/fcitx5-x86_64.dll
   settings/Fcitx5Settings.exe + DLL/PRI/WinMD
   setup/Fcitx5SetupHelper.exe
@@ -108,21 +109,23 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 | Job | 当前流程 |
 | --- | --- |
-| `build-core-arm64` | 仅检查 ARM64 Core 编译 |
-| `build-x64` | 统一 Release 构建一次，上传完整运行树、便携 TSF 测试/probes 及独立 Settings artifact |
-| `test-x64` | 复用运行树和测试包，执行脚本回归、图标校验、默认 CTest、拼音/TSF/settings probes 及词库验证 |
+| `build-x64` | 统一 Release 构建一次，显式 `-ModernApps -SkipTests`，上传完整运行树、便携 TSF 测试/probes 及独立 Settings artifact |
+| `test-x64` | 复用运行树和测试包，执行脚本/注册检查回归、图标校验、默认 CTest、拼音/TSF/settings、五笔/输入法列表、引擎翻译及词库验证 |
 | `package-installer-x64` | 与测试并行复用运行树，下载并核对运行库 SHA256，执行模拟打包回归，构建两种安装包并核对文件存在 |
-| `release` | 等待构建、测试、打包成功，在 master 且提交消息不含 `!release` 时用 GitHub CLI 更新 `latest` 预发布 |
+| `installer-smoke-x64` | 不含运行库包静默 machine-only 安装，检查实际 COM/profile/现代 category 双向注册、安装状态及卸载清理 |
+| `release` | 等待构建、测试、打包和安装 smoke 成功，在 master 且提交消息不含 `!release` 时用 GitHub CLI 更新 `latest` 预发布 |
 
 `Fcitx5-installer-x64` artifact 包含两种 EXE、各自 SHA256 和 manifest，共六个文件。Nightly 只发布两个 EXE 和各自 SHA256，共四个附件；不发布 manifest、Core 开发包或内部运行树/测试 artifact。PR 只上传 artifact，不发布 Nightly。
 
-当前 CI 没有代码签名步骤。`installer-smoke-x64` 在全新的 Windows runner 上执行不含运行库包的静默机器级安装/卸载，核对安装文件、HKLM 安装状态和卸载清理；它不安装 VC++/Windows App Runtime，也不执行原始用户配置。含运行库包、完整用户初始化、升级及重启后的延迟删除仍需干净 Windows VM 或 self-hosted runner 验证，不能把 smoke job 作为这些场景的验收。完整产物流向见 [CI 构建与产物](build.md#ci-build-and-artifact-flow)。
+当前 CI 没有代码签名步骤。CI/Nightly 的两种安装包均声明 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`；替换 DLL 不补齐旧注册，需安装或显式重新注册。smoke 检查 category/item 双向索引、安装 DLL 路径/threading model 和启用的 profile；缺少现代声明阻止发布，但通过不代表真实现代应用派发已验证。注册断言本身由 `scripts/test-installer-registration.ps1` 使用模拟注册表回归，不修改本机注册。
+
+`installer-smoke-x64` 不安装 VC++/Windows App Runtime，也不执行原始用户配置。含运行库包、完整用户初始化、升级及重启后的延迟删除仍需干净 Windows VM 或 self-hosted runner 验证，不能把 smoke job 作为这些场景的验收。完整产物流向见 [CI 构建与产物](build.md#ci-build-and-artifact-flow)。
 
 ## 已记录的验证
 
-- 两种包已由本机 Inno Setup 7.1.0 实际编译，清单和 SHA256 核对通过；不含运行库版的预处理/编译日志确认没有运行库文件条目及安装步骤。产物和日志记录在 `dist/installer-variants`、`build/installer-variants` 及 `build/ci-inno7-validation`。
+- 两种包已有本地 Inno Setup 7.1.0 编译及清单/SHA256 核对记录；不含运行库版没有运行库文件条目及安装步骤。构建成功不代表系统安装验收。
 - `scripts/test-build-installer.ps1` 使用模拟编译器覆盖双版本、缺失依赖、版本选择、独立元数据、失败返回和无副作用预览，不执行系统安装。
-- `test_setup` 覆盖用户输入项和安装维护相关回归；`test_uninstall` 运行生产入口和 launcher，通过模拟系统调用覆盖普通/提权、占用、`3010`、失败、取消及静默路径。当前默认 CTest 共 13 项，历史较少测试的通过记录仍只代表当时集合。
+- `test_setup` 覆盖用户输入项和安装维护；`test_uninstall` 运行生产入口和 launcher，通过模拟系统调用覆盖普通/提权、占用、`3010`、失败、取消及静默路径；`test_startup` 覆盖登录项命令与路径归属。默认测试清单见 [TSF 测试](pinyin.md#build-and-test-tsf)。
 - helper 日志位于执行用户的 `%LOCALAPPDATA%/fcitx5/installer-helper.log`，包含本地时间、PID/TID、命令/安装根、runtime-check、启用/默认设置、语言切换、激活原始 HRESULT 和 Core 就绪步骤。日志失败不改变返回码并恢复 `GetLastError()`；用于定位已记录的用户配置 `0x80004005`，具体失败调用仍待复现确认。
 
 以上是既有验证记录，本次文档核对未执行真实安装、注册/注销、用户切换或服务控制。

@@ -26,14 +26,25 @@ and Nightly release workflow.
   Erbi, Bingchan, Wanfeng and Ziranma; an entry is available when its engine and
   table data are installed.
 - Third-party Pinyin dictionary loading status and automatic dictionary reload.
+- Simplified Chinese, Traditional Chinese and English UI, with a system-language
+  option in Global Settings. Engine/UI language changes take effect after a
+  service restart; native menus and About refresh in the background.
+- Shortcut recording for engine key-list options, alongside manual text editing.
+- Optional structured developer logs for Core, TSF and Settings, including
+  Settings exit/exception diagnostics, without recording input text.
+- Sandboxie clients share the host Core through an explicit pipe rule.
+- AppContainer input transport and TSF candidate UIElement/Behavior are
+  implemented; signed installation and real modern-app dispatch still need validation.
 - Automatic background Core startup, with settings and service controls in the
-  input indicator's right-click menu.
+  input indicator's right-click menu. AppContainer and Sandboxie clients require
+  an already-running host Core; the installer offers optional login startup.
 
 Automated probes use real Pinyin, table-engine and TSF contexts, but simulate
 key/menu callbacks rather than Windows' registered event dispatch. The input
 method probes cover real Wubi commits and list management; other table methods
-still need broader application coverage. Candidate mouse selection,
-accessibility, Rime, ARM64 Pinyin/TSF, themes and multiple-monitor DPI remain
+still need broader application coverage. The popup has no mouse selection;
+host candidate actions are covered by unregistered UIElement probes. Full
+accessibility, real UWP input, Rime, ARM64 Pinyin/TSF, themes and multiple-monitor DPI remain
 outside the validated scope.
 
 ## Install
@@ -47,9 +58,11 @@ workflow publishes two Windows 11 x64 installers and their SHA256 files:
   for the current user.
 
 The installer targets Program Files, registers TSF, configures the initiating
-user's input method and starts Core. Both package variants have been compiled
-locally; clean-machine installation, upgrades, UAC user handling and restart
-cleanup still need validation. Only x64 TSF is built; x86 and native ARM64
+user's input method and starts Core. Optional login startup is unchecked by
+default and respects a manual service stop. CI has a no-runtime, machine-only
+install/registration/uninstall smoke test; complete clean-machine user setup,
+upgrades, UAC user handling and restart cleanup still need validation.
+Only x64 TSF is built; x86 and native ARM64
 applications are not covered. See [installer status and limits](docs/windows-installer-design.md).
 
 For an installer-managed copy, use **Uninstall Fcitx5** in the Start menu or
@@ -72,7 +85,7 @@ From the repository root in a normal Windows PowerShell terminal, run:
 ```
 
 This initializes pinned submodules, applies Windows patches, builds AMD64 Release
-Core, TSF, the setup helper and Settings, runs the thirteen default TSF tests,
+Core, TSF, the setup helper and Settings, runs the default TSF CTest suite,
 and deploys to `dist/pinyin`. It uses checksum-verified precompiled dictionary/model data and
 reuses the build cache on subsequent runs.
 
@@ -112,6 +125,18 @@ Right-click the input-method indicator for:
 - `User Data Folder`: open `%APPDATA%/Fcitx5`, including settings and Pinyin learning data.
 - `About`: show architecture, CI build number, commit and project/license links.
 
+In **Global Settings**, the **General** tab selects the UI language; restart
+services after applying it to update Core and Settings. **Developer options**
+enables detailed logging immediately and opens `%LOCALAPPDATA%/Fcitx5/logs`.
+Logs rotate automatically; maintenance removes expired files after 30 days and
+enforces capacity limits. See [developer diagnostics](docs/windows-developer-logging-design.md).
+
+For Sandboxie, follow the [host-sharing setup guide](docs/windows-sandboxie-design.md).
+Modern-app runtime behavior and acceptance limits are documented in
+[modern app support](docs/windows-modern-apps-design.md). CI/Nightly installers
+declare modern TSF categories; local builds require `-ModernApps`. Re-register
+after changing category declarations. AppContainer menus expose only Settings.
+
 Compatible Fcitx5/libime binary `.dict` files placed in
 `%APPDATA%/Fcitx5/pinyin/dictionaries` are loaded automatically. See
 [dictionary details](docs/pinyin.md#third-party-dictionaries) for formats and conversion.
@@ -133,6 +158,10 @@ for previews, alternate paths and troubleshooting.
 - [Input-method architecture, individual builds and validation limits](docs/pinyin.md)
 - [Windows settings design](docs/windows-settings-design.md)
 - [Candidate rendering and DPI validation](docs/windows-candidate-rendering.md)
+- [UI language and localization](docs/windows-ui-localization-design.md)
+- [Sandboxie host sharing and configuration](docs/windows-sandboxie-design.md)
+- [Modern app transport and TSF UIElement](docs/windows-modern-apps-design.md)
+- [Developer logging and Settings diagnostics](docs/windows-developer-logging-design.md)
 
 ## Credits
 

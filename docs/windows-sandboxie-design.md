@@ -4,7 +4,7 @@
 
 Sandboxie 内的 TSF 只连接当前用户/session 的宿主 Core。输入法列表、引擎选项、词库和学习记录由宿主 Core 管理；Settings 由宿主 Core 在沙箱外启动。连接失败不得启动沙箱 Core 或创建另一套用户配置。
 
-本方案针对 Sandboxie，不声明 UWP/AppContainer 兼容能力，不修改 TSF 注册 category。实现与构建不修改 Sandboxie 配置、注册表或当前服务；实际启用兼容规则需要显式选择目标沙箱。
+本方案针对 Sandboxie；AppContainer 使用独立的受限输入策略，见 [现代应用支持](windows-modern-apps-design.md)。Sandboxie 共享本身不要求新增 TSF category。普通构建不修改 Sandboxie 配置、注册表或当前服务；实际应用兼容规则需要显式选择目标沙箱。
 
 ## 参考与现状
 
@@ -15,7 +15,7 @@ Weasel 的客户端通过 Named Pipe 连接 WeaselServer，Sandboxie 的 Weasel 
 - https://sandboxie-plus.github.io/sandboxie-docs/Content/OpenPipePath.html
 - https://sandboxie-plus.github.io/sandboxie-docs/Content/SBIEDLLAPI.html
 
-Fcitx5 当前在 TSF 进程中根据命名 mutex 和 LocalAppData 状态文件判断 Core 是否运行。Sandboxie 隔离这些对象后，TSF 会启动沙箱内 Core；其文件视图又可能隐藏宿主配置。Settings 随沙箱 Core 在沙箱内启动，Windows App SDK bootstrap 初始化也可能失败。
+旧实现仅根据 TSF 进程可见的 mutex 和 LocalAppData 状态判断 Core 是否运行，可能在隔离视图中启动另一份 Core/Settings，隐藏宿主配置或使 Windows App SDK bootstrap 失败。当前实现识别沙箱后禁止本地服务操作，直接连接宿主 Pipe，避免创建第二套服务和用户配置。
 
 ## 进程策略
 
@@ -29,7 +29,7 @@ Fcitx5 当前在 TSF 进程中根据命名 mutex 和 LocalAppData 状态文件�
 
 ## Sandboxie 兼容规则
 
-辅助脚本仅输出当前用户的配置片段，默认不修改系统。规则形如：
+辅助脚本默认仅输出当前用户的配置片段，不修改系统；只有显式 `-Apply -BoxName` 才写配置。规则形如：
 
 ```ini
 OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-<当前用户SID>-*
@@ -129,7 +129,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 | 沙箱外正常，沙箱内无法输入 | 确认应用实际位于配置的沙箱，规则在正确节内，SID 属于当前用户，并已彻底退出、重新打开应用。若使用 `-SessionOnly`，重新生成当前 session 的规则。 |
 | 脚本提示沙箱不存在或未启用 | 检查 `-BoxName` 是否为配置节名，以及目标节的 `Enabled=y`；脚本不会新建或启用沙箱。 |
 | 规则无法保存或脚本写入失败 | 检查 Sandboxie 配置锁定、管理权限及 `SbieIni.exe` 路径，处理具体报错后重新确认规则已保存。 |
-| 连接后提示协议不匹配 | 使用同一套构建的 Core、TSF DLL 和 Settings，并重新打开加载旧 DLL 的应用。Pipe 名中的 `v2` 不是 IPC 协议版本，不要自行改成 `v8`。 |
+| 连接后提示协议不匹配 | 使用同一套构建的 Core、TSF DLL 和 Settings，并重新打开加载旧 DLL 的应用。Pipe 名中的 `v2` 不是 IPC 协议版本，不要改成当前 framing 版本 `v10`。 |
 | Settings 在沙箱内启动或出现另一份 Core | 检查是否仍在使用旧构建、残留沙箱进程或强制沙箱规则；当前实现要求 Core 和 Settings 在沙箱外运行。 |
 
 若已有构建产物，可在沙箱外和目标沙箱内分别运行 `ipc_probe.exe --diagnose`（使用实际文件路径），比较 Pipe 名称、连接阶段、Windows 错误码和服务端 PID。该命令不启动服务或修改配置。错误 `2/3` 只说明当前 Pipe 不可见，可能是宿主未启动、规则未生效或应用未重启；不能仅凭错误码判断原因。诊断成功只证明 IPC 连接，真实输入和候选窗仍需按上面的应用步骤验证。
@@ -147,13 +147,13 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 | 输入、输入法轮换 | 现有宿主 Core IPC |
 | 设置页 | 现有 OpenSettings，由宿主 Core 启动 Settings |
 | UI 语言 | GetGlobalSettings，使用宿主解析后的语言，不读沙箱配置 |
-| 用户数据目录 | 新 IPC，由宿主 Core 定位和打开固定目录 |
-| 重启/关闭服务 | 新 IPC，由宿主 Core 启动自身固定路径的控制进程 |
-| 候选窗、关于 | 继续由应用进程中的 TSF 显示 |
+| 用户数据目录 | OpenUserDataFolder，由宿主 Core 定位和打开固定目录 |
+| 重启/关闭服务 | RestartServices/StopServices，由宿主 Core 启动自身固定路径的控制进程 |
+| 候选窗、关于 | 由应用进程中的 TSF 按 UIElement 显示许可处理 |
 
-新增操作只允许空 payload 和 contextId=0。协议版本同步更新 Core、TSF、Settings。服务控制先写出回复，再投递到 Core 主线程启动既有 `--restart-services` / `--stop-services` 控制程序；不在 Pipe 线程操作引擎，也不等待自身退出。回复只代表请求已接受，后续启动失败应记录诊断，不承诺 exactly-once。
+宿主操作只允许空 payload 和 contextId=0。Core、TSF、Settings 必须使用同版协议。服务控制先写出回复，再投递到 Core 主线程启动既有 `--restart-services` / `--stop-services` 控制程序；不在 Pipe 线程操作引擎，也不等待自身退出。回复只代表请求已接受，后续启动失败记录诊断，不承诺 exactly-once。
 
-宿主 Core 未运行、被手动关闭或规则未放行时，沙箱 TSF 只重试连接并提供故障信息。用户需在沙箱外启动/重启 Core。可选登录启动和常驻唤醒代理不属于本轮实现。
+宿主 Core 未运行、被手动关闭或规则未放行时，沙箱 TSF 只重试连接并提供故障信息。用户需在沙箱外启动/重启 Core。安装器现有可选登录启动项可预先启动宿主 Core，但不解除手动停止状态；没有常驻唤醒代理。
 
 ## 验证与交付
 
@@ -173,6 +173,8 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 
 `ipc_probe.exe --check-candidates` 创建临时输入 context，以当前可用中文条目输入 `NI`，检查预编辑和候选后取消并销毁 context，不提交文字或保存配置。它用于验证候选数据链路，不验证真实应用中的候选窗显示；码表等条目对 `NI` 不一定产生候选，需结合当前引擎判断失败。
 
-自动化回归覆盖 Sandboxie 查询的宿主/沙箱/异常状态、启动禁止、服务端归属、控制请求校验、回复后执行、模板输出和 UI 语言来源；保留桌面服务生命周期、IPC 超时和 TSF 编辑回归。
+自动化回归包括 `test_sandbox`、`test_sandboxie_template`、`test_hostcommands`、`test_isolationpolicy` 和 `test_pipeidentity`，覆盖查询状态、启动禁止、服务端归属、控制请求/回复后执行、模板及语言来源。`test_pipeidentity` 使用真实 Pipe 检查 peer session/login 及管理入口匿名例外；模拟身份通过不代表真实 Sandboxie 安全模式已经验收。
+
+详细日志开关由宿主 Core 回复同步。诊断文件位于 TSF 进程的 LocalAppData 视图，Sandboxie 可能重定向该目录；比较沙箱内外日志时确认实际位置，不能假定全部文件都在宿主目录。日志不包含输入文本，详见 [开发日志设计](windows-developer-logging-design.md)。
 
 完整构建使用隔离 Prefix/BuildRoot，重建 Core、TSF、Settings。真实验收包括普通/隐私沙箱、多个沙箱、宿主缺失/停止/重启、协议不匹配和 Pipe 未放行。确认只运行一份宿主 Core、Settings 未加载沙箱 DLL、配置写入宿主目录、预编辑不跨输入框/沙箱保存。自动化模拟和免注册 probe 不代替真实 Sandboxie/应用验证。
