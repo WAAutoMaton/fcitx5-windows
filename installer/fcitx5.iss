@@ -148,13 +148,11 @@ begin
     Result := ExpandConstant('{app}\setup');
 end;
 
-procedure InitializeWizard;
-begin
-  DetectMode;
-end;
-
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
+  { The app constant is initialized after wpSelectDir, even when that page is hidden. }
+  if PageID = wpSelectTasks then
+    DetectMode;
   Result := StageUpgrade and (PageID = wpSelectTasks);
 end;
 

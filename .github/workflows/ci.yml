@@ -213,6 +213,9 @@ jobs:
       - name: Test installer packaging script
         run: ./scripts/test-build-installer.ps1
 
+      - name: Test installer wizard without system changes
+        run: ./scripts/test-installer-wizard.ps1 -IsccPath $env:FCITX5_ISCC_PATH
+
       - name: Build installers with and without runtimes
         run: |
           ./scripts/build-installer.ps1 -IsccPath $env:FCITX5_ISCC_PATH -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-setup
