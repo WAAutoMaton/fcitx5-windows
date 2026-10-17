@@ -18,6 +18,15 @@
 #ifndef PackageName
   #define PackageName "Fcitx5-0.1.0-x64-setup"
 #endif
+#ifndef RebootUpgrade
+  #define RebootUpgrade 0
+#endif
+#ifndef RuntimeManifest
+  #error RuntimeManifest is required
+#endif
+#ifndef RuntimeFiles
+  #error RuntimeFiles is required
+#endif
 
 [Setup]
 AppId={{0D07698A-591B-44B4-940F-BBD38AA62F0E}
@@ -45,7 +54,8 @@ LicenseFile={#Prefix}\licenses\Fcitx5-Windows-LICENSE.txt
 UninstallDisplayIcon={app}\tsf\fcitx5-x86_64.dll
 SetupLogging=yes
 VersionInfoVersion={#PackageVersion}
-Uninstallable=yes
+Uninstallable=NormalInstall
+CreateUninstallRegKey=NormalInstall
 #ifdef SignToolCommand
 SignTool=release $f
 SignedUninstaller=yes
@@ -55,21 +65,26 @@ SignedUninstaller=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "{#Prefix}\*"; DestDir: "{app}"; Excludes: "vc_redist.x64.exe,WindowsAppRuntimeInstall-x64.exe"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
+Source: "{#Prefix}\setup\Fcitx5Upgrade.exe"; Flags: dontcopy noencryption
+Source: "{#RuntimeManifest}"; Flags: dontcopy noencryption
+Source: "{#Prefix}\setup\Fcitx5Upgrade.exe"; DestDir: "{app}\setup\maintenance-host"; Flags: ignoreversion uninsrestartdelete; Check: NormalInstall
+Source: "{#RuntimeManifest}"; DestDir: "{app}\setup"; DestName: "runtime-manifest.json"; Flags: ignoreversion uninsrestartdelete; Check: NormalInstall
+#include RuntimeFiles
 #if Int(BundleRuntimes)
 Source: "{#Dependencies}\vc_redist.x64.exe"; Flags: dontcopy
-Source: "{#Dependencies}\WindowsAppRuntimeInstall-x64.exe"; DestDir: "{app}\setup"; Flags: uninsrestartdelete
+Source: "{#Dependencies}\vc_redist.x64.exe"; DestDir: "{code:DependenciesDestination}"; Flags: ignoreversion; Check: CopyUpgradeDependencies
+Source: "{#Dependencies}\WindowsAppRuntimeInstall-x64.exe"; DestDir: "{code:DependenciesDestination}"; Flags: ignoreversion uninsrestartdelete; Check: CopyRuntimeFiles
 #endif
 
 [Icons]
-Name: "{group}\Fcitx5 Settings"; Filename: "{app}\settings\Fcitx5Settings.exe"
-Name: "{group}\Uninstall Fcitx5"; Filename: "{app}\setup\Fcitx5SetupHelper.exe"; Parameters: "uninstall"
+Name: "{group}\Fcitx5 Settings"; Filename: "{app}\settings\Fcitx5Settings.exe"; Check: NormalInstall
+Name: "{group}\Uninstall Fcitx5"; Filename: "{app}\setup\maintenance-host\Fcitx5Upgrade.exe"; Parameters: "uninstall --prefix ""{app}"""; Check: NormalInstall
 
 [Tasks]
 Name: "loginstart"; Description: "Start Fcitx5 when I sign in (for modern apps)"; Flags: unchecked
 
 [Registry]
-Root: HKLM64; Subkey: "SOFTWARE\Fcitx5\Installer"; Flags: uninsdeletekey
+Root: HKLM64; Subkey: "SOFTWARE\Fcitx5\Installer"; Flags: uninsdeletekey; Check: NormalInstall
 
 [Code]
 const
@@ -84,6 +99,64 @@ var
   MachineOnly: Boolean;
   Pending: Boolean;
   HelperMode: Boolean;
+  ModeKnown: Boolean;
+  StageUpgrade: Boolean;
+  StageOwned: Boolean;
+  StageSealed: Boolean;
+  AlreadyStaged: Boolean;
+
+procedure DetectMode;
+begin
+  if not ModeKnown then begin
+    StageUpgrade := ({#RebootUpgrade} <> 0) and
+      FileExists(ExpandConstant('{app}\setup\managed-install'));
+    ModeKnown := True;
+  end;
+end;
+
+function NormalInstall: Boolean;
+begin
+  DetectMode;
+  Result := not StageUpgrade;
+end;
+
+function CopyRuntimeFiles: Boolean;
+begin
+  DetectMode;
+  Result := not AlreadyStaged;
+end;
+
+function CopyUpgradeDependencies: Boolean;
+begin
+  Result := StageUpgrade and not AlreadyStaged;
+end;
+
+function RuntimeDestination(Param: String): String;
+begin
+  DetectMode;
+  if StageUpgrade then
+    Result := ExpandConstant('{app}\setup\upgrades\current\payload')
+  else
+    Result := ExpandConstant('{app}');
+end;
+
+function DependenciesDestination(Param: String): String;
+begin
+  if StageUpgrade then
+    Result := ExpandConstant('{app}\setup\upgrades\current\dependencies')
+  else
+    Result := ExpandConstant('{app}\setup');
+end;
+
+procedure InitializeWizard;
+begin
+  DetectMode;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := StageUpgrade and (PageID = wpSelectTasks);
+end;
 
 function RunHelper(Command: String; OriginalUser: Boolean): Integer;
 var
@@ -131,12 +204,30 @@ var
   Code: Integer;
 begin
   Result := '';
+  DetectMode;
+  if StageUpgrade then begin
+    ExtractTemporaryFile('Fcitx5Upgrade.exe');
+    ExtractTemporaryFile('{#PackageName}.runtime.json');
+    Helper := ExpandConstant('{tmp}\Fcitx5Upgrade.exe');
+    Code := RunHelper('begin-stage --manifest ' +
+      AddQuotes(ExpandConstant('{tmp}\{#PackageName}.runtime.json')), False);
+    if Code = 3010 then begin
+      AlreadyStaged := True;
+      StageSealed := True;
+    end else if Code = 0 then
+      StageOwned := True
+    else
+      Result := Format('Cannot prepare the Fcitx5 upgrade (%d). The current version has not been replaced. Run the maintenance helper query-upgrade command for the current state.', [Code]);
+    exit;
+  end;
   Helper := ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe');
+  if FileExists(ExpandConstant('{app}\setup\maintenance-host\Fcitx5Upgrade.exe')) then
+    Helper := ExpandConstant('{app}\setup\maintenance-host\Fcitx5Upgrade.exe');
   if FileExists(Helper) then begin
     Code := RunHelper('preflight-machine', False);
     if Code <> 0 then begin
       NeedsRestart := Code = 3010;
-      Result := Format('Cannot install Fcitx5 (%d). Another DLL is registered, or this directory has files pending restart deletion.', [Code]);
+      Result := Format('Cannot install Fcitx5 (%d). Check for conflicting registration, a pending upgrade/recovery, or files pending restart deletion.', [Code]);
       exit;
     end;
   end;
@@ -174,12 +265,21 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-#if Int(BundleRuntimes)
 var
   Code: Integer;
-#endif
 begin
   if CurStep = ssPostInstall then begin
+    if StageUpgrade then begin
+      if not AlreadyStaged then begin
+        Code := RunHelper('seal-stage', False);
+        if Code <> 3010 then
+          RaiseException(Format('Cannot finish preparing the Fcitx5 upgrade (%d). The current version has not been replaced.', [Code]));
+        StageSealed := True;
+      end;
+      WizardForm.FinishedLabel.Caption := 'The Fcitx5 upgrade is ready. Restart Windows to complete it. You can continue using the current version until then.';
+      exit;
+    end;
+    Helper := ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe');
     try
       RequireHelper('register-machine', False);
       Registered := True;
@@ -198,9 +298,9 @@ begin
       end;
       RegWriteStringValue(HKLM64, InstallerKey, 'NativeUninstaller', ExpandConstant('{uninstallexe}'));
       RegWriteStringValue(HKLM64, UninstallKey, 'UninstallString',
-        AddQuotes(ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe')) + ' uninstall');
+        AddQuotes(ExpandConstant('{app}\setup\maintenance-host\Fcitx5Upgrade.exe')) + ' uninstall --prefix ' + AddQuotes(ExpandConstant('{app}')));
       RegWriteStringValue(HKLM64, UninstallKey, 'QuietUninstallString',
-        AddQuotes(ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe')) + ' uninstall --silent');
+        AddQuotes(ExpandConstant('{app}\setup\maintenance-host\Fcitx5Upgrade.exe')) + ' uninstall --silent --prefix ' + AddQuotes(ExpandConstant('{app}')));
       if not MachineOnly then begin
         if WizardIsTaskSelected('loginstart') then
           RequireHelper('enable-login-start', True)
@@ -225,15 +325,43 @@ end;
 
 procedure DeinitializeSetup;
 begin
+  if StageUpgrade then begin
+    if StageOwned and not StageSealed then
+      RunHelper('cancel-upgrade', False);
+    exit;
+  end;
   ResumeInstallation;
 end;
 
+function NeedRestart: Boolean;
+begin
+  { Silent staging never initiates a reboot, even without /NORESTART. }
+  Result := StageSealed and not WizardSilent;
+end;
+
+function GetCustomSetupExitCode: Integer;
+begin
+  if StageSealed then Result := 3010 else Result := 0;
+end;
+
 function InitializeUninstall: Boolean;
+var
+  Code: Integer;
 begin
   HelperMode := ExpandConstant('{param:HELPER|0}') = '1';
   if HelperMode then begin
     Result := True;
     exit;
+  end;
+  Helper := ExpandConstant('{app}\setup\maintenance-host\Fcitx5Upgrade.exe');
+  if FileExists(Helper) then begin
+    Code := RunHelper('preflight-machine', False);
+    if Code <> 0 then begin
+      Result := False;
+      if not UninstallSilent then
+        MsgBox('A Fcitx5 upgrade or recovery is pending. Use the Fcitx5 uninstall entry or maintenance helper to resolve it before removing files.', mbError, MB_OK);
+      exit;
+    end;
   end;
   Helper := ExpandConstant('{tmp}\Fcitx5SetupHelper.exe');
   Result := CopyFile(ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe'), Helper, True);

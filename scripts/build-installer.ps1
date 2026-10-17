@@ -6,7 +6,8 @@ param(
     [string]$PackageVersion = '0.1.0.0',
     [string]$PackageName = '',
     [string]$IsccPath = '',
-    [switch]$SkipRuntimes
+    [switch]$SkipRuntimes,
+    [switch]$RebootUpgrade
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,10 +25,17 @@ foreach ($path in @($Prefix, $Dependencies, $Output)) {
     }
 }
 foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll',
-        'setup/Fcitx5SetupHelper.exe', 'settings/Fcitx5Settings.exe')) {
+        'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
     if (!(Test-Path -LiteralPath (Join-Path $Prefix $file) -PathType Leaf)) {
         throw "Missing staged installer file: $file"
     }
+}
+if ($PackageVersion -notmatch '^\d{1,5}\.\d{1,5}\.\d{1,5}\.\d{1,5}$' -or
+    @($PackageVersion.Split('.') | Where-Object { [int]$_ -gt 65535 }).Count) {
+    throw 'PackageVersion must have four numeric components in the range 0..65535.'
+}
+if ($PackageName -and $PackageName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') {
+    throw 'PackageName must be a simple ASCII package basename without directory components.'
 }
 if (!$SkipRuntimes) {
     foreach ($file in @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')) {
@@ -69,7 +77,54 @@ foreach ($source in @(
         Copy-Item -LiteralPath $sourcePath -Destination (Join-Path (Split-Path $license) $source.Name) -Force
     }
 }
-Set-Content -LiteralPath (Join-Path $Prefix 'setup/managed-install') -Value 'FCITX5-MANAGED-1' -NoNewline -Encoding ascii
+Set-Content -LiteralPath (Join-Path $Prefix 'setup/managed-install') -Value "FCITX5-MANAGED-1`n" -NoNewline -Encoding ascii
+$metadata = Join-Path $Output 'metadata'
+New-Item -ItemType Directory -Force $metadata | Out-Null
+$runtimeManifest = Join-Path $metadata "$PackageName.runtime.json"
+$runtimeFiles = Join-Path $metadata "$PackageName.files.iss"
+$runtime = @()
+foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'settings', 'licenses')) {
+    $path = Join-Path $Prefix $directory
+    if (Test-Path -LiteralPath $path) {
+        $linked = @(Get-ChildItem -LiteralPath $path -Recurse -Force | Where-Object {
+            $_.Attributes -band [IO.FileAttributes]::ReparsePoint
+        })
+        if ((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint -or $linked.Count) {
+            throw "Linked payload directory: $directory"
+        }
+        $runtime += @(Get-ChildItem -LiteralPath $path -File -Recurse)
+    }
+}
+$runtime += Get-Item -LiteralPath "$Prefix/setup/Fcitx5SetupHelper.exe", "$Prefix/setup/managed-install"
+$prefixBase = $Prefix.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+$records = @($runtime | Sort-Object FullName | ForEach-Object {
+    if ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Linked payload file: $($_.Name)" }
+    $relative = $_.FullName.Substring($prefixBase.Length).Replace('\', '/')
+    [ordered]@{ path = $relative; size = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+})
+$dependencyRecords = @()
+if (!$SkipRuntimes) {
+    $dependencyRecords = @(foreach ($name in @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')) {
+        $file = Get-Item -LiteralPath (Join-Path $Dependencies $name)
+        [ordered]@{ path = $name; size = $file.Length; sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    })
+}
+$protocol = Select-String -LiteralPath "$root/win32/ipc/protocol.h" -Pattern 'constexpr uint16_t kVersion = (\d+);'
+if (!$protocol) { throw 'Cannot determine the IPC protocol version.' }
+$document = [ordered]@{
+    schemaVersion = 1; architecture = 'x64'; protocolVersion = [int]$protocol.Matches[0].Groups[1].Value
+    version = $PackageVersion; package = $PackageName; files = $records; dependencies = $dependencyRecords
+}
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+[IO.File]::WriteAllText($runtimeManifest, ($document | ConvertTo-Json -Depth 6), $utf8)
+$entries = @($records | ForEach-Object {
+    $source = Join-Path $Prefix $_.path
+    $parent = Split-Path $_.path -Parent
+    $destination = '{code:RuntimeDestination}'
+    if ($parent) { $destination += '\' + $parent.Replace('/', '\') }
+    'Source: "' + $source.Replace('"', '""') + '"; DestDir: "' + $destination + '"; Flags: ignoreversion uninsrestartdelete; Check: CopyRuntimeFiles'
+})
+[IO.File]::WriteAllLines($runtimeFiles, $entries, $utf8)
 @(
     "version=$PackageVersion"
     "package=$PackageName"
@@ -77,8 +132,9 @@ Set-Content -LiteralPath (Join-Path $Prefix 'setup/managed-install') -Value 'FCI
     "commit=$((& git -C $root rev-parse HEAD).Trim())"
     "prefix=$Prefix"
     "inno=$compilerVersion"
+    "reboot-upgrade=$([int]$RebootUpgrade.IsPresent)"
 ) | Set-Content -LiteralPath $manifest -Encoding ascii
-& $isccPath "/DPrefix=$Prefix" "/DDependencies=$Dependencies" "/DBundleRuntimes=$bundleRuntimes" "/DOutputDirectory=$Output" "/DPackageVersion=$PackageVersion" "/DPackageName=$PackageName" (Join-Path $root 'installer/fcitx5.iss')
+& $isccPath "/DPrefix=$Prefix" "/DDependencies=$Dependencies" "/DBundleRuntimes=$bundleRuntimes" "/DRuntimeManifest=$runtimeManifest" "/DRuntimeFiles=$runtimeFiles" "/DRebootUpgrade=$([int]$RebootUpgrade.IsPresent)" "/DOutputDirectory=$Output" "/DPackageVersion=$PackageVersion" "/DPackageName=$PackageName" (Join-Path $root 'installer/fcitx5.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)." }
 $setup = Join-Path $Output "$PackageName.exe"
 if (!(Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Installer was not produced: $setup" }

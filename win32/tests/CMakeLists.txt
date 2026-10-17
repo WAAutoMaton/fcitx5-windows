@@ -10,6 +10,15 @@ if(ENABLE_UWP_FIXTURE)
     add_subdirectory(uwp-fixture)
 endif()
 
+add_library(upgrade_fixture SHARED upgrade_fixture.cpp)
+add_executable(test_upgrade_files test_upgrade_files.cpp)
+target_compile_options(test_upgrade_files PRIVATE -UNDEBUG)
+target_link_libraries(test_upgrade_files PRIVATE setup_upgrade_files)
+add_dependencies(test_upgrade_files upgrade_fixture)
+add_test(NAME test_upgrade_files COMMAND test_upgrade_files $<TARGET_FILE:upgrade_fixture>)
+add_test_target(test_upgrade test_upgrade.cpp)
+target_link_libraries(test_upgrade PRIVATE setup_upgrade)
+
 add_test_target(test_dll test_dll.cpp ../dll/util.cpp)
 add_test_target(test_protocol test_protocol.cpp)
 add_test_target(test_diagnostic_log test_diagnostic_log.cpp)
@@ -71,6 +80,7 @@ target_link_libraries(test_setup PRIVATE advapi32 secur32 user32 shell32 ole32 o
 add_test_target(test_uninstall test_uninstall.cpp ../dll/register.cpp ../dll/util.cpp)
 target_compile_definitions(test_uninstall PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(test_uninstall PRIVATE advapi32 secur32 user32 shell32 ole32 oleaut32 uuid rstrtmgr)
+target_link_libraries(test_uninstall PRIVATE setup_upgrade)
 add_test_target(test_langbar test_langbar.cpp ../tsf/langbaritem.cpp ../dll/util.cpp)
 target_compile_definitions(test_langbar PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(test_langbar PRIVATE windows_i18n user32 gdi32 ole32 oleaut32 uuid windowscodecs)
@@ -103,6 +113,11 @@ configure_file("${CMAKE_SOURCE_DIR}/scripts/check-tsf-runtime.ps1"
 add_test(NAME test_tsf_runtime_imports COMMAND powershell.exe -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_BINARY_DIR}/check-tsf-runtime.ps1"
     -DllPath $<TARGET_FILE:fcitx5-x86_64>)
+foreach(target Fcitx5SetupHelper Fcitx5Upgrade)
+    add_test(NAME test_${target}_runtime_imports COMMAND powershell.exe -NoProfile
+        -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_BINARY_DIR}/check-tsf-runtime.ps1"
+        -DllPath $<TARGET_FILE:${target}>)
+endforeach()
 
 add_executable(test_tsf_runtime_host test_tsf_runtime_host.cpp ../dll/util.cpp)
 target_compile_definitions(test_tsf_runtime_host PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)

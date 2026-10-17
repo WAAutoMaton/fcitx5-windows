@@ -3,6 +3,7 @@
 #include "../ipc/service.h"
 #include "log.h"
 #include "startup.h"
+#include "upgrade.h"
 #include "userprofile.h"
 #include <algorithm>
 #include <fstream>
@@ -14,6 +15,7 @@
 namespace {
 namespace fs = std::filesystem;
 namespace ipc = fcitx::win32::ipc;
+namespace upgrade = fcitx::setup::upgrade;
 constexpr wchar_t kClsidKey[] = L"SOFTWARE\\Classes\\CLSID\\{FC3869BA-51E3-"
                                 L"4078-8EE2-5FE49493A1F4}\\InprocServer32";
 
@@ -142,7 +144,14 @@ DWORD inspectLocks(const fs::path &root) {
         return ERROR_SUCCESS;
     }
     std::vector<std::wstring> files;
-    for (const auto &entry : fs::recursive_directory_iterator(root)) {
+    for (auto iterator = fs::recursive_directory_iterator(root);
+         iterator != fs::recursive_directory_iterator(); ++iterator) {
+        const auto &entry = *iterator;
+        if (entry.path() == root / "setup" / "upgrades" ||
+            entry.path() == root / "setup" / "maintenance-host") {
+            iterator.disable_recursion_pending();
+            continue;
+        }
         const auto attributes = GetFileAttributesW(entry.path().c_str());
         if (attributes == INVALID_FILE_ATTRIBUTES ||
             (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
@@ -274,6 +283,9 @@ DWORD configure(const fs::path &root) {
 }
 
 DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
+    if (upgrade::hasTransaction(root) &&
+        upgrade::busyState(upgrade::transactionState(root)))
+        return ERROR_BUSY;
     if (!elevated && !administrator()) {
         const auto prepared = fcitx::setup::removeUser(root, false);
         if (prepared) {
@@ -288,7 +300,10 @@ DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
         SHELLEXECUTEINFOW execute{sizeof(execute)};
         execute.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
         execute.lpVerb = L"runas";
-        const auto helper = root / "setup" / "Fcitx5SetupHelper.exe";
+        const auto helper =
+            upgrade::hasMaintenance(root)
+                ? root / "setup" / "maintenance-host" / "Fcitx5Upgrade.exe"
+                : root / "setup" / "Fcitx5SetupHelper.exe";
         execute.lpFile = helper.c_str();
         execute.lpParameters = arguments.c_str();
         execute.nShow = SW_SHOWNORMAL;
@@ -312,6 +327,19 @@ DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
     if (!ipc::sameInstallationPath(registered, root)) {
         return ERROR_INVALID_DATA;
     }
+    std::unique_ptr<upgrade::InstallationLock> upgradeLock;
+    if (upgrade::hasMaintenance(root)) {
+        upgradeLock = std::make_unique<upgrade::InstallationLock>(root);
+        if (upgrade::hasTransaction(root) ||
+            fs::exists(root / "setup" / "upgrade-result.json")) {
+            auto machine = upgrade::nativeMachine(root);
+            upgrade::Engine engine(root, *machine);
+            const auto cancelled = engine.cancel();
+            if (cancelled)
+                return cancelled;
+        }
+    }
+    const auto additionalFiles = upgrade::ownedFiles(root);
     auto result = setState(root, "maintenance\n");
     if (result)
         return result;
@@ -349,6 +377,11 @@ DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
                 error.message());
             result = ERROR_WRITE_FAULT;
         }
+        upgradeLock.reset();
+        const auto removed = upgrade::removeOwnedFiles(root, additionalFiles);
+        if (removed && (result == ERROR_SUCCESS ||
+                        result == ERROR_SUCCESS_REBOOT_REQUIRED))
+            result = removed;
     }
     return result;
 }
@@ -379,10 +412,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     const auto command = args.front();
     auto root = ipc::installationRootForAddress(
         reinterpret_cast<const void *>(&wWinMain));
+#ifdef FCITX5_UPGRADE_HOST
+    root = root.parent_path();
+#endif
     bool preview = false, silent = false, elevated = false;
+    fs::path manifestSource;
+    std::string transaction;
     for (size_t i = 1; i < args.size(); ++i) {
         if (args[i] == L"--prefix" && i + 1 < args.size()) {
             root = args[++i];
+        } else if (args[i] == L"--manifest" && i + 1 < args.size()) {
+            manifestSource = args[++i];
+        } else if (args[i] == L"--transaction" && i + 1 < args.size()) {
+            transaction = upgrade::utf8(args[++i]);
         } else if (args[i] == L"--what-if") {
             preview = true;
         } else if (args[i] == L"--silent") {
@@ -400,8 +442,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         L"pause-user",        L"resume-user",        L"inspect-locks",
         L"uninstall",         L"enable-login-start", L"disable-login-start"};
     if (!root.is_absolute() || root == root.root_path() ||
-        std::find(commands.begin(), commands.end(), command) ==
-            commands.end()) {
+        (!upgrade::upgradeCommand(command) &&
+         std::find(commands.begin(), commands.end(), command) ==
+             commands.end())) {
         return ERROR_INVALID_PARAMETER;
     }
     if (preview) {
@@ -409,11 +452,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
     DWORD result = ERROR_GEN_FAILURE;
     try {
+        if (upgrade::upgradeCommand(command))
+            return static_cast<int>(upgrade::runUpgrade(
+                root, command, manifestSource, transaction, false, silent));
+        if (command != L"uninstall" && upgrade::hasTransaction(root))
+            return ERROR_INSTALL_ALREADY_RUNNING;
         fcitx::setup::logMessage(std::string(command.begin(), command.end()) +
                                  " begin");
         fcitx::setup::logMessage(L"prefix=" + root.wstring());
         if (command == L"preflight-machine") {
-            result = pendingDeletion(root)     ? ERROR_SUCCESS_REBOOT_REQUIRED
+            result = upgrade::hasTransaction(root)
+                         ? ERROR_INSTALL_ALREADY_RUNNING
+                     : pendingDeletion(root)   ? ERROR_SUCCESS_REBOOT_REQUIRED
                      : !ownsRegistration(root) ? ERROR_ALREADY_EXISTS
                                                : ERROR_SUCCESS;
         } else if (command == L"register-machine" ||
@@ -460,12 +510,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
     } catch (const std::system_error &error) {
         result = static_cast<DWORD>(error.code().value());
-        fcitx::setup::logMessage(error.what());
+        if (!upgrade::upgradeCommand(command))
+            fcitx::setup::logMessage(error.what());
     } catch (...) {
         result = ERROR_GEN_FAILURE;
-        fcitx::setup::logMessage("Unhandled helper exception");
+        if (!upgrade::upgradeCommand(command))
+            fcitx::setup::logMessage("Unhandled helper exception");
     }
-    logResult(command, result);
+    if (!upgrade::upgradeCommand(command))
+        logResult(command, result);
     if (result && command == L"uninstall" && !silent &&
         result != ERROR_CANCELLED && result != ERROR_SUCCESS_REBOOT_REQUIRED) {
         const auto message = L"Cannot uninstall Fcitx5. Windows error: " +

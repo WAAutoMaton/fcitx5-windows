@@ -45,11 +45,12 @@ jobs:
           $tests = ($manifest | Out-String | ConvertFrom-Json).tests
           if (!$tests.Count) { throw 'No default TSF tests were found.' }
           $bundle = 'build/ci-x64/test-bundle'
-          New-Item -ItemType Directory -Force "$bundle/tests", "$bundle/dll" | Out-Null
+          New-Item -ItemType Directory -Force "$bundle/tests", "$bundle/dll", "$bundle/setup" | Out-Null
           Copy-Item "$build/tests/*.exe" "$bundle/tests"
           Copy-Item "$build/tests/*.dll", "$build/tests/check-tsf-runtime.ps1", "$build/tests/test_runtime_audit.ps1", "$build/tests/test_sandboxie_template.ps1", "$build/tests/sandboxie-template.ps1" "$bundle/tests"
           Copy-Item "$build/share" "$bundle/share" -Recurse
           Copy-Item "$build/dll/fcitx5-x86_64.dll", "$build/dll/penguin.ico" "$bundle/dll"
+          Copy-Item "$build/setup/Fcitx5SetupHelper.exe", "$build/setup/Fcitx5Upgrade.exe" "$bundle/setup"
           function Convert-TestArgument([string]$Value) {
             $value = $Value.Replace('\', '/')
             if ($value.StartsWith("$build/", [StringComparison]::OrdinalIgnoreCase)) {

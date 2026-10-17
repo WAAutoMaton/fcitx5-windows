@@ -306,7 +306,7 @@ The bundled variant requires `vc_redist.x64.exe` and
 against `cmake/installer-lock.json`; CI downloads and checks the locked SHA256
 values. The packaging script itself checks presence, not dependency hashes.
 `-SkipRuntimes` requires neither installer. Both modes require Inno Setup 7,
-the setup helper and the complete Core/TSF/Settings staging tree.
+the setup helper, `setup/Fcitx5Upgrade.exe` and the complete Core/TSF/Settings staging tree.
 
 `-PackageVersion` defaults to `0.1.0.0`; `-PackageName` overrides the output
 basename. Each variant produces an EXE, `.exe.sha256` and `.manifest.txt` with
@@ -318,11 +318,26 @@ staging tree. Use a dedicated packaging prefix: that marker makes service startu
 require installer-managed state, so do not package an active development tree.
 `-WhatIf` validates required input files without compiling or changing the tree.
 Packaging does not register TSF, start services or execute runtime installers.
+Packaging also generates a per-file runtime manifest and an Inno file list under
+the output's `metadata` directory. The runtime manifest is installed as
+`setup/runtime-manifest.json`; maintenance binaries and transaction state are
+excluded from that payload.
+
+`-RebootUpgrade` explicitly enables the experimental deferred upgrade branch.
+It stages the entire new runtime while the installed version remains usable,
+returns `3010`, and schedules protected machine work for a subsequent full
+Windows restart. CI/Nightly leaves this switch off pending real reboot/VM
+acceptance. See [reboot upgrade design](windows-reboot-upgrade-design.md) for
+recovery, uninstall coordination and remaining system validation.
 The script regression can run without system installation:
 
 ```powershell
 ./scripts/test-build-installer.ps1
+./scripts/test-reboot-upgrade-package.ps1 -TsfBuild ./build/installer/tsf
 ```
+
+The second script compiles both experimental variants using fixture binaries;
+it never executes an installer or changes system registration.
 
 The GitHub Actions `installer-smoke-x64` job executes the no-runtime package on
 a fresh Windows runner with `/VERYSILENT /MACHINEONLY=1`, verifies the installed

@@ -15,11 +15,15 @@ if (!(Test-Path -LiteralPath "$destination/bin/Fcitx5.exe")) {
 }
 $dll = (Resolve-Path -LiteralPath "$TsfBuild/dll/fcitx5-x86_64.dll").Path
 $helper = (Resolve-Path -LiteralPath "$TsfBuild/setup/Fcitx5SetupHelper.exe").Path
+$upgrade = (Resolve-Path -LiteralPath "$TsfBuild/setup/Fcitx5Upgrade.exe").Path
 & "$root/win32/scripts/check-tsf-runtime.ps1" -DllPath $dll
+& "$root/win32/scripts/check-tsf-runtime.ps1" -DllPath $helper
+& "$root/win32/scripts/check-tsf-runtime.ps1" -DllPath $upgrade
 New-Item -ItemType Directory -Force "$destination/tsf" | Out-Null
 New-Item -ItemType Directory -Force "$destination/setup" | Out-Null
 Copy-Item -LiteralPath $dll -Destination "$destination/tsf/fcitx5-x86_64.dll"
 Copy-Item -LiteralPath $helper -Destination "$destination/setup/Fcitx5SetupHelper.exe"
+Copy-Item -LiteralPath $upgrade -Destination "$destination/setup/Fcitx5Upgrade.exe"
 if (Test-Path -LiteralPath "$TsfBuild/share/locale") {
     New-Item -ItemType Directory -Force "$destination/share/locale" | Out-Null
     Copy-Item "$TsfBuild/share/locale/*" -Destination "$destination/share/locale" -Recurse -Force

@@ -59,7 +59,7 @@ try {
     [void][Management.Automation.Language.Parser]::ParseFile($entry, [ref]$tokens, [ref]$parseErrors)
     if ($parseErrors.Count) { throw "Parse error in $entry" }
     foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll',
-            'setup/Fcitx5SetupHelper.exe', 'settings/Fcitx5Settings.exe')) {
+            'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
         $path = Join-Path $prefix $file
         New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
         Set-Content -LiteralPath $path -Value 'fixture' -Encoding ascii
@@ -67,6 +67,7 @@ try {
     Push-Location $temporary
     try {
         & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -WhatIf
+        & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -RebootUpgrade -WhatIf
         if ((Test-Path $output) -or (Test-Path "$prefix/setup/managed-install") -or $testState.CompilerCalls.Count -or $testState.Lookups.Count) {
             throw 'WhatIf wrote packaging files or invoked the compiler.'
         }
@@ -90,6 +91,17 @@ try {
             throw 'No-runtime package did not disable runtime bundling.'
         }
         if (Test-Path $dependencies) { throw 'No-runtime packaging created the dependency directory.' }
+        $runtimeManifest = Get-Content -Raw -LiteralPath "$output/metadata/$lite.runtime.json" | ConvertFrom-Json
+        if ($runtimeManifest.architecture -ne 'x64' -or $runtimeManifest.files.Count -lt 5 -or
+            $runtimeManifest.dependencies.Count -ne 0 -or
+            @($runtimeManifest.files | Where-Object path -eq 'setup/Fcitx5Upgrade.exe').Count) {
+            throw 'Incorrect runtime file manifest or maintenance host was included in the runtime payload.'
+        }
+        foreach ($record in $runtimeManifest.files) {
+            if ((Get-FileHash -LiteralPath (Join-Path $prefix $record.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ne $record.sha256) {
+                throw "Incorrect runtime file digest: $($record.path)"
+            }
+        }
         New-Item -ItemType Directory -Force $dependencies | Out-Null
         Set-Content -LiteralPath "$dependencies/vc_redist.x64.exe" -Value 'fixture' -Encoding ascii
         Assert-Failure { & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -WhatIf } 'Missing installer dependency: WindowsAppRuntimeInstall-x64.exe'
@@ -110,8 +122,9 @@ try {
                 throw "Incorrect checksum for $package."
             }
         }
-        & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -PackageName 'custom-no-runtime' -SkipRuntimes | Out-Null
+        & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -PackageName 'custom-no-runtime' -SkipRuntimes -RebootUpgrade | Out-Null
         if (!(Test-Path -LiteralPath "$output/custom-no-runtime.manifest.txt")) { throw 'Custom package name was ignored.' }
+        if ($testState.CompilerCalls[-1] -notcontains '/DRebootUpgrade=1') { throw 'Reboot-upgrade opt-in was not passed to Inno.' }
         $testState.CompilerExitCode = 9
         Assert-Failure { & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -SkipRuntimes } 'ISCC failed (9)'
         Write-Output 'PASS: explicit compiler path, Inno Setup 6 rejection, actual compiler version, runtime variants, missing dependencies, distinct manifests/checksums, custom names, compiler failure, arbitrary-CWD/space/quote paths and WhatIf.'

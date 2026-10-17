@@ -131,6 +131,8 @@ try {
             (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'),
             (Join-Path $InstallRoot 'settings/Fcitx5Settings.exe'),
             $helper,
+            (Join-Path $InstallRoot 'setup/maintenance-host/Fcitx5Upgrade.exe'),
+            (Join-Path $InstallRoot 'setup/runtime-manifest.json'),
             (Join-Path $InstallRoot 'setup/managed-install'),
             (Join-Path $InstallRoot 'setup/install-state'))) {
         Assert-Path $path
@@ -162,7 +164,7 @@ try {
     if (Test-Path -LiteralPath $InstallRoot) {
         $remaining = Get-ChildItem -LiteralPath $InstallRoot -Force -Recurse -ErrorAction SilentlyContinue
         $unexpected = @($remaining | Where-Object {
-                !$_.PSIsContainer -and $_.Name -ne 'Fcitx5SetupHelper.exe' -and
+                !$_.PSIsContainer -and $_.Name -notin @('Fcitx5SetupHelper.exe', 'Fcitx5Upgrade.exe') -and
                 !$_.Name.StartsWith('unins', [StringComparison]::OrdinalIgnoreCase)
             })
         if ($unexpected) {

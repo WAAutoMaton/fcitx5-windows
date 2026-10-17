@@ -176,7 +176,7 @@ try {
     Write-Host '[4/5] Validate staged outputs and run default CTest tests.'
     foreach ($file in @('bin/Fcitx5.exe', 'lib/fcitx5/libpinyin.dll', 'share/libime/sc.dict',
             'lib/libime/zh_CN.lm', 'tsf/fcitx5-x86_64.dll',
-            'setup/Fcitx5SetupHelper.exe', 'settings/Fcitx5Settings.exe')) {
+            'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
         if (!(Test-Path -LiteralPath "$staging/$file" -PathType Leaf)) {
             throw "Missing staged output: $file"
         }

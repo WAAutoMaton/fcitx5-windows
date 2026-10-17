@@ -25,6 +25,7 @@
 | `win32/setup/main.cpp`、`userprofile.cpp` | 注册归属、权限、占用检查、用户输入项备份/恢复、启用/激活、Core 就绪及卸载 launcher |
 | `win32/setup/startup.h` | 显式当前用户登录启动项；固定 `--login-start` 命令和安装路径归属检查 |
 | `win32/setup/log.h` | 安装 helper 的 UTF-8 诊断日志 |
+| `win32/setup/upgrade*.{h,cpp}` | 实验性延迟升级：暂存、SYSTEM 开机提交、文件保护、状态/注册恢复和卸载所有权 |
 | `win32/dll/register.cpp`、`main.cpp` | COM/profile/category 注册与注销、失败结果传递 |
 | `win32/ipc/installation.h` | 受管理安装识别与服务启动门控 |
 | `.github/workflows/ci.yml` | 一次 x64 联合构建，独立测试/打包 job，Nightly 发布 |
@@ -50,7 +51,7 @@
 
 Core 保持独立进程和 MSYS2 Windows GNU 运行库；TSF/helper 使用 Windows SDK/ATL，Settings 使用独立 MSBuild 工程。Core 与 TSF/Settings 只通过 Named Pipe 交换协议数据，不跨进程传递 C++ 对象或分配器。安装路径仍符合 `bin`、`tsf`、`settings` 相邻目录的定位约定。
 
-当前机器状态存于安装树 `setup/install-state` 和 `HKLM\SOFTWARE\Fcitx5\Installer`，不是 ProgramData 清理计划。实际状态值为 `installed`、`maintenance`、`pending`。受管理安装由 `setup/managed-install` 或 HKLM 安装根识别，只有完整有效的 `installed` 文件允许服务启动；状态缺失/损坏时拒绝启动。未标记的隔离开发树保留原有启动行为。
+当前机器状态存于安装树 `setup/install-state` 和 `HKLM\SOFTWARE\Fcitx5\Installer`，不是 ProgramData 清理计划。实际状态值为 `installed`、`maintenance`、`pending`。受管理安装由 `setup/managed-install` 或 HKLM 安装根识别，只有完整有效的 `installed` 文件允许服务启动；状态缺失/损坏时拒绝启动。未标记的隔离开发树保留原有启动行为。实验性升级状态独立存于 `setup/upgrades/current`，等待重启时不改旧版 `installed`；结果保留在 `setup/upgrade-result.json`。
 
 TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.state` 仍只表达 SID/session/logon 的手动关闭意图，不能代替机器安装状态。旧版本已加载 DLL 若不认识维护状态，仍需要关闭相关应用或注销/重启来释放。
 
@@ -89,11 +90,13 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 `InstallLayoutOrTip` 使用既有简体中文 profile 描述，不使用会禁用其他输入项的 `ILOT_CLEANINSTALL`，也不配置登录屏幕。首次激活记录 `ChangeCurrentLanguage` 和 `ActivateProfile` 的实际结果；不能推断非中文系统、每应用输入模式和已有应用窗口必然立即切换。API 参考：[InstallLayoutOrTip](https://learn.microsoft.com/en-us/windows/win32/tsf/installlayoutortip)、[SetDefaultLayoutOrTip](https://learn.microsoft.com/en-us/windows/win32/tsf/setdefaultlayoutortip)、[ActivateProfile](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfinputprocessorprofilemgr-activateprofile)。
 
-固定目录升级遇到 DLL 占用会拒绝覆盖；当前没有整套 IPC 端点的重启替换方案。helper 会扫描 `PendingFileRenameOperations` 中安装根下的条目；若被预检发现则返回 `3010`。完整卸载后旧 helper 不再存在时的同路径重装保护仍需系统验收，不能仅凭 helper 单独检查宣称全部重装分支已经安全。
+默认包在固定目录升级遇到 DLL 占用时仍拒绝覆盖。helper 会扫描 `PendingFileRenameOperations` 中安装根下的条目；若被预检发现则返回 `3010`。完整卸载后旧 helper 不再存在时的同路径重装保护仍需系统验收，不能仅凭 helper 单独检查宣称全部重装分支已经安全。
+
+通过打包开关 `-RebootUpgrade` 可生成实验性升级包：受管理升级统一完整暂存，等待重启期间继续使用旧版，重启后在维护门控下提交与恢复。实现和限制见 [Windows 输入法占用时的延迟升级设计](windows-reboot-upgrade-design.md)。开机时序和系统验收仍是默认启用的前提；当前 CI/Nightly 不传此开关。
 
 ## 卸载与 DLL 占用
 
-开始菜单和 Windows 应用卸载项指向 `Fcitx5SetupHelper.exe uninstall`。普通权限入口处理当前用户输入偏好及服务后再提权；仅在当前默认仍为 Fcitx5 时恢复原项或选择有效替代项。管理员阶段校验安装归属、写维护状态、查询占用、注销，然后运行 Inno 原生卸载器；原生卸载成功或返回 `3010` 后，helper 还会删除安装后动态创建的 `setup/install-state`。
+新包的开始菜单和 Windows 应用卸载项指向 `setup/maintenance-host/Fcitx5Upgrade.exe uninstall --prefix <root>`，与 `Fcitx5SetupHelper.exe` 共用卸载调用链。普通权限入口处理当前用户输入偏好及服务后再提权；仅在当前默认仍为 Fcitx5 时恢复原项或选择有效替代项。管理员阶段先协调待升级事务，再写维护状态、查询占用、注销并运行 Inno 原生卸载器；原生卸载后清理动态状态及独立所有权清单中的升级新增文件，不能只依赖旧 Inno 日志。
 
 传给 Inno 的参数为 `/NORESTART /HELPER=1`；静默时另加 `/VERYSILENT /SUPPRESSMSGBOXES`。`/HELPER=1` 避免原生卸载器重复维护/注销。文件条目使用 `uninsrestartdelete`，被占用时可能延迟到重启删除。launcher 在占用且原生卸载成功时返回 `ERROR_SUCCESS_REBOOT_REQUIRED`（`3010`），保留该返回码且不弹失败提示。不会调用 `RmShutdown`、结束 Explorer/ctfmon 或按进程名杀用户应用。
 

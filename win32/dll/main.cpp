@@ -1,3 +1,4 @@
+#include "../ipc/installation.h"
 #include "../tsf/tsf.h"
 #include "register.h"
 #include "util.h"
@@ -68,6 +69,8 @@ __declspec(dllexport) STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid,
         return E_INVALIDARG;
     *ppvObject = nullptr;
     if (rclsid != fcitx::FCITX_CLSID)
+        return CLASS_E_CLASSNOTAVAILABLE;
+    if (!fcitx::win32::ipc::clientInstallationAllowsUse())
         return CLASS_E_CLASSNOTAVAILABLE;
     if (factory == nullptr) {
         EnterCriticalSection(&CS);

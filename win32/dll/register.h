@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <msctf.h>
+#include <span>
 #include <string>
 
 namespace fcitx {
@@ -12,6 +13,7 @@ HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath);
 HRESULT UnregisterServer();
 BOOL RegisterProfiles();
 BOOL RegisterCategories();
+std::span<const GUID> RegistrationCategories();
 HRESULT RegisterProfile(ITfInputProcessorProfileMgr *manager, HINSTANCE module);
 HRESULT RegisterCategories(ITfCategoryMgr *manager);
 HRESULT UnregisterCategories(ITfCategoryMgr *manager);
