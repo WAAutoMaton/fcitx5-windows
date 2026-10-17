@@ -452,9 +452,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
     DWORD result = ERROR_GEN_FAILURE;
     try {
-        if (upgrade::upgradeCommand(command))
-            return static_cast<int>(upgrade::runUpgrade(
-                root, command, manifestSource, transaction, false, silent));
+        if (upgrade::upgradeCommand(command)) {
+            fcitx::setup::logMessage(
+                std::string("upgrade command=") +
+                std::string(command.begin(), command.end()) + " begin");
+            result = upgrade::runUpgrade(root, command, manifestSource,
+                                         transaction, false, silent);
+            fcitx::setup::logStep(
+                std::string("upgrade command=") +
+                    std::string(command.begin(), command.end()) + " complete",
+                result);
+            return static_cast<int>(result);
+        }
         if (command != L"uninstall" && upgrade::hasTransaction(root))
             return ERROR_INSTALL_ALREADY_RUNNING;
         fcitx::setup::logMessage(std::string(command.begin(), command.end()) +
@@ -510,12 +519,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
     } catch (const std::system_error &error) {
         result = static_cast<DWORD>(error.code().value());
-        if (!upgrade::upgradeCommand(command))
-            fcitx::setup::logMessage(error.what());
+        fcitx::setup::logStep(upgrade::upgradeCommand(command)
+                                  ? "upgrade command failed"
+                                  : "helper command failed",
+                              result);
     } catch (...) {
         result = ERROR_GEN_FAILURE;
-        if (!upgrade::upgradeCommand(command))
-            fcitx::setup::logMessage("Unhandled helper exception");
+        fcitx::setup::logStep(upgrade::upgradeCommand(command)
+                                  ? "upgrade command exception"
+                                  : "helper command exception",
+                              result);
     }
     if (!upgrade::upgradeCommand(command))
         logResult(command, result);

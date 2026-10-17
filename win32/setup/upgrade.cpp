@@ -1,5 +1,6 @@
 #include "upgrade.h"
 #include "../ipc/installation.h"
+#include "log.h"
 #include <algorithm>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -292,12 +293,20 @@ void Engine::result(std::string_view value, DWORD error) {
 }
 
 DWORD Engine::begin(const fs::path &manifestPath) {
+    logMessage("upgrade phase=engine validation begin");
     machine_.validate();
+    logMessage("upgrade phase=engine validation complete");
+    logMessage("upgrade phase=completed transaction cleanup begin");
     reapCompleted(root_);
+    logMessage("upgrade phase=completed transaction cleanup complete");
+    logMessage("upgrade phase=manifest load begin");
     const auto target = manifest(manifestPath);
+    logMessage("upgrade phase=manifest load complete");
     if (target.protocolVersion != win32::ipc::kVersion)
         fail(ERROR_REVISION_MISMATCH);
+    logMessage("upgrade phase=disk space check begin");
     checkSpace(root_, target);
+    logMessage("upgrade phase=disk space check complete");
     if (hasTransaction(root_) && (stateAt(transaction_) == "committed" ||
                                   stateAt(transaction_) == "rolled-back"))
         cleanup();
@@ -309,8 +318,11 @@ DWORD Engine::begin(const fs::path &manifestPath) {
             return ERROR_SUCCESS_REBOOT_REQUIRED;
         fail(ERROR_INSTALL_ALREADY_RUNNING);
     }
+    logMessage("upgrade phase=transaction directories begin");
     fs::create_directories(transaction_ / "payload");
     fs::create_directories(transaction_ / "dependencies");
+    logMessage("upgrade phase=transaction directories complete");
+    logMessage("upgrade phase=transaction plan write begin");
     writeText(transaction_ / "target-manifest.json", readText(manifestPath));
     GUID id{};
     if (FAILED(CoCreateGuid(&id)))
@@ -335,6 +347,7 @@ DWORD Engine::begin(const fs::path &manifestPath) {
     plan.add_child("sourceBinaries", binaries);
     save(transaction_ / "plan.json", plan);
     state("preparing");
+    logMessage("upgrade phase=transaction plan write complete");
     return ERROR_SUCCESS;
 }
 

@@ -1,6 +1,7 @@
 #include "../dll/register.h"
 #include "../ipc/installation.h"
 #include "../ipc/isolationpolicy.h"
+#include "log.h"
 #include "upgrade.h"
 #include <atlbase.h>
 #include <atlcomcli.h>
@@ -15,6 +16,7 @@
 
 namespace fcitx::setup::upgrade {
 namespace {
+namespace ipc = win32::ipc;
 using Tree = boost::property_tree::ptree;
 constexpr wchar_t kUninstall[] =
     L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"
@@ -25,6 +27,47 @@ constexpr wchar_t kTip[] =
     L"SOFTWARE\\Microsoft\\CTF\\TIP\\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}";
 constexpr wchar_t kEpoch[] = L"SOFTWARE\\Fcitx5\\Installer\\UpgradeEpoch";
 constexpr wchar_t kTask[] = L"Fcitx5-CompleteUpgrade";
+
+template <typename Callback>
+void loggedPhase(std::string_view name, Callback &&callback) {
+    const auto prefix = std::string("upgrade phase=") + std::string(name);
+    logMessage(prefix + " begin");
+    try {
+        callback();
+    } catch (const std::system_error &error) {
+        logStep(prefix + " failed", DWORD(error.code().value()));
+        throw;
+    }
+    logMessage(prefix + " complete");
+}
+
+const char *isolationName(ipc::IsolationKind isolation) {
+    switch (isolation) {
+    case ipc::IsolationKind::Host:
+        return "host";
+    case ipc::IsolationKind::Sandboxie:
+        return "sandboxie";
+    case ipc::IsolationKind::AppContainer:
+        return "appcontainer";
+    case ipc::IsolationKind::SandboxieAppContainer:
+        return "sandboxie-appcontainer";
+    case ipc::IsolationKind::Unknown:
+        return "unknown";
+    }
+    return "unknown";
+}
+
+void logEnvironment() {
+    const auto environment = ipc::clientEnvironment();
+    char details[160]{};
+    snprintf(
+        details, sizeof(details),
+        "upgrade environment isolation=%s token-known=%u appcontainer=%u "
+        "low-integrity=%u",
+        isolationName(environment.isolation), unsigned(environment.tokenKnown),
+        unsigned(environment.appContainer), unsigned(environment.lowIntegrity));
+    logMessage(details);
+}
 
 void hr(HRESULT result) {
     if (FAILED(result))
@@ -244,37 +287,67 @@ class NativeMachine : public Machine {
   public:
     explicit NativeMachine(fs::path root) : root_(std::move(root)) {}
     void validate() override {
-        win32::ipc::requireHostServices();
-        if (!administrator() || root_ == root_.root_path())
-            fail(ERROR_ACCESS_DENIED);
-        validateSecurity(root_);
-        validateSecurity(root_ / "setup");
-        if (!win32::ipc::registeredInstallationRoot(root_))
-            fail(ERROR_ALREADY_EXISTS);
-        try {
-            if (!win32::ipc::sameInstallationPath(
-                    regString(
-                        (std::wstring(kClsid) + L"\\InprocServer32").c_str(),
-                        nullptr),
-                    root_ / "tsf" / "fcitx5-x86_64.dll"))
+        logEnvironment();
+        loggedPhase("host-services policy", [] { ipc::requireHostServices(); });
+        loggedPhase("administrator token", [] {
+            if (!administrator())
+                fail(ERROR_ACCESS_DENIED);
+        });
+        loggedPhase("non-root installation path", [&] {
+            if (root_ == root_.root_path())
+                fail(ERROR_ACCESS_DENIED);
+        });
+        loggedPhase("installation root security",
+                    [&] { validateSecurity(root_); });
+        loggedPhase("setup directory security",
+                    [&] { validateSecurity(root_ / "setup"); });
+        loggedPhase("registered installation root", [&] {
+            if (!ipc::registeredInstallationRoot(root_))
                 fail(ERROR_ALREADY_EXISTS);
-        } catch (const std::system_error &error) {
-            if (error.code().value() != ERROR_FILE_NOT_FOUND ||
-                !hasTransaction(root_) || !busyState(transactionState(root_)))
-                throw;
-        }
-        wchar_t filesystem[32]{};
-        if (GetDriveTypeW(root_.root_path().c_str()) != DRIVE_FIXED ||
-            !GetVolumeInformationW(root_.root_path().c_str(), nullptr, 0,
-                                   nullptr, nullptr, nullptr, filesystem, 32) ||
-            std::wstring_view(filesystem) != L"NTFS")
-            fail(ERROR_NOT_SUPPORTED);
+        });
+        loggedPhase("TSF registration", [&] {
+            try {
+                if (!ipc::sameInstallationPath(
+                        regString((std::wstring(kClsid) + L"\\InprocServer32")
+                                      .c_str(),
+                                  nullptr),
+                        root_ / "tsf" / "fcitx5-x86_64.dll"))
+                    fail(ERROR_ALREADY_EXISTS);
+            } catch (const std::system_error &error) {
+                if (error.code().value() != ERROR_FILE_NOT_FOUND ||
+                    !hasTransaction(root_) ||
+                    !busyState(transactionState(root_)))
+                    throw;
+            }
+        });
+        loggedPhase("NTFS fixed-volume check", [&] {
+            wchar_t filesystem[32]{};
+            if (GetDriveTypeW(root_.root_path().c_str()) != DRIVE_FIXED ||
+                !GetVolumeInformationW(root_.root_path().c_str(), nullptr, 0,
+                                       nullptr, nullptr, nullptr, filesystem,
+                                       32) ||
+                std::wstring_view(filesystem) != L"NTFS")
+                fail(ERROR_NOT_SUPPORTED);
+        });
         // Validate every active/control directory before allowing SYSTEM work.
-        for (const auto &entry : fs::recursive_directory_iterator(root_)) {
-            validatePath(entry.path());
-            validateSecurity(entry.path());
-        }
-        pendingOperations();
+        loggedPhase("installation tree security", [&] {
+            size_t index = 0;
+            for (const auto &entry : fs::recursive_directory_iterator(root_)) {
+                try {
+                    validatePath(entry.path());
+                    validateSecurity(entry.path());
+                } catch (const std::system_error &error) {
+                    logStep("upgrade installation tree entry failed index=" +
+                                std::to_string(index),
+                            DWORD(error.code().value()));
+                    throw;
+                }
+                ++index;
+            }
+            logMessage("upgrade installation tree entries=" +
+                       std::to_string(index));
+        });
+        loggedPhase("pending restart operations", [&] { pendingOperations(); });
     }
     void gate(std::string_view state) override {
         writeText(root_ / "setup" / "install-state", std::string(state) + "\n");
@@ -559,23 +632,30 @@ class NativeMachine : public Machine {
         return root_ / "setup" / "maintenance-host" / "Fcitx5Upgrade.exe";
     }
     void installHost() {
-        protectDirectory(root_ / "setup" / "maintenance-host");
-        protectDirectory(root_ / "setup" / "upgrades");
+        loggedPhase("maintenance host directory", [&] {
+            protectDirectory(root_ / "setup" / "maintenance-host");
+        });
+        loggedPhase("upgrade transaction directory",
+                    [&] { protectDirectory(root_ / "setup" / "upgrades"); });
         const auto source = modulePath();
         if (source.filename() != L"Fcitx5Upgrade.exe")
             fail(ERROR_INVALID_FUNCTION);
-        validateSecurity(source);
+        loggedPhase("temporary maintenance host security",
+                    [&] { validateSecurity(source); });
         if (!fs::exists(host()) || sha256(host()) != sha256(source)) {
             const auto temporary = host().wstring() + L".new";
             validatePath(temporary, true);
-            fs::copy_file(source, temporary,
-                          fs::copy_options::overwrite_existing);
-            if (!MoveFileExW(temporary.c_str(), host().c_str(),
-                             MOVEFILE_REPLACE_EXISTING |
-                                 MOVEFILE_WRITE_THROUGH))
-                fail();
+            loggedPhase("install maintenance host", [&] {
+                fs::copy_file(source, temporary,
+                              fs::copy_options::overwrite_existing);
+                if (!MoveFileExW(temporary.c_str(), host().c_str(),
+                                 MOVEFILE_REPLACE_EXISTING |
+                                     MOVEFILE_WRITE_THROUGH))
+                    fail();
+            });
         }
-        validateSecurity(host());
+        loggedPhase("installed maintenance host security",
+                    [&] { validateSecurity(host()); });
     }
     void checkTarget(const Manifest &value) {
         const auto current = regString(kUninstall, L"DisplayVersion");
@@ -660,38 +740,51 @@ bool upgradeCommand(std::wstring_view command) {
 DWORD runUpgrade(const fs::path &root, std::wstring_view command,
                  const fs::path &source, std::string_view transaction,
                  bool preview, bool silent) {
-    win32::ipc::requireHostServices();
-    if (!root.is_absolute() || root == root.root_path())
-        fail(ERROR_INVALID_NAME);
+    logEnvironment();
+    loggedPhase("host-services policy", [] { ipc::requireHostServices(); });
+    loggedPhase("installation root argument", [&] {
+        if (!root.is_absolute() || root == root.root_path())
+            fail(ERROR_INVALID_NAME);
+    });
     auto machine = nativeMachine(root);
     Engine engine(root, *machine, parentProcess());
     if (command == L"query-upgrade") {
+        logMessage("upgrade phase=query state begin");
         const auto value = engine.query();
+        logMessage("upgrade phase=query state complete");
         std::cout << value;
         if (!silent)
             MessageBoxW(nullptr, wide(value).c_str(), L"Fcitx5 upgrade",
                         MB_OK | MB_ICONINFORMATION);
         return ERROR_SUCCESS;
     }
-    machine->validate();
+    loggedPhase("machine validation", [&] { machine->validate(); });
     if (preview)
         return ERROR_SUCCESS;
+    logMessage("upgrade phase=installation lock begin");
     InstallationLock lock(root);
+    logMessage("upgrade phase=installation lock complete");
     if (!transaction.empty() && hasTransaction(root) &&
         load(root / "setup" / "upgrades" / "current" / "plan.json")
                 .get<std::string>("id") != transaction)
         fail(ERROR_INVALID_DATA);
     if (command == L"begin-stage") {
         auto &native = static_cast<NativeMachine &>(*machine);
-        native.checkTarget(manifest(source));
-        if (readText(root / "setup" / "install-state", 64) != "installed\n")
-            fail(ERROR_INVALID_STATE);
+        loggedPhase("target package validation",
+                    [&] { native.checkTarget(manifest(source)); });
+        loggedPhase("current installation state", [&] {
+            if (readText(root / "setup" / "install-state", 64) != "installed\n")
+                fail(ERROR_INVALID_STATE);
+        });
         if (hasTransaction(root) && (transactionState(root) == "committed" ||
                                      transactionState(root) == "rolled-back"))
-            engine.cleanup();
+            loggedPhase("old transaction cleanup", [&] { engine.cleanup(); });
         if (!hasTransaction(root))
             native.installHost();
-        return engine.begin(source);
+        DWORD result = ERROR_GEN_FAILURE;
+        loggedPhase("create upgrade transaction",
+                    [&] { result = engine.begin(source); });
+        return result;
     }
     if (command == L"seal-stage")
         return engine.seal();
