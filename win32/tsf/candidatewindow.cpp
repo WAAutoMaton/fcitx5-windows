@@ -381,43 +381,75 @@ bool CandidateWindow::update(const PipeClient::KeyReply &reply) {
 void CandidateWindow::discardTarget() {
     brush_.Release();
     target_.Release();
+    dcTarget_.Release();
 }
 
-bool CandidateWindow::createTarget() {
+HRESULT CandidateWindow::createTarget(HDC dc) {
     RECT client{};
-    GetClientRect(window_, &client);
+    if (!GetClientRect(window_, &client))
+        return HRESULT_FROM_WIN32(GetLastError());
     const auto size = D2D1::SizeU(client.right, client.bottom);
     if (target_) {
         target_->SetDpi(static_cast<float>(dpi_), static_cast<float>(dpi_));
         const auto previous = target_->GetPixelSize();
-        if ((previous.width == size.width && previous.height == size.height) ||
-            SUCCEEDED(target_->Resize(size))) {
-            return true;
+        if ((previous.width != size.width || previous.height != size.height) &&
+            FAILED(target_->Resize(size)))
+            discardTarget();
+    }
+    if (!target_ && !useDcTarget_) {
+        const auto properties = D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(),
+            static_cast<float>(dpi_), static_cast<float>(dpi_));
+        // Keep display refresh waits off the application's TSF thread.
+        const auto result = drawingFactory_->CreateHwndRenderTarget(
+            properties,
+            D2D1::HwndRenderTargetProperties(window_, size,
+                                             D2D1_PRESENT_OPTIONS_IMMEDIATELY),
+            &target_);
+        diagnosticResult(L"CreateHwndRenderTarget", result);
+        if (FAILED(result)) {
+            discardTarget();
+            useDcTarget_ = true;
+            win32::diagnostic::tsfLogger().event(
+                win32::diagnostic::Level::Warning, "popup_render_fallback",
+                {{"hr", static_cast<uint32_t>(result)},
+                 {"backend", "dc_software"}});
         }
-        discardTarget();
     }
-    const auto properties = D2D1::RenderTargetProperties(
-        D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(),
-        static_cast<float>(dpi_), static_cast<float>(dpi_));
-    // Keep display refresh waits off the application's TSF thread.
-    const auto targetResult = drawingFactory_->CreateHwndRenderTarget(
-        properties,
-        D2D1::HwndRenderTargetProperties(window_, size,
-                                         D2D1_PRESENT_OPTIONS_IMMEDIATELY),
-        &target_);
-    diagnosticResult(L"CreateHwndRenderTarget", targetResult);
-    if (FAILED(targetResult)) {
-        return false;
+    if (useDcTarget_) {
+        // Avoid the HWND presentation path rejected by some modern hosts.
+        if (!dcTarget_) {
+            const auto properties = D2D1::RenderTargetProperties(
+                D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                  D2D1_ALPHA_MODE_IGNORE),
+                static_cast<float>(dpi_), static_cast<float>(dpi_));
+            const auto result =
+                drawingFactory_->CreateDCRenderTarget(&properties, &dcTarget_);
+            diagnosticResult(L"CreateDCRenderTarget", result);
+            if (FAILED(result))
+                return result;
+        }
+        dcTarget_->SetDpi(static_cast<float>(dpi_), static_cast<float>(dpi_));
+        const auto result = dcTarget_->BindDC(dc, &client);
+        diagnosticResult(L"BindDC", result);
+        if (FAILED(result))
+            return result;
     }
-    const auto brushResult =
-        target_->CreateSolidColorBrush(systemColor(COLOR_WINDOWTEXT), &brush_);
-    diagnosticResult(L"CreateSolidColorBrush", brushResult);
-    if (FAILED(brushResult)) {
-        discardTarget();
-        return false;
+    ID2D1RenderTarget *drawingTarget =
+        useDcTarget_ ? static_cast<ID2D1RenderTarget *>(dcTarget_.p)
+                     : target_.p;
+    if (!brush_) {
+        const auto result = drawingTarget->CreateSolidColorBrush(
+            systemColor(COLOR_WINDOWTEXT), &brush_);
+        diagnosticResult(L"CreateSolidColorBrush", result);
+        if (FAILED(result)) {
+            discardTarget();
+            return result;
+        }
+        drawingTarget->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
     }
-    target_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
-    return true;
+    return S_OK;
 }
 
 HRESULT CandidateWindow::draw(ID2D1RenderTarget *target,
@@ -461,9 +493,13 @@ HRESULT CandidateWindow::draw(ID2D1RenderTarget *target,
 
 void CandidateWindow::paint() {
     PAINTSTRUCT paint{};
-    BeginPaint(window_, &paint);
-    const auto result =
-        createTarget() ? draw(target_, brush_) : D2DERR_RECREATE_TARGET;
+    const auto dc = BeginPaint(window_, &paint);
+    auto result = dc ? createTarget(dc) : E_FAIL;
+    if (SUCCEEDED(result))
+        result =
+            draw(useDcTarget_ ? static_cast<ID2D1RenderTarget *>(dcTarget_.p)
+                              : target_.p,
+                 brush_);
     EndPaint(window_, &paint);
     finishPaint(result);
 }

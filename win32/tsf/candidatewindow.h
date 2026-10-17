@@ -43,7 +43,7 @@ class CandidateWindow {
     bool updateRows(const PipeClient::KeyReply &reply);
     bool layout();
     void position();
-    bool createTarget();
+    HRESULT createTarget(HDC dc);
     void discardTarget();
     HRESULT draw(ID2D1RenderTarget *target, ID2D1SolidColorBrush *brush);
     void finishPaint(HRESULT result);
@@ -61,6 +61,7 @@ class CandidateWindow {
     float commentLeft_ = 0;
     bool positioning_ = false;
     bool layoutDirty_ = true;
+    bool useDcTarget_ = false;
     unsigned paintFailures_ = 0;
     CComPtr<ID2D1Factory> drawingFactory_;
     CComPtr<IDWriteFactory> textFactory_;
@@ -68,6 +69,7 @@ class CandidateWindow {
     CComPtr<IDWriteTextFormat> secondaryFormat_;
     CComPtr<IDWriteInlineObject> ellipsis_;
     CComPtr<ID2D1HwndRenderTarget> target_;
+    CComPtr<ID2D1DCRenderTarget> dcTarget_;
     CComPtr<ID2D1SolidColorBrush> brush_;
 };
 

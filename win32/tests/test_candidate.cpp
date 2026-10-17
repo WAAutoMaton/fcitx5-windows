@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <dwmapi.h>
+#include <dxgi.h>
 #include <filesystem>
 #include <wincodec.h>
 
@@ -15,6 +16,19 @@ struct CandidateWindowTestAccess {
         return view.rows_[index].text.layout;
     }
     static void discardTarget(CandidateWindow &view) { view.discardTarget(); }
+    static void factory(CandidateWindow &view, ID2D1Factory *factory) {
+        view.drawingFactory_ = factory;
+    }
+    static bool usesDc(const CandidateWindow &view) {
+        return view.useDcTarget_ && view.dcTarget_ && !view.target_;
+    }
+    static HRESULT drawDc(CandidateWindow &view, HDC dc, UINT dpi) {
+        view.dpi_ = dpi;
+        auto result = view.createTarget(dc);
+        if (SUCCEEDED(result))
+            result = view.draw(view.dcTarget_, view.brush_);
+        return result;
+    }
     static void loseTarget(CandidateWindow &view) {
         view.finishPaint(D2DERR_RECREATE_TARGET);
     }
@@ -68,6 +82,113 @@ struct CandidateWindowTestAccess {
 namespace {
 using Access = fcitx::CandidateWindowTestAccess;
 using Reply = fcitx::PipeClient::KeyReply;
+
+class FailingHwndFactory : public ID2D1Factory {
+  public:
+    FailingHwndFactory() {
+        assert(SUCCEEDED(
+            D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &factory_)));
+    }
+    STDMETHODIMP QueryInterface(REFIID id, void **result) override {
+        if (!result)
+            return E_POINTER;
+        *result = nullptr;
+        if (id != IID_IUnknown && id != __uuidof(ID2D1Factory))
+            return E_NOINTERFACE;
+        *result = static_cast<ID2D1Factory *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++references_; }
+    STDMETHODIMP_(ULONG) Release() override {
+        const auto remaining = --references_;
+        if (!remaining)
+            delete this;
+        return remaining;
+    }
+    STDMETHODIMP ReloadSystemMetrics() noexcept override { return S_OK; }
+    STDMETHODIMP_(void) GetDesktopDpi(FLOAT *x, FLOAT *y) noexcept override {
+        *x = *y = 96;
+    }
+    STDMETHODIMP
+    CreateRectangleGeometry(const D2D1_RECT_F *rect,
+                            ID2D1RectangleGeometry **out) noexcept override {
+        return factory_->CreateRectangleGeometry(rect, out);
+    }
+    STDMETHODIMP CreateRoundedRectangleGeometry(
+        const D2D1_ROUNDED_RECT *rect,
+        ID2D1RoundedRectangleGeometry **out) noexcept override {
+        return factory_->CreateRoundedRectangleGeometry(rect, out);
+    }
+    STDMETHODIMP
+    CreateEllipseGeometry(const D2D1_ELLIPSE *ellipse,
+                          ID2D1EllipseGeometry **out) noexcept override {
+        return factory_->CreateEllipseGeometry(ellipse, out);
+    }
+    STDMETHODIMP
+    CreateGeometryGroup(D2D1_FILL_MODE mode, ID2D1Geometry **items,
+                        UINT32 count,
+                        ID2D1GeometryGroup **out) noexcept override {
+        return factory_->CreateGeometryGroup(mode, items, count, out);
+    }
+    STDMETHODIMP
+    CreateTransformedGeometry(
+        ID2D1Geometry *geometry, const D2D1_MATRIX_3X2_F *transform,
+        ID2D1TransformedGeometry **out) noexcept override {
+        return factory_->CreateTransformedGeometry(geometry, transform, out);
+    }
+    STDMETHODIMP CreatePathGeometry(ID2D1PathGeometry **out) noexcept override {
+        return factory_->CreatePathGeometry(out);
+    }
+    STDMETHODIMP
+    CreateStrokeStyle(const D2D1_STROKE_STYLE_PROPERTIES *properties,
+                      const FLOAT *dashes, UINT32 count,
+                      ID2D1StrokeStyle **out) noexcept override {
+        return factory_->CreateStrokeStyle(properties, dashes, count, out);
+    }
+    STDMETHODIMP
+    CreateDrawingStateBlock(const D2D1_DRAWING_STATE_DESCRIPTION *description,
+                            IDWriteRenderingParams *params,
+                            ID2D1DrawingStateBlock **out) noexcept override {
+        return factory_->CreateDrawingStateBlock(description, params, out);
+    }
+    STDMETHODIMP
+    CreateWicBitmapRenderTarget(IWICBitmap *bitmap,
+                                const D2D1_RENDER_TARGET_PROPERTIES *properties,
+                                ID2D1RenderTarget **out) noexcept override {
+        return factory_->CreateWicBitmapRenderTarget(bitmap, properties, out);
+    }
+    STDMETHODIMP
+    CreateHwndRenderTarget(const D2D1_RENDER_TARGET_PROPERTIES *,
+                           const D2D1_HWND_RENDER_TARGET_PROPERTIES *,
+                           ID2D1HwndRenderTarget **out) noexcept override {
+        ++hwndAttempts;
+        *out = nullptr;
+        return DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+    }
+    STDMETHODIMP CreateDxgiSurfaceRenderTarget(
+        IDXGISurface *surface, const D2D1_RENDER_TARGET_PROPERTIES *properties,
+        ID2D1RenderTarget **out) noexcept override {
+        return factory_->CreateDxgiSurfaceRenderTarget(surface, properties,
+                                                       out);
+    }
+    STDMETHODIMP
+    CreateDCRenderTarget(const D2D1_RENDER_TARGET_PROPERTIES *properties,
+                         ID2D1DCRenderTarget **out) noexcept override {
+        ++dcAttempts;
+        *out = nullptr;
+        return FAILED(dcResult)
+                   ? dcResult
+                   : factory_->CreateDCRenderTarget(properties, out);
+    }
+    unsigned hwndAttempts = 0;
+    unsigned dcAttempts = 0;
+    HRESULT dcResult = S_OK;
+
+  private:
+    ULONG references_ = 1;
+    CComPtr<ID2D1Factory> factory_;
+};
 
 void pump() {
     MSG message{};
@@ -281,6 +402,84 @@ void windowTests() {
     assert(SetThreadDpiAwarenessContext(initial));
 }
 
+void fallbackTests(IWICImagingFactory *factory) {
+    const auto previous = SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    for (const UINT dpi : {96u, 192u, 288u}) {
+        CComPtr<FailingHwndFactory> failing;
+        failing.Attach(new FailingHwndFactory);
+        fcitx::CandidateWindow view;
+        Access::factory(view, failing);
+        view.show(fixture(), nullptr, {100, 100, 101, 120});
+        assert(view.visible() && Access::usesDc(view));
+        assert(failing->hwndAttempts == 1 && failing->dcAttempts == 1);
+        const auto window = Access::window(view);
+        RECT client{};
+        assert(GetClientRect(window, &client));
+        const auto dc = CreateCompatibleDC(nullptr);
+        BITMAPINFO info{};
+        info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        info.bmiHeader.biWidth = client.right;
+        info.bmiHeader.biHeight = -client.bottom;
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        void *pixels = nullptr;
+        const auto bitmap =
+            CreateDIBSection(dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0);
+        assert(dc && bitmap && pixels);
+        const auto old = SelectObject(dc, bitmap);
+        assert(SUCCEEDED(Access::drawDc(view, dc, dpi)));
+        GdiFlush();
+        CComPtr<IWICBitmap> rendered;
+        assert(SUCCEEDED(factory->CreateBitmapFromMemory(
+            client.right, client.bottom, GUID_WICPixelFormat32bppBGR,
+            client.right * 4, client.right * client.bottom * 4,
+            static_cast<BYTE *>(pixels), &rendered)));
+        assert(coloredPixels(rendered) > 30);
+        const auto *bytes = static_cast<const BYTE *>(pixels);
+        size_t textPixels = 0, selectedPixels = 0;
+        for (LONG i = 0; i < client.right * client.bottom; ++i) {
+            const auto color =
+                RGB(bytes[i * 4 + 2], bytes[i * 4 + 1], bytes[i * 4]);
+            textPixels += color == GetSysColor(COLOR_WINDOWTEXT);
+            selectedPixels += color == GetSysColor(COLOR_HIGHLIGHT);
+        }
+        assert(textPixels > 30 && selectedPixels > 100);
+        // Bind back to the window before releasing the temporary DC.
+        InvalidateRect(window, nullptr, FALSE);
+        UpdateWindow(window);
+        SelectObject(dc, old);
+        DeleteObject(bitmap);
+        DeleteDC(dc);
+        assert(view.visible());
+        auto reply = fixture();
+        reply.candidates.resize(2);
+        view.show(reply, nullptr, {200, 200, 201, 220});
+        assert(view.visible() && Access::usesDc(view));
+        assert(failing->dcAttempts == 1);
+        Access::discardTarget(view);
+        InvalidateRect(window, nullptr, FALSE);
+        UpdateWindow(window);
+        assert(view.visible() && Access::usesDc(view));
+        assert(failing->hwndAttempts == 1 && failing->dcAttempts == 2);
+        std::printf(
+            "DC fallback DPI %u: text pixels = %zu, selected pixels = %zu\n",
+            dpi, textPixels, selectedPixels);
+    }
+    CComPtr<FailingHwndFactory> failing;
+    failing.Attach(new FailingHwndFactory);
+    failing->dcResult = E_OUTOFMEMORY;
+    fcitx::CandidateWindow view;
+    Access::factory(view, failing);
+    view.show(fixture(), nullptr, {100, 100, 101, 120});
+    assert(!view.visible());
+    failing->dcResult = S_OK;
+    view.show(fixture(), nullptr, {100, 100, 101, 120});
+    assert(view.visible() && Access::usesDc(view));
+    assert(failing->hwndAttempts == 1 && failing->dcAttempts == 2);
+    assert(SetThreadDpiAwarenessContext(previous));
+}
+
 void inputSiteWindowTests() {
     const auto initial = GetThreadDpiAwarenessContext();
     for (const auto ownerContext :
@@ -447,6 +646,7 @@ int main(int argc, char **argv) {
         }
         renderTests(factory, directory);
         windowTests();
+        fallbackTests(factory);
         inputSiteWindowTests();
         if (!directory.empty()) {
             preview(factory, directory);

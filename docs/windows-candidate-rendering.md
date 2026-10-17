@@ -3,7 +3,8 @@
 ## Decision and Scope
 
 The nonactivating Win32 popup uses DirectWrite layouts and a Direct2D HWND
-render target. Language-bar icons and document composition use separate paths.
+render target, with a software DC render target fallback. Language-bar icons
+and document composition use separate paths.
 The TSF target links Windows `d2d1` and `dwrite`; rendering alone does not require
 Core, submodule, IPC or registration metadata changes.
 The window and graphics resources stay on the TSF owning thread. Initialization
@@ -77,10 +78,20 @@ the anchor when space below is exhausted.
 
 `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW` and `MA_NOACTIVATE` preserve focus.
 Owner destruction clears the HWND and device resources; a later snapshot can
-recreate the popup. Device-target loss or target creation failure discards device
+recreate the popup. Device-target loss discards device
 resources and schedules at most two repaint retries, after 16/32 ms, without
 hiding. Persistent or other drawing errors hide until a later snapshot retries,
 without resetting or replaying input. Hiding cancels repaint retries.
+
+If HWND render-target creation fails, switch that candidate-window instance to
+`ID2D1DCRenderTarget` with explicit software rendering. Bind the current paint DC
+and full client rectangle on every paint, including after resize or DPI changes.
+This avoids the HWND presentation path while reusing the existing DirectWrite
+layouts, colors and draw routine. Log `popup_render_fallback` with the original
+HRESULT and `dc_software` backend. Creation/binding failures retain their original
+HRESULT in `popup_paint`; only actual `D2DERR_RECREATE_TARGET` failures use the
+bounded device-loss retries. Host UIElement permission and owner checks still
+apply before either rendering path.
 
 ## Resource and Latency Policy
 
@@ -97,6 +108,17 @@ and [presentation options](https://learn.microsoft.com/en-us/windows/win32/api/d
 ## Verification
 
 `test_candidate` is a default CTest with no Core or registration requirement.
+It injects `DXGI_ERROR_NOT_CURRENTLY_AVAILABLE` into HWND-target creation and
+checks software DC pixels, target reuse, resize, DPI changes, resource recreation
+and failure recovery.
+
+`candidate_render_probe <existing AppContainer profile/package family name>`
+compares default/software HWND targets, software DC targets and both production
+candidate rendering paths in desktop and real AppContainer-token children.
+It does not create a profile, register a TIP or connect to Core. Such children
+do not reproduce a packaged immersive host's complete windowing environment;
+success does not establish compatibility with SearchHost or other real apps.
+
 The production draw function runs through a software WIC target at 96/120/144/
 192/288 DPI. It compares color emoji with monochrome controls and checks VS15,
 ellipsis and layout reuse. Window tests cover three owner awareness modes,
