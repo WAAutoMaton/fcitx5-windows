@@ -8,7 +8,7 @@
 - 根工程、`win32` TSF 工程和 `win32/settings` WinUI 工程彼此独立。不要把它们的编译器、头文件、运行库或构建缓存混用。
 - Core 是独立进程，TSF DLL 加载到应用进程；两者通过用户级 Named Pipe 通信，不共享 C++ 对象、分配器或引擎 ABI。Settings 也通过 IPC 访问 Core。
 - `win32/ipc/protocol.h` 的协议变更必须同步更新 Core、TSF DLL 和 Settings。当前 TSF 只构建/验证 x64；CI 当前不再构建 ARM64，ARM64 输入法能力尚未验证。
-- “可以编译”“可以注册为输入法”或“可以提交固定字符”都不等于已经支持完整的 Fcitx5 Windows 输入。报告结果时区分自动化 probe、免注册测试和真实系统/应用验证。
+- 报告结果时区分自动化 probe、免注册测试和真实系统/应用验证。
 
 ## 目录与文档
 
