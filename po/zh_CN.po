@@ -22,8 +22,8 @@ msgid "Enable detailed logging"
 msgstr "开启详细日志记录"
 
 msgctxt "settings"
-msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 30 days."
-msgstr "日志记录连接、上下文、候选数量和布局元数据，不记录输入文本。日志保存在下方目录，最多保留 30 天。"
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
+msgstr "日志记录连接、上下文、候选数量和布局元数据，不记录输入文本。日志最多保留 7 天，占用不超过 512 MiB。"
 
 msgctxt "settings"
 msgid "Log folder"

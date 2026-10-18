@@ -21,8 +21,8 @@ struct Options {
     size_t queueLimit = 4096;
     uint64_t rotateBytes = 8U * 1024U * 1024U;
     uint64_t processBytes = 64U * 1024U * 1024U;
-    uint64_t directoryBytes = 256U * 1024U * 1024U;
-    std::chrono::hours retention{24 * 30};
+    uint64_t directoryBytes = 512U * 1024U * 1024U;
+    std::chrono::hours retention{24 * 7};
     std::function<std::chrono::system_clock::time_point()> clock;
 };
 

@@ -27,7 +27,7 @@ msgid "Enable detailed logging"
 msgstr ""
 
 msgctxt "settings"
-msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 30 days."
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
 msgstr ""
 
 msgctxt "settings"

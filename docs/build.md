@@ -122,8 +122,8 @@ IPC v10. `windows-ui.conf` now uses version 2; version 1 loads with logging off
 and migrates on the next successful save. Language and logging share a revision.
 
 Logs are JSON Lines under `%LOCALAPPDATA%/Fcitx5/logs`, split by role and TSF or
-Settings PID. The files rotate at 8 MiB and UTC date changes, expire after 30
-days, and are bounded to 64 MiB per process and 256 MiB per directory. Active
+Settings PID. The files rotate at 8 MiB and UTC date changes, expire after 7
+days, and are bounded to 64 MiB per process and 512 MiB per directory. Active
 files in other processes are protected from deletion by Windows sharing rules;
 capacity cleanup retries on subsequent maintenance. Disabling retains history.
 

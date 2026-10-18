@@ -128,7 +128,7 @@ Right-click the input-method indicator for:
 In **Global Settings**, the **General** tab selects the UI language; restart
 services after applying it to update Core and Settings. **Developer options**
 enables detailed logging immediately and opens `%LOCALAPPDATA%/Fcitx5/logs`.
-Logs rotate automatically; maintenance removes expired files after 30 days and
+Logs rotate automatically; maintenance removes expired files after 7 days and
 enforces capacity limits. See [developer diagnostics](docs/windows-developer-logging-design.md).
 
 For Sandboxie, follow the [host-sharing setup guide](docs/windows-sandboxie-design.md).

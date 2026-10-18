@@ -69,7 +69,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 - `用户数据文件夹`：打开 `%APPDATA%/Fcitx5`，其中包括设置和拼音学习数据。
 - `关于`：显示架构、CI 编号、commit 及项目/许可证链接。
 
-在**全局设置**的**常规**页选择 UI 语言并应用后，重启服务使 Core 和 Settings 使用新语言。**开发者选项**可即时启用详细日志，并打开 `%LOCALAPPDATA%/Fcitx5/logs`。日志自动轮转，按 30 天期限及容量上限清理，详见[开发诊断](docs/windows-developer-logging-design.md)。
+在**全局设置**的**常规**页选择 UI 语言并应用后，重启服务使 Core 和 Settings 使用新语言。**开发者选项**可即时启用详细日志，并打开 `%LOCALAPPDATA%/Fcitx5/logs`。日志自动轮转，最多保留 7 天、占用不超过 512 MiB，详见[开发诊断](docs/windows-developer-logging-design.md)。
 
 Sandboxie 使用前请按[宿主共享配置指南](docs/windows-sandboxie-design.md)放行 Pipe。现代应用的运行策略和验收边界见[现代应用支持](docs/windows-modern-apps-design.md)。CI/Nightly 安装包启用现代 TSF category，本地构建需显式传入 `-ModernApps`；更改 category 后需重新注册。AppContainer 菜单仅提供设置入口。
 

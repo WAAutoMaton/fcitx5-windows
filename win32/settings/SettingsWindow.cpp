@@ -266,7 +266,7 @@ void SettingsWindow::translateStatic() {
         .Text(tr("settings",
                  "Logs record connection, context, candidate counts "
                  "and layout metadata, never input text. Files are "
-                 "kept here for up to 30 days."));
+                 "kept here for up to 7 days, up to 512 MiB total."));
     root.FindName(L"LogFolderLabel")
         .as<TextBlock>()
         .Text(tr("settings", "Log folder"));

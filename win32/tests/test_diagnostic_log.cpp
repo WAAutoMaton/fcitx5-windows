@@ -29,6 +29,10 @@ std::string contents(const std::filesystem::path &directory) {
 } // namespace
 
 int main() {
+    diagnostic::Options defaults;
+    assert(defaults.retention == 7 * 24h);
+    assert(defaults.directoryBytes == 512U * 1024U * 1024U);
+
     wchar_t temp[MAX_PATH]{};
     assert(GetTempPathW(MAX_PATH, temp));
     const auto root =
@@ -84,16 +88,21 @@ int main() {
     options.directory = root / "retention";
     std::filesystem::create_directories(options.directory);
     const auto expired = options.directory / "core-20000101.log";
+    const auto retained = options.directory / "core-20261010.log";
     const auto foreign = options.directory / "core-not-ours.log";
     put(expired);
+    put(retained);
     put(foreign);
     std::filesystem::last_write_time(
-        expired, std::filesystem::file_time_type::clock::now() - 31 * 24h);
+        expired, std::filesystem::file_time_type::clock::now() - 8 * 24h);
+    std::filesystem::last_write_time(
+        retained, std::filesystem::file_time_type::clock::now() - 6 * 24h);
     {
         diagnostic::Logger logger("core", {}, options);
         logger.maintain();
         assert(logger.flush(5s));
         assert(!std::filesystem::exists(expired));
+        assert(std::filesystem::exists(retained));
         assert(std::filesystem::exists(foreign));
     }
 
