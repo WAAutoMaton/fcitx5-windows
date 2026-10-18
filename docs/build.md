@@ -113,6 +113,14 @@ For individual Core, TSF and Settings builds, see the
 CMake build does not build/deploy libime, chinese-addons, TSF, Settings or input
 method data.
 
+## Independent Input-Method Plugins
+
+Additional input methods can use the existing shared-library addon loader and
+the SDK from the installed Core/libime staging prefix. See
+[Windows plugins](windows-plugins.md) for the directory layout, ABI requirements,
+the generic addon toolchain and the isolated addon probe. Plugin-specific build
+and packaging instructions belong in each plugin's own repository.
+
 ## Developer Logging
 
 In Settings, open **Global Settings > Developer options** and enable detailed

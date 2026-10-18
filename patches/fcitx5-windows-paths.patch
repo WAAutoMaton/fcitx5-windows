@@ -1,8 +1,43 @@
 diff --git a/src/lib/fcitx-utils/standardpaths_p_win.cpp b/src/lib/fcitx-utils/standardpaths_p_win.cpp
-index c9d6942..5db3c42 100644
+index c9d6942..6251083 100644
 --- a/src/lib/fcitx-utils/standardpaths_p_win.cpp
 +++ b/src/lib/fcitx-utils/standardpaths_p_win.cpp
-@@ -176,11 +176,11 @@ std::vector<std::filesystem::path> builtinPath(
+@@ -19,6 +19,7 @@
+ #include <knownfolders.h>
+ #include <ranges>
+ #include "fcitx-utils/fcitxutils_export.h"
++#include "fcitx-utils/environ.h"
+ #include "fcitx-utils/fs.h"
+ #include "fcitx-utils/standardpaths.h"
+ #include "fcitx-utils/stringutils.h"
+@@ -156,6 +157,26 @@ std::vector<std::filesystem::path> builtinPath(
+         return *path;
+     }
+
++    const std::unordered_map<std::string_view, const char *> environment = {
++        {"addondir", "FCITX_ADDON_DIRS"},
++        {"datadir", "XDG_DATA_DIRS"},
++        {"pkgdatadir", "FCITX_DATA_DIRS"},
++    };
++    if (auto *name = findValue(environment, std::string_view(builtInPathType))) {
++        std::vector<std::filesystem::path> paths;
++        for (const auto &value :
++             stringutils::split(getEnvironmentOrEmpty(*name), ";")) {
++            auto path = std::filesystem::path(std::u8string(
++                reinterpret_cast<const char8_t *>(value.c_str())));
++            if (path.is_absolute()) {
++                paths.push_back(std::move(path));
++            }
++        }
++        if (!paths.empty()) {
++            return paths;
++        }
++    }
++
+     static const std::filesystem::path defaultBasePath = []() {
+         auto filename = appFileName();
+         auto parent = filename.parent_path();
+@@ -176,11 +197,11 @@ std::vector<std::filesystem::path> builtinPath(
          {"basedir", basePath},
          {"configdir", basePath / "config"},
          {"pkgconfigdir", basePath / "config/fcitx5"},

@@ -5,6 +5,7 @@
 #include "windowsfrontend.h"
 #include "windowskeyboard.h"
 #include "windowslogging.h"
+#include "windowsplugins.h"
 #include <fcitx-utils/environ.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
@@ -39,16 +40,7 @@ void setupEnv() {
     }
     path.resize(length);
     auto rootPath = ::fs::path(path).parent_path().parent_path();
-    if (!SetDllDirectoryW((rootPath / "bin").c_str())) {
-        throw std::runtime_error("Cannot set the Core runtime DLL directory");
-    }
-    auto fcitx_addon_dirs = rootPath / "lib" / "fcitx5";
-    setenv("FCITX_ADDON_DIRS", fcitx_addon_dirs.string());
-    auto xdg_data_dirs = rootPath / "share";
-    auto fcitx_data_dirs = xdg_data_dirs / "fcitx5";
-    setenv("XDG_DATA_DIRS", xdg_data_dirs.string());
-    setenv("FCITX_DATA_DIRS", fcitx_data_dirs.string());
-    setenv("LIBIME_MODEL_DIRS", (rootPath / "lib" / "libime").string());
+    win32::setupPluginEnvironment(rootPath, win32::pluginPrefixes(rootPath));
 }
 
 void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,

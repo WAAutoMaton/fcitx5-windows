@@ -13,6 +13,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 - 提供 Windows 输入法指示器，显示当前输入法的图标或简短标签，提示文本显示具体名称；英文键盘显示 `A`。左键点击按同一输入法列表轮换。
 - 设置支持添加、删除和排序已安装的输入法，提供拼音/双拼共享选项、八种内置双拼方案及码表引擎选项。随包提供的码表条目包括五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风和自然码；条目是否可用取决于已安装的引擎和码表数据。
 - 显示第三方拼音词库加载状态，并自动重新加载词库。
+- 支持独立构建和安装输入法 DLL 插件。
 - 支持简体中文、繁体中文和英文 UI，可在全局设置中选择跟随系统；Core/Settings 的语言在重启服务后生效，原生菜单和关于窗口通过后台刷新更新。
 - 引擎按键列表选项支持快捷键录制，也可手动编辑文本。
 - 可选的结构化开发日志覆盖 Core、TSF、Settings 及 Settings 退出/异常诊断，不记录输入文本。
@@ -47,6 +48,29 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 该脚本会初始化固定版本的子模块、应用 Windows 补丁、构建 AMD64 Release 版 Core、TSF、安装 helper 和 Settings，运行默认 TSF CTest 测试集，并部署到 `dist/pinyin`。脚本使用经过校验和验证的预编译词典/模型数据，并在后续运行中复用构建缓存。
 
 脚本不会安装工具或运行库，也不会注册输入法。更新已有部署前，请选择`关闭服务`并关闭加载其 DLL 的应用程序。自定义路径、单独构建和集成检查请参阅[构建选项和部署详情](docs/build.md)。
+
+## 输入法插件
+
+输入法可作为独立 DLL 插件安装，无需加入 Core 工程重新编译。现有 `chinese-addons` 继续随 Core 统一构建部署。
+
+### 安装与启用
+
+插件可安装到以下任一位置：
+
+| 位置 | 用途 |
+| --- | --- |
+| `%LOCALAPPDATA%/Fcitx5/plugins` | 当前用户安装，无需管理员权限，与 Core 安装目录分离 |
+| `<Core 安装目录>/plugins` | 随安装树一起保存的便携部署；安装目录是包含 `bin/Fcitx5.exe` 的目录 |
+
+1. 在输入法指示器右键菜单中选择 `关闭服务`。
+2. 将插件包中的 `bin`、`lib`、`share` 合并到选定位置，保留各自的目录结构。引擎 DLL 位于 `plugins/lib/fcitx5`，私有依赖 DLL 位于 `plugins/bin`，资源位于相应的 `lib` 或 `share` 子目录。多个插件共用该目录树，不再增加以插件名命名的中间目录。
+3. 选择 `重启服务`，打开 `输入法设置`，将新输入法加入已启用列表并调整顺序。之后使用 `Ctrl+Space` 或左键点击指示器切换。
+
+更新或移除插件前也应关闭服务，完成后重启。移除时只删除该插件自身的文件，保留其他插件共用的目录。当前不支持插件热加载或热卸载。
+
+### 兼容要求
+
+各插件的构建和打包方法见其自身仓库。插件必须匹配 Core 的架构、Fcitx5/libime 版本、Windows 补丁及 Clang Windows GNU 工具链和运行库；Linux/macOS 插件或其他工具链生成的 DLL 不能直接使用。插件应共享宿主提供的 Core/libime 公共运行库，避免覆盖它们。目前尚无在线插件管理器或自动 ABI 校验。完整文件布局、依赖要求和隔离验证见 [Windows 插件指南](docs/windows-plugins.md)。
 
 ## 运行
 
@@ -88,6 +112,7 @@ Sandboxie 使用前请按[宿主共享配置指南](docs/windows-sandboxie-desig
 - [构建、部署与验证](docs/build.md)
 - [Windows 安装实现与验证边界](docs/windows-installer-design.md)
 - [输入法架构、单独构建与验证限制](docs/pinyin.md)
+- [Windows 输入法插件设计与独立构建](docs/windows-plugins.md)
 - [Windows 设置设计](docs/windows-settings-design.md)
 - [候选窗渲染与 DPI 验证](docs/windows-candidate-rendering.md)
 - [UI 语言与国际化](docs/windows-ui-localization-design.md)

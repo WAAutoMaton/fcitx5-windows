@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.27)
+project(fcitx5-windows-addon-probe LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+find_package(Fcitx5Core 5.1.13 REQUIRED)
+add_executable(addon_probe main.cpp ../../src/windowsplugins.cpp)
+target_link_libraries(addon_probe PRIVATE Fcitx5::Core shell32 ole32)
+target_compile_options(addon_probe PRIVATE -fexperimental-library)
+install(TARGETS addon_probe RUNTIME DESTINATION bin)

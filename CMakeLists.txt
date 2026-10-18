@@ -34,8 +34,8 @@ set(ENV{PKG_CONFIG_PATH} "${CMAKE_SYSROOT}/lib/pkgconfig")
 add_compile_options(-fexperimental-library)
 
 add_subdirectory(fcitx5)
-target_compile_definitions(Fcitx5Utils PUBLIC -DFcitx5Utils_EXPORTS)
-target_compile_definitions(Fcitx5Core PUBLIC -DFcitx5Core_EXPORTS)
+target_compile_definitions(Fcitx5Utils PRIVATE -DFcitx5Utils_EXPORTS)
+target_compile_definitions(Fcitx5Core PRIVATE -DFcitx5Core_EXPORTS)
 
 add_subdirectory(src)
 include(cmake/windows-translations.cmake)

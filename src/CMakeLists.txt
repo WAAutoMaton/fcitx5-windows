@@ -4,6 +4,7 @@ add_executable(Fcitx5
     ../win32/ipc/diagnostic_log.cpp
     windowsfrontend.cpp
     windowslogging.cpp
+    windowsplugins.cpp
     windowssettings.cpp
     windowsinputmethods.cpp
     windowsdictionaries.cpp

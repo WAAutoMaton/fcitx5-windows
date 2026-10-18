@@ -26,6 +26,7 @@ and Nightly release workflow.
   Erbi, Bingchan, Wanfeng and Ziranma; an entry is available when its engine and
   table data are installed.
 - Third-party Pinyin dictionary loading status and automatic dictionary reload.
+- Independently built and installed input-method DLL plugins.
 - Simplified Chinese, Traditional Chinese and English UI, with a system-language
   option in Global Settings. Engine/UI language changes take effect after a
   service restart; native menus and About refresh in the background.
@@ -94,6 +95,41 @@ updating an existing deployment, choose `Stop Services` and close applications l
 its DLL. See [build options and deployment details](docs/build.md) for custom
 paths, individual builds and integration checks.
 
+## Input-Method Plugins
+
+Input methods can be built and installed as independent DLL plugins without
+adding them to the Core project. Existing `chinese-addons` continue to be built
+and deployed alongside Core.
+
+### Install and Enable
+
+Choose either plugin location:
+
+| Location | Purpose |
+| --- | --- |
+| `%LOCALAPPDATA%/Fcitx5/plugins` | Current-user installation without administrator privileges, separate from the Core installation |
+| `<Core installation>/plugins` | Portable deployment within the installation tree; the Core installation is the directory containing `bin/Fcitx5.exe` |
+
+1. Choose `Stop Services` from the input-method indicator's context menu.
+2. Merge the plugin package's `bin`, `lib` and `share` directories into the chosen location, preserving their structure. Engine DLLs belong in `plugins/lib/fcitx5`, private dependency DLLs in `plugins/bin`, and resources in their corresponding `lib` or `share` subdirectories. Plugins share this tree; do not add an intermediate directory named after the plugin.
+3. Choose `Restart Services`, open `Input Method Settings`, and add the new input method to the enabled list. Adjust its order, then switch with `Ctrl+Space` or by left-clicking the indicator.
+
+Stop services before updating or removing a plugin, then restart afterward.
+When removing a plugin, delete only its own files and retain directories shared
+with other plugins. Loading and unloading plugins require a Core restart.
+
+### Compatibility
+
+Follow each plugin's own repository for build and packaging instructions.
+Plugins must match Core's architecture, Fcitx5/libime versions, Windows patches,
+Clang Windows GNU toolchain
+and runtime libraries. Linux/macOS plugins and DLLs built with other toolchains
+cannot be used directly. Plugins should share the host's public Core/libime
+runtime libraries and avoid overwriting them. An online plugin manager and
+automatic ABI checks are not yet available. See the
+[Windows plugin guide](docs/windows-plugins.md) for the complete layout,
+dependencies and isolated validation steps.
+
 ## Run
 
 For a development deployment, register the input method:
@@ -156,6 +192,7 @@ for previews, alternate paths and troubleshooting.
 - [Build, deployment and validation](docs/build.md)
 - [Windows installer implementation and validation limits](docs/windows-installer-design.md)
 - [Input-method architecture, individual builds and validation limits](docs/pinyin.md)
+- [Independent Windows input-method plugins and SDK builds](docs/windows-plugins.md)
 - [Windows settings design](docs/windows-settings-design.md)
 - [Candidate rendering and DPI validation](docs/windows-candidate-rendering.md)
 - [UI language and localization](docs/windows-ui-localization-design.md)
