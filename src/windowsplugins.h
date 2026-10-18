@@ -5,6 +5,8 @@
 
 namespace fcitx::win32 {
 
+// Discover direct package directories, retaining each legacy shared prefix
+// first.
 std::vector<std::filesystem::path>
 pluginPrefixes(const std::filesystem::path &installation);
 

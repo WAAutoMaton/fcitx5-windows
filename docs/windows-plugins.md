@@ -20,31 +20,36 @@ Windows 使用 PE DLL、导入库与 Windows GNU C++ 运行库；不能套用 ma
 
 ## 目录与发现
 
-启动时依次加入这些前缀：
+每个插件发布包使用一个独立目录，目录内部保留标准安装前缀的 `bin`、`lib` 和 `share` 布局。一个包可以包含多个 addon，无需按 addon 拆分目录。Core 启动时依次加入这些前缀：
 
 1. Core 安装目录，保持现有 `bin`、`lib/fcitx5`、`share` 和 `lib/libime`。
-2. `<Core 安装目录>/plugins`，用于便携部署。
-3. `%LOCALAPPDATA%/Fcitx5/plugins`，用于不需管理员权限、与 Core 安装目录分离的插件安装。
+2. `<Core 安装目录>/plugins/<插件包名>`，用于便携部署。
+3. `%LOCALAPPDATA%/Fcitx5/plugins/<插件包名>`，用于不需管理员权限、与 Core 安装目录分离的插件安装。
 
-每个插件安装到上述插件前缀的共同目录树，**不是** `plugins/<插件名>`。通用的运行时文件布局为：
+插件包名用于组织文件，不必与 addon 名称或输入法 ID 相同。通用的运行时文件布局为：
 
 ```text
 plugins/
-  bin/<私有依赖>.dll
-  lib/fcitx5/<引擎库>.dll
-  lib/libime/<语言模型>.lm
-  lib/libime/<语言模型>.lm.predict
-  share/fcitx5/addon/<addon名>.conf
-  share/fcitx5/inputmethod/<输入法ID>.conf
-  share/<插件资源目录>/...
-  share/locale/<语言>/LC_MESSAGES/<翻译域>.mo
+  <插件包名>/
+    bin/<私有依赖>.dll
+    lib/fcitx5/<引擎库>.dll
+    lib/libime/<语言模型>.lm
+    lib/libime/<语言模型>.lm.predict
+    share/fcitx5/addon/<addon名>.conf
+    share/fcitx5/inputmethod/<输入法ID>.conf
+    share/<插件资源目录>/...
+    share/locale/<语言>/LC_MESSAGES/<翻译域>.mo
 ```
+
+只扫描两个 `plugins` 目录的直接子目录，不递归发现嵌套插件。子目录包含 `bin`、`lib` 或 `share` 目录之一时才作为插件前缀；因此也支持只提供资源的包，缺少 DLL 的插件仍可被发现并显示为不可用。`bin`、`lib` 和 `share` 是保留目录名（不区分大小写），不会作为插件包目录。缺失或无法访问的目录跳过；同一位置的插件按目录名的路径字典序排序，使搜索顺序固定。
+
+兼容旧的 `plugins/bin`、`plugins/lib` 和 `plugins/share` 共用布局。每个位置先加入旧布局前缀，再加入该位置的独立插件目录：完整顺序是 Core、安装目录的旧布局、安装目录的独立插件、用户目录的旧布局、用户目录的独立插件。新包应使用独立目录。迁移旧包时，先关闭服务，将该包拥有的文件移入独立目录并移除旧副本；不自动搬迁无法确定归属的旧文件，也不应长期保留同一插件的两份副本。
 
 `FCITX_ADDON_DIRS`、`FCITX_DATA_DIRS`、`XDG_DATA_DIRS` 和 `LIBIME_MODEL_DIRS` 使用分号分隔的绝对路径，由 Core 根据安装位置重新生成。Windows 路径层仍保留原有用户配置、用户词库和内置路径规则；这些变量用于内置搜索前缀，不改变用户数据写入位置。既有用户数据路径在系统资源路径之前，新增前缀之间按上面的顺序查找。相同 addon 名称及数据相对路径应视为冲突，插件不应覆盖内置文件。
 
-Core 使用 `AddDllDirectory` 加入存在的插件 `bin` 目录，并启用相应的 DLL 搜索模式，供 addon 的私有依赖使用。主程序及已经加载的 Core 运行库继续共享；不同插件的私有 DLL 应使用不同文件名。Windows 不保证多个 `AddDllDirectory` 目录之间的搜索顺序，不能靠目录顺序解决 DLL 同名冲突。
+Core 使用 `AddDllDirectory` 加入存在的插件 `bin` 目录，并启用相应的 DLL 搜索模式，供 addon 的私有依赖使用。独立目录便于管理文件，不提供进程或依赖命名空间隔离：addon ID、资源相对路径和翻译域仍应避免冲突。主程序及已经加载的 Core 运行库继续共享；不同插件的私有 DLL 应使用不同文件名。Windows 不保证多个 `AddDllDirectory` 目录之间的搜索顺序，不能靠目录顺序解决 DLL 同名冲突。
 
-安装、升级或移除插件后重启 Core，再在 Settings 的输入法列表启用条目。当前不实现 DLL 热卸载。已有 Settings 会枚举 addon 的输入法、可用状态及配置描述；符合上游接口的输入法可使用通用配置页和文字标签，不需要增加专用 IPC 或 TSF profile。
+安装、升级或移除插件前先关闭 Core 服务，完成后重启，再在 Settings 的输入法列表启用条目。独立插件可通过替换或删除其目录来更新或移除，用户配置和词库仍保存在原有用户数据目录。当前不实现 DLL 热卸载。已有 Settings 会枚举 addon 的输入法、可用状态及配置描述；符合上游接口的输入法可使用通用配置页和文字标签，不需要增加专用 IPC 或 TSF profile。
 
 ## ABI 与发布边界
 
@@ -54,13 +59,13 @@ SDK 是同一次 Core/libime 构建的安装前缀，包含头文件、导入库
 
 插件引用 SDK 中的共享库，不再静态链接一份 Core，也不分发 `libFcitx5*.dll`、`libIMECore.dll`、`libc++.dll` 等公共运行库。引擎使用其他 addon 时，应在 addon 描述中声明依赖，并确保宿主已安装相应模块。
 
-上游 addon 描述中的版本依赖会检查 Core 版本，但不能校验完整 Windows C++ ABI。目前是针对匹配 SDK 的本地插件能力，尚无自动 ABI 校验或在线插件管理器。面向公开分发时，建议增加宿主 SDK 标识以及包清单，记录架构、依赖、哈希和拥有的文件；安装器先验证兼容性和文件冲突，再合并目录，卸载时只移除该包拥有的文件。清单是部署层协议，不必改变上游 addon ABI。每个 Core ABI 更新应同时提供对应 SDK，并重建插件。
+上游 addon 描述中的版本依赖会检查 Core 版本，但不能校验完整 Windows C++ ABI。目前是针对匹配 SDK 的本地插件能力，尚无自动 ABI 校验或在线插件管理器。面向公开分发时，建议增加宿主 SDK 标识以及包清单，记录架构、依赖、哈希和拥有的文件；安装器先验证兼容性和名称冲突，再将包安装到独立目录，卸载时只移除该包拥有的文件。清单是部署层协议，不必改变上游 addon ABI。每个 Core ABI 更新应同时提供对应 SDK，并重建插件。
 
 ## 插件 SDK
 
 各插件在自身仓库维护构建脚本、平台适配和打包说明。主仓库提供通用的 `cmake/windows-addon-toolchain.cmake`，其 `FCITX5_WINDOWS_SDK` 参数指向匹配的 Core/libime SDK 安装前缀，例如统一构建生成的 `build/all/prefix`。SDK 需要包含头文件、导入库、模块公共接口、CMake package 和所需数据生成工具；仅有运行时文件的部署目录不能代替 SDK。
 
-插件应将私有共享库安装到 `bin`，将 addon DLL 安装到 `lib/fcitx5`，并通过运行时搜索路径读取资源。数据文件使用插件专用名称，避免与其他插件冲突。将包中的 `bin`、`lib` 和 `share` 合并到选定插件前缀后重启 Core。分发运行时包时可省略头文件、导入库、CMake 文件和数据转换工具，并附上引擎及数据许可。
+插件应将私有共享库安装到 `bin`，将 addon DLL 安装到 `lib/fcitx5`，并通过运行时搜索路径读取资源。数据文件使用插件专用名称，避免与其他插件冲突。将包中的 `bin`、`lib` 和 `share` 一起放入选定的 `plugins/<插件包名>` 目录后重启 Core；构建输出前缀内部的布局无需改变。分发运行时包时可省略头文件、导入库、CMake 文件和数据转换工具，并附上引擎及数据许可。
 
 ## 隔离验证
 
@@ -83,6 +88,12 @@ $keys = '<可产生候选的ASCII按键序列>'
 & "$sdk/bin/addon_probe.exe" "$sdk" "$plugin" "$method" "$keys"
 ```
 
-probe 禁用用户配置与词库读写，不创建 Pipe 服务或注册 TSF。最后一个参数可以是 `--absent` 或 `--unavailable`，分别验证没有安装描述文件、以及描述存在但缺 DLL/依赖/数据的情况。第二个参数使用 `--default` 可以检查 Core 的默认插件前缀。
+probe 禁用用户配置与词库读写，不创建 Pipe 服务或注册 TSF。最后一个参数可以是 `--absent` 或 `--unavailable`，分别验证没有安装描述文件、以及描述存在但缺 DLL/依赖/数据的情况。第二个参数显式指定的是单个插件前缀（包含 `bin`、`lib` 和 `share` 的目录），不会扫描其子目录。验证自动发现时，将包放入隔离 Core 树的 `plugins/<插件包名>`，并使用 `--default`：
+
+```powershell
+& "$sdk/bin/addon_probe.exe" "$sdk" --default "$method" "$keys"
+```
+
+目录发现回归测试与 probe 一起构建，可用 `ctest --test-dir build/addon-probe --output-on-failure` 运行；测试仅在临时目录创建数据，不修改已安装插件。
 
 通过 probe 代表资源发现、DLL 加载、配置读取和引擎候选提交通过，不能替代真实 Windows 应用中的 TSF 输入验收。安装器对用户插件的保留策略、完整插件包管理、ARM64 和跨版本二进制兼容性需要后续实现或验证。

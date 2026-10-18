@@ -41,16 +41,55 @@ void registerTranslations(const std::filesystem::path &locale) {
     }
 }
 
+bool isPluginPrefix(const std::filesystem::path &path) {
+    const auto name = path.filename().wstring();
+    for (const auto *reserved : {L"bin", L"lib", L"share"}) {
+        if (CompareStringOrdinal(name.c_str(), -1, reserved, -1, TRUE) ==
+            CSTR_EQUAL) {
+            return false;
+        }
+    }
+    for (const auto *subdirectory : {"bin", "lib", "share"}) {
+        std::error_code error;
+        if (std::filesystem::is_directory(path / subdirectory, error)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void appendPluginPrefixes(std::vector<std::filesystem::path> &prefixes,
+                          const std::filesystem::path &directory) {
+    // Keep the shared layout ahead of individual packages for compatibility.
+    prefixes.push_back(directory);
+    std::vector<std::filesystem::path> packages;
+    std::error_code error;
+    std::filesystem::directory_iterator entry(
+        directory, std::filesystem::directory_options::skip_permission_denied,
+        error);
+    const std::filesystem::directory_iterator end;
+    while (!error && entry != end) {
+        std::error_code statusError;
+        if (entry->is_directory(statusError) && isPluginPrefix(entry->path())) {
+            packages.push_back(entry->path());
+        }
+        entry.increment(error);
+    }
+    std::sort(packages.begin(), packages.end());
+    prefixes.insert(prefixes.end(), packages.begin(), packages.end());
+}
+
 } // namespace
 
 std::vector<std::filesystem::path>
 pluginPrefixes(const std::filesystem::path &installation) {
-    std::vector<std::filesystem::path> result{installation / "plugins"};
+    std::vector<std::filesystem::path> result;
+    appendPluginPrefixes(result, installation / "plugins");
     PWSTR local = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,
                                        KF_FLAG_DONT_VERIFY, nullptr, &local))) {
-        result.emplace_back(std::filesystem::path(local) / "Fcitx5" /
-                            "plugins");
+        appendPluginPrefixes(result, std::filesystem::path(local) / "Fcitx5" /
+                                         "plugins");
         CoTaskMemFree(local);
     }
     return result;

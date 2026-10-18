@@ -12,6 +12,9 @@
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <windows.h>
 
 namespace {
 class ProbeContext final : public fcitx::InputContext {
@@ -31,13 +34,23 @@ class ProbeContext final : public fcitx::InputContext {
     void updatePreeditImpl() override {}
 };
 
-std::filesystem::path path(const char *value) {
-    return std::filesystem::path(
-        std::u8string(reinterpret_cast<const char8_t *>(value)));
+std::string utf8(const wchar_t *value) {
+    const auto size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value,
+                                          -1, nullptr, 0, nullptr, nullptr);
+    if (!size) {
+        throw std::runtime_error("Cannot convert a probe argument to UTF-8");
+    }
+    std::string result(size, '\0');
+    if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1,
+                             result.data(), size, nullptr, nullptr)) {
+        throw std::runtime_error("Cannot convert a probe argument to UTF-8");
+    }
+    result.pop_back();
+    return result;
 }
 } // namespace
 
-int main(int argc, char **argv) {
+int wmain(int argc, wchar_t **argv) {
     try {
         if (argc != 5) {
             throw std::runtime_error(
@@ -48,11 +61,10 @@ int main(int argc, char **argv) {
         fcitx::setEnvironment("SKIP_FCITX_SYSTEM_PATH", "1");
         fcitx::setEnvironment("SKIP_FCITX_PATH", "0");
         fcitx::Log::setLogRule("*=3,key_trace=0");
-        const auto installation = path(argv[1]);
-        const auto plugins =
-            std::string_view(argv[2]) == "--default"
-                ? fcitx::win32::pluginPrefixes(installation)
-                : std::vector<std::filesystem::path>{path(argv[2])};
+        const auto installation = std::filesystem::path(argv[1]);
+        const auto plugins = std::wstring_view(argv[2]) == L"--default"
+                                 ? fcitx::win32::pluginPrefixes(installation)
+                                 : std::vector<std::filesystem::path>{argv[2]};
         fcitx::win32::setupPluginEnvironment(installation, plugins);
         fcitx::Instance instance(0, nullptr);
         fcitx::win32::WindowsKeyboardFactory keyboard;
@@ -60,8 +72,9 @@ int main(int argc, char **argv) {
         instance.addonManager().registerDefaultLoader(&registry);
         instance.initialize();
         auto &manager = instance.inputMethodManager();
-        const auto *entry = manager.entry(argv[3]);
-        const std::string_view keys(argv[4]);
+        const auto method = utf8(argv[3]);
+        const auto *entry = manager.entry(method);
+        const auto keys = utf8(argv[4]);
         if (keys == "--absent") {
             if (entry) {
                 throw std::runtime_error("Unexpected input method entry");
@@ -127,7 +140,7 @@ int main(int argc, char **argv) {
         }
         context.reset();
         context.focusOut();
-        std::cout << "PASS: " << argv[3]
+        std::cout << "PASS: " << method
                   << " discovered, DLL loaded, configuration read, candidate "
                      "committed ("
                   << context.commit.size() << " UTF-8 bytes)\n";
