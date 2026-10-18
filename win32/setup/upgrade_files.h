@@ -11,6 +11,10 @@ namespace fcitx::setup::upgrade {
 
 namespace fs = std::filesystem;
 
+namespace detail {
+bool trustedWritePrincipal(PSID sid);
+}
+
 class Handle {
   public:
     explicit Handle(HANDLE value = INVALID_HANDLE_VALUE) : value_(value) {}

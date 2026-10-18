@@ -1,6 +1,7 @@
 #include "../setup/upgrade_files.h"
 #include <cassert>
 #include <iostream>
+#include <sddl.h>
 
 namespace upgrade = fcitx::setup::upgrade;
 namespace fs = std::filesystem;
@@ -28,6 +29,32 @@ int wmain(int argc, wchar_t **argv) try {
         return 0;
     }
     assert(argc == 2);
+    assert(!upgrade::detail::trustedWritePrincipal(nullptr));
+    PSID trustedInstallerSid = nullptr;
+    assert(ConvertStringSidToSidW(
+        L"S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464",
+        &trustedInstallerSid));
+    assert(upgrade::detail::trustedWritePrincipal(trustedInstallerSid));
+    LocalFree(trustedInstallerSid);
+
+    BYTE systemSidBuffer[SECURITY_MAX_SID_SIZE]{};
+    DWORD systemSidSize = sizeof(systemSidBuffer);
+    assert(CreateWellKnownSid(WinLocalSystemSid, nullptr, systemSidBuffer,
+                              &systemSidSize));
+    assert(upgrade::detail::trustedWritePrincipal(systemSidBuffer));
+
+    BYTE administratorsSidBuffer[SECURITY_MAX_SID_SIZE]{};
+    DWORD administratorsSidSize = sizeof(administratorsSidBuffer);
+    assert(CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr,
+                              administratorsSidBuffer, &administratorsSidSize));
+    assert(upgrade::detail::trustedWritePrincipal(administratorsSidBuffer));
+
+    BYTE everyoneSidBuffer[SECURITY_MAX_SID_SIZE]{};
+    DWORD everyoneSidSize = sizeof(everyoneSidBuffer);
+    assert(CreateWellKnownSid(WinWorldSid, nullptr, everyoneSidBuffer,
+                              &everyoneSidSize));
+    assert(!upgrade::detail::trustedWritePrincipal(everyoneSidBuffer));
+
     const auto root =
         fs::temp_directory_path() /
         ("fcitx5-upgrade-files-" + std::to_string(GetCurrentProcessId()));

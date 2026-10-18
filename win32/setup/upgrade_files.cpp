@@ -6,11 +6,32 @@
 #include <atomic>
 #include <bcrypt.h>
 #include <cwctype>
+#include <memory>
 #include <sddl.h>
 #include <system_error>
 #include <utility>
 
 namespace fcitx::setup::upgrade {
+namespace detail {
+bool trustedWritePrincipal(PSID sid) {
+    if (!sid)
+        return false;
+    if (IsWellKnownSid(sid, WinLocalSystemSid) ||
+        IsWellKnownSid(sid, WinBuiltinAdministratorsSid))
+        return true;
+
+    static const auto trustedInstallerSid = [] {
+        constexpr wchar_t sidText[] =
+            L"S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+        PSID value = nullptr;
+        if (!ConvertStringSidToSidW(sidText, &value))
+            fail();
+        return std::unique_ptr<void, decltype(&LocalFree)>(value, LocalFree);
+    }();
+    return EqualSid(sid, trustedInstallerSid.get());
+}
+} // namespace detail
+
 namespace {
 void checkFile(HANDLE file) {
     BY_HANDLE_FILE_INFORMATION info{};
@@ -27,7 +48,7 @@ void rewind(HANDLE file) {
         fail();
 }
 
-bool trustedSid(PSID sid) {
+bool trustedOwnerSid(PSID sid) {
     return IsWellKnownSid(sid, WinLocalSystemSid) ||
            IsWellKnownSid(sid, WinBuiltinAdministratorsSid);
 }
@@ -207,7 +228,7 @@ void validateSecurity(const fs::path &path) {
         PSECURITY_DESCRIPTOR value;
         ~Local() { LocalFree(value); }
     } lifetime{descriptor};
-    if (!acl || !owner || !trustedSid(owner))
+    if (!acl || !owner || !trustedOwnerSid(owner))
         fail(ERROR_ACCESS_DENIED);
     constexpr DWORD writes = FILE_WRITE_DATA | FILE_APPEND_DATA |
                              FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES | DELETE |
@@ -222,7 +243,7 @@ void validateSecurity(const fs::path &path) {
             continue;
         if (ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
             (ace->Mask & writes) &&
-            !trustedSid(const_cast<DWORD *>(&ace->SidStart)))
+            !detail::trustedWritePrincipal(const_cast<DWORD *>(&ace->SidStart)))
             fail(ERROR_ACCESS_DENIED);
         if (ace->Header.AceType == ACCESS_ALLOWED_OBJECT_ACE_TYPE ||
             ace->Header.AceType == ACCESS_ALLOWED_CALLBACK_ACE_TYPE)
