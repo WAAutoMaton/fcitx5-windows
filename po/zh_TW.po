@@ -14,6 +14,26 @@ msgstr ""
 
 #: win32/settings/SettingsWindow.cpp:68
 msgctxt "settings"
+msgid "Plugins"
+msgstr "外掛程式"
+
+msgctxt "settings"
+msgid "Open Personal Plugin Folder"
+msgstr "開啟個人外掛程式目錄"
+
+msgctxt "settings"
+msgid "Not loaded"
+msgstr "未載入"
+
+msgctxt "settings"
+msgid "No plugins"
+msgstr "沒有外掛程式"
+
+msgctxt "settings"
+msgid "Cannot open the plugin folder."
+msgstr "無法開啟外掛程式目錄。"
+
+msgctxt "settings"
 msgid "Developer options"
 msgstr "開發者選項"
 

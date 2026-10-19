@@ -5,7 +5,7 @@
 int wmain(int argc, wchar_t **argv) {
     namespace ipc = fcitx::win32::ipc;
     namespace i18n = fcitx::win32::i18n;
-    if (argc != 2)
+    if (argc != 2 && argc != 3)
         return 1;
     const std::filesystem::path file(argv[1]);
     ipc::GlobalSettings saved;
@@ -126,6 +126,29 @@ int wmain(int argc, wchar_t **argv) {
                 reply.payload = ipc::encodeMethodConfig(description);
                 break;
             }
+            case ipc::MessageType::GetPlugins:
+                reply.type = ipc::MessageType::PluginsReply;
+                reply.payload = ipc::encodePluginsReply(
+                    {"C:/isolated-test/plugins",
+                     {{"loaded", "Loaded plugin", "Plugin description", "1.2.3",
+                       "test-library", ipc::PluginStatus::Loaded},
+                      {"pending",
+                       "On-demand plugin",
+                       {},
+                       "1.0.0",
+                       "pending-library",
+                       ipc::PluginStatus::NotLoaded},
+                      {"disabled",
+                       "Disabled plugin",
+                       {},
+                       "1.0.0",
+                       "disabled-library",
+                       ipc::PluginStatus::Disabled}}});
+                if (argc == 3 &&
+                    std::wstring_view(argv[2]) == L"--empty-plugins")
+                    reply.payload = ipc::encodePluginsReply(
+                        {"C:/isolated-test/plugins", {}});
+                break;
             case ipc::MessageType::GetDictionaries:
                 reply.type = ipc::MessageType::DictionariesReply;
                 reply.payload = ipc::encodeDictionariesReply(

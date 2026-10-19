@@ -55,6 +55,7 @@ class PipeClient {
     bool setGlobalSettings(const ipc::GlobalSettings &settings,
                            ipc::GlobalSettingsReply &reply);
     bool getDictionaries(ipc::DictionariesReply &reply);
+    bool getPlugins(ipc::PluginsReply &reply);
     bool setSettings(const ipc::PinyinSettings &settings,
                      ipc::SettingsReply &reply);
     bool openSettings(ipc::SettingsReply &reply);

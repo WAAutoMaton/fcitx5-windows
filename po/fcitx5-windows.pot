@@ -19,6 +19,26 @@ msgstr ""
 
 #: win32/settings/SettingsWindow.cpp:68
 msgctxt "settings"
+msgid "Plugins"
+msgstr ""
+
+msgctxt "settings"
+msgid "Open Personal Plugin Folder"
+msgstr ""
+
+msgctxt "settings"
+msgid "Not loaded"
+msgstr ""
+
+msgctxt "settings"
+msgid "No plugins"
+msgstr ""
+
+msgctxt "settings"
+msgid "Cannot open the plugin folder."
+msgstr ""
+
+msgctxt "settings"
 msgid "Developer options"
 msgstr ""
 

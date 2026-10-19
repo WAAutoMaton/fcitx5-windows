@@ -46,6 +46,8 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     const ipc::InputMethodInfo *method(const std::string &id) const;
     winrt::fire_and_forget refreshDictionaries();
     winrt::fire_and_forget openDictionaryFolder();
+    winrt::fire_and_forget refreshPlugins();
+    winrt::fire_and_forget openPluginFolder();
     winrt::fire_and_forget refreshLogStatus(bool openFolder = false);
     void busy(bool enabled);
     winrt::Microsoft::UI::Xaml::Window window_{nullptr};
@@ -85,6 +87,12 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
         nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock dictionaryStatus_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button dictionaryFolder_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ListView plugins_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock pluginDirectory_{nullptr},
+        pluginStatus_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button pluginFolder_{nullptr};
+    ipc::PluginsReply pluginReply_;
+    bool pluginRefresh_ = false;
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer timer_{nullptr};
     ipc::DictionariesReply dictionaryReply_;
     bool dictionaryRefresh_ = false;

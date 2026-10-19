@@ -93,7 +93,7 @@ DetailedLogging=false
 
 ## IPC 扩展
 
-当前协议为 v10，Core、TSF 和 Settings 同步更新。`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId=0`。语言请求始于 v7，v10 增加详细日志字段；以下为当前相关字段。AppContainer 仅允许读取，不允许 `SetGlobalSettings`。
+当前协议为 v11，Core、TSF 和 Settings 同步更新。`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId=0`。语言请求始于 v7，v10 增加详细日志字段，v11 增加独立的只读插件查询；以下为当前相关字段。AppContainer 仅允许读取，不允许 `SetGlobalSettings`。
 
 ```cpp
 enum class UiLanguage : uint8_t {

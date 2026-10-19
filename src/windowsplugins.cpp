@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <fcitx-utils/environ.h>
 #include <fcitx-utils/i18n.h>
+#include <memory>
 #include <shlobj.h>
 #include <stdexcept>
 #include <string>
@@ -81,16 +82,51 @@ void appendPluginPrefixes(std::vector<std::filesystem::path> &prefixes,
 
 } // namespace
 
+std::filesystem::path userPluginDirectory() {
+    PWSTR local = nullptr;
+    const auto result = SHGetKnownFolderPath(
+        FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr, &local);
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> directory(
+        local, &CoTaskMemFree);
+    return SUCCEEDED(result)
+               ? std::filesystem::path(directory.get()) / "Fcitx5" / "plugins"
+               : std::filesystem::path{};
+}
+
+ipc::PluginsReply pluginSnapshot(AddonManager &manager) {
+    ipc::PluginsReply reply;
+    reply.directory = utf8(userPluginDirectory());
+    for (auto category :
+         {AddonCategory::InputMethod, AddonCategory::Frontend,
+          AddonCategory::Loader, AddonCategory::Module, AddonCategory::UI}) {
+        for (const auto &id : manager.addonNames(category)) {
+            const auto *info = manager.addonInfo(id);
+            if (!info) {
+                continue;
+            }
+            // Inspect the existing instance without triggering on-demand loads.
+            const auto status =
+                manager.lookupAddon(id) ? ipc::PluginStatus::Loaded
+                : info->isEnabled()     ? ipc::PluginStatus::NotLoaded
+                                        : ipc::PluginStatus::Disabled;
+            reply.plugins.push_back(
+                {id, info->name().match(), info->comment().match(),
+                 info->version().toString(), info->library(), status});
+        }
+    }
+    std::sort(
+        reply.plugins.begin(), reply.plugins.end(),
+        [](const auto &left, const auto &right) { return left.id < right.id; });
+    return reply;
+}
+
 std::vector<std::filesystem::path>
 pluginPrefixes(const std::filesystem::path &installation) {
     std::vector<std::filesystem::path> result;
     appendPluginPrefixes(result, installation / "plugins");
-    PWSTR local = nullptr;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,
-                                       KF_FLAG_DONT_VERIFY, nullptr, &local))) {
-        appendPluginPrefixes(result, std::filesystem::path(local) / "Fcitx5" /
-                                         "plugins");
-        CoTaskMemFree(local);
+    const auto user = userPluginDirectory();
+    if (!user.empty()) {
+        appendPluginPrefixes(result, user);
     }
     return result;
 }

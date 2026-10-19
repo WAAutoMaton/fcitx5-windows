@@ -5,6 +5,7 @@
 #include "../win32/ipc/service.h"
 #include "../win32/ipc/transport.h"
 #include "windowslogging.h"
+#include "windowsplugins.h"
 #include <algorithm>
 #include <chrono>
 #include <fcitx-utils/key.h>
@@ -684,6 +685,11 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             ipc::encodeMethodConfig(settings_.methodConfig(config.id, error));
         break;
     }
+    case MessageType::GetPlugins:
+        response.type = MessageType::PluginsReply;
+        response.payload =
+            ipc::encodePluginsReply(pluginSnapshot(instance_.addonManager()));
+        break;
     case MessageType::GetDictionaries: {
         response.type = MessageType::DictionariesReply;
         const auto dictionaries = dictionaries_.snapshot();

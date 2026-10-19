@@ -14,6 +14,26 @@ msgstr ""
 
 #: win32/settings/SettingsWindow.cpp:68
 msgctxt "settings"
+msgid "Plugins"
+msgstr "插件"
+
+msgctxt "settings"
+msgid "Open Personal Plugin Folder"
+msgstr "打开个人插件目录"
+
+msgctxt "settings"
+msgid "Not loaded"
+msgstr "未加载"
+
+msgctxt "settings"
+msgid "No plugins"
+msgstr "没有插件"
+
+msgctxt "settings"
+msgid "Cannot open the plugin folder."
+msgstr "无法打开插件目录。"
+
+msgctxt "settings"
 msgid "Developer options"
 msgstr "开发者选项"
 

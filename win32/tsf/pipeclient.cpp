@@ -310,6 +310,13 @@ bool PipeClient::getDictionaries(ipc::DictionariesReply &reply) {
            ipc::decodeDictionariesReply(response.payload, reply);
 }
 
+bool PipeClient::getPlugins(ipc::PluginsReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::GetPlugins, 0, {}, response) &&
+           response.type == ipc::MessageType::PluginsReply &&
+           ipc::decodePluginsReply(response.payload, reply);
+}
+
 bool PipeClient::getGlobalSettings(ipc::GlobalSettingsReply &reply) {
     ipc::Frame response;
     return request(ipc::MessageType::GetGlobalSettings, 0, {}, response) &&

@@ -10,7 +10,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 10;
+constexpr uint16_t kVersion = 11;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -54,6 +54,8 @@ enum class MessageType : uint16_t {
     AuthenticateServer = 37,
     ServerIdentityReply = 38,
     CandidateAction = 39,
+    GetPlugins = 40,
+    PluginsReply = 41,
 };
 
 enum class CandidateAction : uint8_t { Select, Finalize, Abort };
@@ -140,6 +142,7 @@ constexpr bool globalSettingsRequest(MessageType type) {
            type == MessageType::GetSettings ||
            type == MessageType::SetSettings ||
            type == MessageType::GetDictionaries ||
+           type == MessageType::GetPlugins ||
            type == MessageType::GetInputMethods ||
            type == MessageType::SetInputMethods ||
            type == MessageType::GetMethodConfig ||
@@ -173,6 +176,25 @@ struct DictionariesReply {
     std::string error;
     std::vector<DictionaryInfo> dictionaries;
     bool operator==(const DictionariesReply &) const = default;
+};
+
+constexpr uint32_t kMaxPlugins = 4096;
+enum class PluginStatus : uint8_t { Loaded, NotLoaded, Disabled };
+
+struct PluginInfo {
+    std::string id;
+    std::string name;
+    std::string comment;
+    std::string version;
+    std::string library;
+    PluginStatus status = PluginStatus::NotLoaded;
+    bool operator==(const PluginInfo &) const = default;
+};
+
+struct PluginsReply {
+    std::string directory;
+    std::vector<PluginInfo> plugins;
+    bool operator==(const PluginsReply &) const = default;
 };
 
 constexpr uint32_t kMaxCandidates = 32;
@@ -473,6 +495,49 @@ inline bool decodeDictionariesReply(const std::vector<uint8_t> &payload,
         }
         dictionary.status = static_cast<DictionaryStatus>(status);
         result.dictionaries.push_back(std::move(dictionary));
+    }
+    if (reader.remaining()) {
+        return false;
+    }
+    reply = std::move(result);
+    return true;
+}
+
+inline std::vector<uint8_t> encodePluginsReply(const PluginsReply &reply) {
+    Writer writer;
+    writer.string(reply.directory);
+    writer.u32(static_cast<uint32_t>(reply.plugins.size()));
+    for (const auto &plugin : reply.plugins) {
+        writer.string(plugin.id);
+        writer.string(plugin.name);
+        writer.string(plugin.comment);
+        writer.string(plugin.version);
+        writer.string(plugin.library);
+        writer.u8(static_cast<uint8_t>(plugin.status));
+    }
+    return writer.take();
+}
+
+inline bool decodePluginsReply(const std::vector<uint8_t> &payload,
+                               PluginsReply &reply) {
+    Reader reader(payload.data(), payload.size());
+    PluginsReply result;
+    uint32_t count = 0;
+    if (!reader.string(result.directory) || !reader.u32(count) ||
+        count > kMaxPlugins || count > reader.remaining() / 21) {
+        return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        PluginInfo plugin;
+        uint8_t status = 0;
+        if (!reader.string(plugin.id) || !reader.string(plugin.name) ||
+            !reader.string(plugin.comment) || !reader.string(plugin.version) ||
+            !reader.string(plugin.library) || !reader.u8(status) ||
+            status > static_cast<uint8_t>(PluginStatus::Disabled)) {
+            return false;
+        }
+        plugin.status = static_cast<PluginStatus>(status);
+        result.plugins.push_back(std::move(plugin));
     }
     if (reader.remaining()) {
         return false;

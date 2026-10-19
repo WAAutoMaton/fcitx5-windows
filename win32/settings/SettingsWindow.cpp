@@ -31,7 +31,8 @@ using namespace winrt;
 using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
 namespace {
-HRESULT openDictionariesDirectory() {
+HRESULT openUserDirectory(REFKNOWNFOLDERID folder,
+                          const std::filesystem::path &relative) {
     const auto initialized = CoInitializeEx(
         nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (FAILED(initialized)) {
@@ -40,16 +41,15 @@ HRESULT openDictionariesDirectory() {
     struct Lifetime {
         ~Lifetime() { CoUninitialize(); }
     } lifetime;
-    PWSTR roaming = nullptr;
-    const auto result =
-        SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming);
+    PWSTR knownFolder = nullptr;
+    const auto result = SHGetKnownFolderPath(folder, 0, nullptr, &knownFolder);
     const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> directory(
-        roaming, &CoTaskMemFree);
+        knownFolder, &CoTaskMemFree);
     if (FAILED(result)) {
         return result;
     }
-    const auto path = std::filesystem::path(directory.get()) / L"Fcitx5" /
-                      L"pinyin" / L"dictionaries";
+    const auto path =
+        std::filesystem::path(directory.get()) / L"Fcitx5" / relative;
     std::error_code error;
     std::filesystem::create_directories(path, error);
     if (error) {
@@ -74,6 +74,17 @@ const char *dictionaryState(ipc::DictionaryStatus status) {
         return win32::i18n::mark("settings", "Disabled");
     default:
         return win32::i18n::mark("settings", "Loading");
+    }
+}
+
+const char *pluginState(ipc::PluginStatus status) {
+    switch (status) {
+    case ipc::PluginStatus::Loaded:
+        return win32::i18n::mark("settings", "Loaded");
+    case ipc::PluginStatus::Disabled:
+        return win32::i18n::mark("settings", "Disabled");
+    default:
+        return win32::i18n::mark("settings", "Not loaded");
     }
 }
 
@@ -255,6 +266,14 @@ void SettingsWindow::translateStatic() {
     root.FindName(L"GeneralTab")
         .as<TabViewItem>()
         .Header(box_value(tr("settings", "General")));
+    root.FindName(L"PluginTab")
+        .as<TabViewItem>()
+        .Header(box_value(tr("settings", "Plugins")));
+    root.FindName(L"OpenPluginFolderText")
+        .as<TextBlock>()
+        .Text(tr("settings", "Open Personal Plugin Folder"));
+    Automation::AutomationProperties::SetName(
+        pluginFolder_, tr("settings", "Open Personal Plugin Folder"));
     root.FindName(L"DeveloperTab")
         .as<TabViewItem>()
         .Header(box_value(tr("settings", "Developer options")));
@@ -339,6 +358,8 @@ void SettingsWindow::renderGlobal() {
         tr("settings", global_.settings.detailedLogging ? "Starting" : "Off"));
     operation.stage("log_status");
     refreshLogStatus();
+    if (globalPanel_.SelectedIndex() == 2)
+        refreshPlugins();
 }
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
@@ -565,6 +586,20 @@ bool SettingsWindow::open() {
     </StackPanel>
     </ScrollViewer>
     </TabViewItem>
+    <TabViewItem x:Name="PluginTab" Header="Plugins" IsClosable="False" AutomationProperties.AutomationId="PluginOptions">
+      <Grid Margin="0,16,0,0" RowSpacing="12">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Button x:Name="PluginFolder" HorizontalAlignment="Left" AutomationProperties.AutomationId="PluginFolder">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <FontIcon Glyph="&#xE8B7;" FontSize="16"/>
+            <TextBlock x:Name="OpenPluginFolderText" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Button>
+        <TextBlock x:Name="PluginDirectory" Grid.Row="1" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="12" AutomationProperties.AutomationId="PluginDirectory"/>
+        <TextBlock x:Name="PluginStatus" Grid.Row="2" TextWrapping="Wrap" AutomationProperties.AutomationId="PluginStatus" AutomationProperties.LiveSetting="Polite"/>
+        <ListView x:Name="Plugins" Grid.Row="3" SelectionMode="None" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="Plugins"/>
+      </Grid>
+    </TabViewItem>
   </TabView>
   </Grid>
   <TextBlock x:Name="Status" Grid.Row="1" Grid.ColumnSpan="2" TextWrapping="Wrap" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
@@ -596,6 +631,11 @@ bool SettingsWindow::open() {
     logDirectory_ = root.FindName(L"LogDirectory").as<TextBlock>();
     logStatus_ = root.FindName(L"LogStatus").as<TextBlock>();
     logFolder_ = root.FindName(L"LogFolder").as<Button>();
+    plugins_ = root.FindName(L"Plugins").as<ListView>();
+    pluginDirectory_ = root.FindName(L"PluginDirectory").as<TextBlock>();
+    pluginStatus_ = root.FindName(L"PluginStatus").as<TextBlock>();
+    pluginFolder_ = root.FindName(L"PluginFolder").as<Button>();
+    pluginFolder_.Click([this](auto &&, auto &&) { openPluginFolder(); });
     globalButton_.Click([this](auto &&, auto &&) { chooseGlobal(); });
     methods_.SelectionChanged([this](auto &&, auto &&) {
         if (!rendering_ && !working_) {
@@ -648,6 +688,8 @@ bool SettingsWindow::open() {
         win32::diagnostic::settingsLogger().event(
             win32::diagnostic::Level::Debug, "settings_tab_selected",
             {{"page", "global"}, {"index", globalPanel_.SelectedIndex()}});
+        if (page_ == PageKind::Global && globalPanel_.SelectedIndex() == 2)
+            refreshPlugins();
     });
     logFolder_.Click([this](auto &&, auto &&) { refreshLogStatus(true); });
     root.FindName(L"Cancel").as<Button>().Click([this](auto &&, auto &&) {
@@ -702,6 +744,8 @@ bool SettingsWindow::open() {
             }
             if (page_ == PageKind::Global && globalPanel_.SelectedIndex() == 1)
                 refreshLogStatus();
+            if (page_ == PageKind::Global && globalPanel_.SelectedIndex() == 2)
+                refreshPlugins();
         }
     });
     timer_.Start();
@@ -1559,7 +1603,8 @@ fire_and_forget SettingsWindow::openDictionaryFolder() try {
     HRESULT result = E_FAIL;
     co_await resume_background();
     try {
-        result = openDictionariesDirectory();
+        result =
+            openUserDirectory(FOLDERID_RoamingAppData, L"pinyin/dictionaries");
     } catch (...) {
         settings::diagnostic::exception("open_dictionary_folder");
     }
@@ -1574,6 +1619,108 @@ fire_and_forget SettingsWindow::openDictionaryFolder() try {
     }
 } catch (...) {
     settings::diagnostic::exception("open_dictionary_folder", true);
+    throw;
+}
+
+fire_and_forget SettingsWindow::refreshPlugins() try {
+    if (pluginRefresh_ || closed_)
+        co_return;
+    const auto lifetime = shared_from_this();
+    const apartment_context ui;
+    pluginRefresh_ = true;
+    ipc::PluginsReply reply;
+    bool connected = false;
+    co_await resume_background();
+    try {
+        PipeClient client({}, {}, &win32::diagnostic::settingsLogger());
+        connected = client.connect() && client.getPlugins(reply);
+    } catch (...) {
+        settings::diagnostic::exception("refresh_plugins");
+    }
+    co_await ui;
+    pluginRefresh_ = false;
+    if (closed_)
+        co_return;
+    if (!connected) {
+        plugins_.Items().Clear();
+        pluginReply_ = {};
+        pluginDirectory_.Text(L"");
+        pluginStatus_.Text(tr("settings", "Cannot connect to Core."));
+        pluginStatus_.Visibility(Visibility::Visible);
+        co_return;
+    }
+    pluginDirectory_.Text(to_hstring(reply.directory));
+    pluginStatus_.Text(reply.plugins.empty() ? tr("settings", "No plugins")
+                                             : L"");
+    pluginStatus_.Visibility(pluginStatus_.Text().empty()
+                                 ? Visibility::Collapsed
+                                 : Visibility::Visible);
+    if (reply == pluginReply_)
+        co_return;
+    plugins_.Items().Clear();
+    for (const auto &plugin : reply.plugins) {
+        Grid row;
+        ColumnDefinition nameColumn, stateColumn;
+        nameColumn.Width({1, GridUnitType::Star});
+        stateColumn.Width({1, GridUnitType::Auto});
+        row.ColumnDefinitions().Append(nameColumn);
+        row.ColumnDefinitions().Append(stateColumn);
+        row.ColumnSpacing(16);
+        row.Padding({0, 8, 0, 8});
+        StackPanel details;
+        details.Spacing(4);
+        TextBlock name, metadata, comment, state;
+        name.Text(to_hstring(plugin.name.empty() ? plugin.id : plugin.name));
+        name.TextWrapping(TextWrapping::Wrap);
+        metadata.Text(to_hstring(plugin.id + " | " + plugin.version + " | " +
+                                 plugin.library));
+        metadata.FontSize(12);
+        metadata.TextWrapping(TextWrapping::Wrap);
+        metadata.IsTextSelectionEnabled(true);
+        details.Children().Append(name);
+        details.Children().Append(metadata);
+        if (!plugin.comment.empty()) {
+            comment.Text(to_hstring(plugin.comment));
+            comment.FontSize(12);
+            comment.TextWrapping(TextWrapping::Wrap);
+            details.Children().Append(comment);
+        }
+        state.Text(tr("settings", pluginState(plugin.status)));
+        Grid::SetColumn(state, 1);
+        row.Children().Append(details);
+        row.Children().Append(state);
+        Automation::AutomationProperties::SetAutomationId(
+            row, to_hstring("plugin:" + plugin.id));
+        plugins_.Items().Append(row);
+    }
+    pluginReply_ = std::move(reply);
+} catch (...) {
+    settings::diagnostic::exception("refresh_plugins", true);
+    throw;
+}
+
+fire_and_forget SettingsWindow::openPluginFolder() try {
+    const auto lifetime = shared_from_this();
+    const apartment_context ui;
+    pluginFolder_.IsEnabled(false);
+    HRESULT result = E_FAIL;
+    co_await resume_background();
+    try {
+        result = openUserDirectory(FOLDERID_LocalAppData, L"plugins");
+    } catch (...) {
+        settings::diagnostic::exception("open_plugin_folder");
+    }
+    co_await ui;
+    if (!closed_) {
+        pluginFolder_.IsEnabled(true);
+        if (FAILED(result)) {
+            pluginStatus_.Text(
+                tr("settings", "Cannot open the plugin folder."));
+            pluginStatus_.Visibility(Visibility::Visible);
+        }
+    }
+} catch (...) {
+    settings::diagnostic::exception("open_plugin_folder", true);
     throw;
 }
 

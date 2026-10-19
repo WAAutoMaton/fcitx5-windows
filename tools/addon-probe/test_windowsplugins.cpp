@@ -1,6 +1,8 @@
 #include "../../src/windowsplugins.h"
 #include <algorithm>
 #include <fcitx-utils/environ.h>
+#include <fcitx/addonfactory.h>
+#include <fcitx/addoninstance.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -11,6 +13,15 @@
 
 namespace {
 namespace fs = std::filesystem;
+
+class TestFactory : public fcitx::AddonFactory {
+  public:
+    fcitx::AddonInstance *create(fcitx::AddonManager *) override {
+        ++created;
+        return new fcitx::AddonInstance;
+    }
+    unsigned created = 0;
+};
 
 void require(bool condition, const char *message) {
     if (!condition) {
@@ -62,6 +73,8 @@ void requirePaths(const char *variable, const std::vector<fs::path> &prefixes,
 
 int main() {
     try {
+        fcitx::setEnvironment("SKIP_FCITX_USER_PATH", "1");
+        fcitx::setEnvironment("SKIP_FCITX_SYSTEM_PATH", "1");
         TemporaryDirectory temporary;
         const auto installation = temporary.path / "Core with spaces";
         const auto plugins = installation / "plugins";
@@ -119,6 +132,49 @@ int main() {
         requirePaths("FCITX_DATA_DIRS", roots, "share/fcitx5");
         requirePaths("XDG_DATA_DIRS", roots, "share");
         requirePaths("LIBIME_MODEL_DIRS", roots, "lib/libime");
+        const auto descriptions = temporary.path / "addons";
+        fs::create_directories(descriptions);
+        for (const auto *id : {"loaded", "pending", "disabled"}) {
+            std::ofstream config(descriptions / (std::string(id) + ".conf"));
+            config << "[Addon]\nName=" << id
+                   << "\nComment=Test plugin\nVersion=1.2.3\nCategory=Module\n"
+                      "Type=StaticLibrary\nLibrary=test\nOnDemand="
+                   << (std::string(id) == "loaded" ? "False" : "True")
+                   << "\nEnabled="
+                   << (std::string(id) == "disabled" ? "False" : "True")
+                   << '\n';
+        }
+        TestFactory factory;
+        fcitx::StaticAddonRegistry registry{{"loaded", &factory},
+                                            {"pending", &factory},
+                                            {"disabled", &factory}};
+        fcitx::AddonManager manager(utf8(descriptions));
+        manager.registerDefaultLoader(&registry);
+        manager.load();
+        require(factory.created == 1, "Only the eager addon should load");
+        const auto snapshot = fcitx::win32::pluginSnapshot(manager);
+        require(snapshot.plugins.size() == 3 &&
+                    snapshot.directory ==
+                        utf8(fcitx::win32::userPluginDirectory()),
+                "Plugin snapshot or personal directory missing");
+        using fcitx::win32::ipc::PluginStatus;
+        require(snapshot.plugins[0].id == "disabled" &&
+                    snapshot.plugins[0].status == PluginStatus::Disabled &&
+                    snapshot.plugins[1].id == "loaded" &&
+                    snapshot.plugins[1].status == PluginStatus::Loaded &&
+                    snapshot.plugins[2].id == "pending" &&
+                    snapshot.plugins[2].status == PluginStatus::NotLoaded,
+                "Plugin status or deterministic ordering is wrong");
+        require(snapshot.plugins[1].version == "1.2.3" &&
+                    snapshot.plugins[1].library == "test" &&
+                    snapshot.plugins[1].comment == "Test plugin",
+                "Plugin metadata missing");
+        require(factory.created == 1 && !manager.lookupAddon("pending"),
+                "Inspecting plugins must not load on-demand addons");
+        require(manager.addon("pending", true) && factory.created == 2 &&
+                    fcitx::win32::pluginSnapshot(manager).plugins[2].status ==
+                        PluginStatus::Loaded,
+                "Snapshot did not reflect the current loaded instance");
         std::cout << "PASS: plugin discovery, legacy layout, ordering and "
                      "search paths\n";
         return 0;

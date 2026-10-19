@@ -14,7 +14,7 @@ int main() {
     assert(globalSettingsRequest(MessageType::StopServices));
     assert(globalSettingsRequest(MessageType::GetGlobalSettings));
     assert(globalSettingsRequest(MessageType::SetGlobalSettings));
-    assert(kVersion == 10);
+    assert(kVersion == 11);
     GlobalSettings global{UiLanguage::TraditionalChinese, 42, true};
     GlobalSettings restoredGlobal;
     assert(decodeGlobalSettings(encodeGlobalSettings(global), restoredGlobal) &&
@@ -174,6 +174,31 @@ int main() {
     dictionaries.dictionaries.resize(kMaxDictionaries + 1);
     assert(!decodeDictionariesReply(encodeDictionariesReply(dictionaries),
                                     restoredDictionaries));
+    assert(globalSettingsRequest(MessageType::GetPlugins));
+    PluginsReply plugins{
+        "C:/Users/test/Fcitx5/plugins",
+        {{"loaded", "Loaded plugin", "Description", "1.2.3", "library",
+          PluginStatus::Loaded},
+         {"pending", "On demand", {}, {}, {}, PluginStatus::NotLoaded},
+         {"disabled", "Disabled", {}, {}, {}, PluginStatus::Disabled}}};
+    PluginsReply restoredPlugins;
+    const auto pluginPayload = encodePluginsReply(plugins);
+    assert(decodePluginsReply(pluginPayload, restoredPlugins) &&
+           restoredPlugins == plugins);
+    for (size_t length = 0; length < pluginPayload.size(); ++length) {
+        assert(!decodePluginsReply(
+            {pluginPayload.begin(), pluginPayload.begin() + length},
+            restoredPlugins));
+        assert(restoredPlugins == plugins);
+    }
+    auto badPlugin = pluginPayload;
+    badPlugin.back() = 3;
+    assert(!decodePluginsReply(badPlugin, restoredPlugins));
+    badPlugin = pluginPayload;
+    badPlugin.push_back(0);
+    assert(!decodePluginsReply(badPlugin, restoredPlugins));
+    plugins.plugins.resize(kMaxPlugins + 1);
+    assert(!decodePluginsReply(encodePluginsReply(plugins), restoredPlugins));
     InputMethodsReply methods;
     methods.selection = {8, {"keyboard-us", "pinyin", "wbx"}};
     methods.methods = {

@@ -43,6 +43,7 @@ int main() {
                    type != ipc::MessageType::SetInputMethods &&
                    type != ipc::MessageType::SetMethodConfig &&
                    type != ipc::MessageType::GetDictionaries &&
+                   type != ipc::MessageType::GetPlugins &&
                    type != ipc::MessageType::GetMethodConfig);
         }
     }

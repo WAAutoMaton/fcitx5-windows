@@ -1,9 +1,14 @@
 #pragma once
 
+#include "../win32/ipc/protocol.h"
+#include <fcitx/addonmanager.h>
 #include <filesystem>
 #include <vector>
 
 namespace fcitx::win32 {
+
+std::filesystem::path userPluginDirectory();
+ipc::PluginsReply pluginSnapshot(AddonManager &manager);
 
 // Discover direct package directories, retaining each legacy shared prefix
 // first.
