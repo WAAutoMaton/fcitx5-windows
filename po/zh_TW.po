@@ -756,3 +756,24 @@ msgstr "五筆拼音"
 #~ msgctxt "settings"
 #~ msgid "Shuangpin"
 #~ msgstr "雙拼"
+
+
+msgctxt "settings"
+msgid "Shortcuts"
+msgstr "快捷鍵"
+
+msgctxt "settings"
+msgid "Switch input method"
+msgstr "切換輸入法"
+
+msgctxt "settings"
+msgid "Quick switch to input method {0}"
+msgstr "快速切換至第 {0} 個輸入法"
+
+msgctxt "settings"
+msgid "Quick switches follow the input method order. Missing or unavailable entries are ignored. Empty shortcuts disable the action."
+msgstr "快速切換依輸入法清單的順序。不存在或無法使用的項目將被忽略。清空快捷鍵可停用該操作。"
+
+msgctxt "settings"
+msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
+msgstr "快捷鍵無效或重複，請使用錄製功能選擇其他快捷鍵。"

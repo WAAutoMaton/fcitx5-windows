@@ -1,5 +1,6 @@
 #include "SettingsWindow.h"
 #include "../ipc/diagnostic_log.h"
+#include "../ipc/shortcuts.h"
 #include "../ipc/transport.h"
 #include "diagnostics.h"
 #include "keycapture.h"
@@ -62,6 +63,18 @@ HRESULT openUserDirectory(REFKNOWNFOLDERID folder,
     execute.nShow = SW_SHOWNORMAL;
     return ShellExecuteExW(&execute) ? S_OK
                                      : HRESULT_FROM_WIN32(GetLastError());
+}
+
+std::string keyListValue(const TextBox &text) {
+    auto value = to_string(text.Text());
+    std::replace(value.begin(), value.end(), '\r', '\n');
+    std::string result;
+    for (const auto &line : ipc::shortcutLines(value)) {
+        if (!result.empty())
+            result += '\n';
+        result += line;
+    }
+    return result;
 }
 
 const char *dictionaryState(ipc::DictionaryStatus status) {
@@ -263,6 +276,9 @@ void SettingsWindow::translateStatic() {
     root.FindName(L"LanguageLabel")
         .as<TextBlock>()
         .Text(tr("settings", "Language"));
+    root.FindName(L"ShortcutsTab")
+        .as<TabViewItem>()
+        .Header(box_value(tr("settings", "Shortcuts")));
     root.FindName(L"GeneralTab")
         .as<TabViewItem>()
         .Header(box_value(tr("settings", "General")));
@@ -352,6 +368,7 @@ void SettingsWindow::renderGlobal() {
     operation.stage("controls");
     language_.SelectedIndex(static_cast<int>(global_.settings.language));
     detailedLogging_.IsOn(global_.settings.detailedLogging);
+    renderShortcuts();
     win32::diagnostic::settingsLogger().setEnabled(
         global_.settings.detailedLogging);
     logStatus_.Text(
@@ -360,6 +377,93 @@ void SettingsWindow::renderGlobal() {
     refreshLogStatus();
     if (globalPanel_.SelectedIndex() == 2)
         refreshPlugins();
+}
+
+ipc::GlobalSettings SettingsWindow::globalDraft() const {
+    auto draft = global_.settings;
+    draft.language = static_cast<ipc::UiLanguage>(language_.SelectedIndex());
+    draft.detailedLogging = detailedLogging_.IsOn();
+    for (size_t i = 0; i < shortcutEditors_.size(); ++i)
+        if (shortcutEditors_[i])
+            draft.shortcuts[i] = keyListValue(shortcutEditors_[i]);
+    return draft;
+}
+
+void SettingsWindow::renderShortcuts() {
+    auto panel = window_.Content()
+                     .as<FrameworkElement>()
+                     .FindName(L"ShortcutOptions")
+                     .as<StackPanel>();
+    panel.Children().Clear();
+    TextBlock help;
+    help.Text(tr(
+        "settings",
+        "Quick switches follow the input method order. Missing or unavailable "
+        "entries are ignored. Empty shortcuts disable the action."));
+    help.TextWrapping(TextWrapping::Wrap);
+    panel.Children().Append(help);
+    for (size_t i = 0; i < shortcutEditors_.size(); ++i) {
+        const auto caption =
+            i == 0 ? tr("settings", "Switch input method")
+                   : translator_.format("settings",
+                                        "Quick switch to input method {0}", i);
+        Grid row;
+        row.ColumnSpacing(20);
+        row.Padding({0, 6, 0, 6});
+        ColumnDefinition labelColumn, editorColumn;
+        labelColumn.Width({1, GridUnitType::Star});
+        editorColumn.Width({1, GridUnitType::Auto});
+        row.ColumnDefinitions().Append(labelColumn);
+        row.ColumnDefinitions().Append(editorColumn);
+        TextBlock label;
+        label.Text(caption);
+        label.TextWrapping(TextWrapping::Wrap);
+        label.VerticalAlignment(VerticalAlignment::Center);
+        TextBox text;
+        text.AcceptsReturn(true);
+        text.Text(to_hstring(global_.settings.shortcuts[i]));
+        const auto id = "GlobalShortcut/" + std::to_string(i);
+        Automation::AutomationProperties::SetName(text, caption);
+        Automation::AutomationProperties::SetAutomationId(text, to_hstring(id));
+        auto editor = shortcutEditor(text, caption, id);
+        Grid::SetColumn(editor, 1);
+        row.Children().Append(label);
+        row.Children().Append(editor);
+        panel.Children().Append(row);
+        shortcutEditors_[i] = text;
+    }
+}
+
+StackPanel SettingsWindow::shortcutEditor(TextBox text,
+                                          const std::wstring &label,
+                                          const std::string &id) {
+    text.AcceptsReturn(true);
+    text.TextWrapping(TextWrapping::Wrap);
+    text.Width(210);
+    text.MaxHeight(100);
+    Button record;
+    record.Content(SymbolIcon(Symbol::Keyboard));
+    record.Width(32);
+    record.Height(32);
+    record.Padding({0, 0, 0, 0});
+    record.Click([weak = weak_from_this(), target = make_weak(text),
+                  label](auto &&, auto &&) {
+        if (auto self = weak.lock())
+            if (auto editor = target.get())
+                self->recordShortcut(editor, label);
+    });
+    ToolTipService::SetToolTip(record,
+                               box_value(tr("settings", "Record shortcut")));
+    Automation::AutomationProperties::SetName(
+        record, tr("settings", "Record shortcut"));
+    Automation::AutomationProperties::SetAutomationId(
+        record, to_hstring(id + "/record"));
+    StackPanel panel;
+    panel.Orientation(Orientation::Horizontal);
+    panel.Spacing(8);
+    panel.Children().Append(text);
+    panel.Children().Append(record);
+    return panel;
 }
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
@@ -396,9 +500,14 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
     const auto index = language_.SelectedIndex();
     if (index < 0 || index > 3)
         co_return false;
-    const ipc::GlobalSettings request{static_cast<ipc::UiLanguage>(index),
-                                      global_.settings.revision,
-                                      detailedLogging_.IsOn()};
+    const auto request = globalDraft();
+    if (!ipc::validShortcuts(request.shortcuts)) {
+        status_.Text(tr("settings",
+                        "Invalid or duplicate shortcuts. Use the recorder "
+                        "to choose a different shortcut."));
+        status_.Visibility(Visibility::Visible);
+        co_return false;
+    }
     const apartment_context ui;
     ipc::GlobalSettingsReply reply;
     bool connected = false;
@@ -412,7 +521,8 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
             connected = client.connect() && client.getGlobalSettings(reply);
             if (connected && reply.error == ipc::SettingsError::None &&
                 (reply.settings.language != request.language ||
-                 reply.settings.detailedLogging != request.detailedLogging))
+                 reply.settings.detailedLogging != request.detailedLogging ||
+                 reply.settings.shortcuts != request.shortcuts))
                 reply.error = ipc::SettingsError::Conflict;
         }
     } catch (...) {
@@ -449,9 +559,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::resolveDraft() {
     bool dirty = false;
     if (page_ == PageKind::Global) {
-        dirty = language_.SelectedIndex() !=
-                    static_cast<int>(global_.settings.language) ||
-                detailedLogging_.IsOn() != global_.settings.detailedLogging;
+        dirty = globalDraft() != global_.settings;
     } else {
         const auto values = configValues();
         for (size_t i = 0; i < values.size(); ++i)
@@ -559,6 +667,8 @@ bool SettingsWindow::open() {
       </Grid>
     </TabViewItem>
   </TabView>
+)"
+                                         LR"(
   <TabView x:Name="GlobalPanel" Grid.Row="1" Visibility="Collapsed" IsAddTabButtonVisible="False" CanDragTabs="False" CanReorderTabs="False">
     <TabViewItem x:Name="GeneralTab" Header="General" IsClosable="False" AutomationProperties.AutomationId="GeneralOptions">
     <Grid ColumnSpacing="20">
@@ -599,6 +709,11 @@ bool SettingsWindow::open() {
         <TextBlock x:Name="PluginStatus" Grid.Row="2" TextWrapping="Wrap" AutomationProperties.AutomationId="PluginStatus" AutomationProperties.LiveSetting="Polite"/>
         <ListView x:Name="Plugins" Grid.Row="3" SelectionMode="None" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="Plugins"/>
       </Grid>
+    </TabViewItem>
+    <TabViewItem x:Name="ShortcutsTab" Header="Shortcuts" IsClosable="False" AutomationProperties.AutomationId="ShortcutOptionsTab">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="ShortcutOptions" Spacing="8" Margin="0,16,12,0"/>
+      </ScrollViewer>
     </TabViewItem>
   </TabView>
   </Grid>
@@ -652,6 +767,9 @@ bool SettingsWindow::open() {
         if (page_ == PageKind::Global) {
             language_.SelectedIndex(0);
             detailedLogging_.IsOn(false);
+            const auto defaults = ipc::defaultShortcuts();
+            for (size_t i = 0; i < shortcutEditors_.size(); ++i)
+                shortcutEditors_[i].Text(to_hstring(defaults[i]));
             return;
         }
         const auto previous = config_.options;
@@ -762,6 +880,7 @@ void SettingsWindow::busy(bool enabled) {
     globalButton_.IsEnabled(!enabled && loaded_);
     language_.IsEnabled(!enabled && loaded_);
     detailedLogging_.IsEnabled(!enabled && loaded_);
+    globalPanel_.IsEnabled(!enabled && loaded_);
     for (auto &editor : editors_) {
         editor.as<Control>().IsEnabled(!enabled && loaded_);
     }
@@ -1127,34 +1246,8 @@ void SettingsWindow::renderConfig() {
             text.Text(to_hstring(option.value));
             text.Width(210);
             if (option.kind == ipc::ConfigKind::KeyList) {
-                text.TextWrapping(TextWrapping::Wrap);
-                text.MaxHeight(100);
-
-                Button record;
-                record.Content(SymbolIcon(Symbol::Keyboard));
-                record.Width(32);
-                record.Height(32);
-                record.Padding({0, 0, 0, 0});
-                record.Click(
-                    [weak = weak_from_this(), target = make_weak(text),
-                     caption = std::wstring(label.Text())](auto &&, auto &&) {
-                        if (auto self = weak.lock()) {
-                            if (auto editor = target.get())
-                                self->recordShortcut(editor, caption);
-                        }
-                    });
-                ToolTipService::SetToolTip(
-                    record, box_value(tr("settings", "Record shortcut")));
-                Automation::AutomationProperties::SetName(
-                    record, tr("settings", "Record shortcut"));
-                Automation::AutomationProperties::SetAutomationId(
-                    record, to_hstring(option.path + "/record"));
-                StackPanel panel;
-                panel.Orientation(Orientation::Horizontal);
-                panel.Spacing(8);
-                panel.Children().Append(text);
-                panel.Children().Append(record);
-                layout = panel;
+                layout = shortcutEditor(text, std::wstring(label.Text()),
+                                        option.path);
             }
             editor = text;
         }
@@ -1284,20 +1377,7 @@ std::vector<ipc::ConfigValue> SettingsWindow::configValues() const {
         } else {
             value = to_string(editors_[i].as<TextBox>().Text());
             if (option.kind == ipc::ConfigKind::KeyList) {
-                std::string normalized;
-                std::replace(value.begin(), value.end(), '\r', '\n');
-                std::istringstream lines(value);
-                std::string line;
-                while (std::getline(lines, line)) {
-                    if (line.empty()) {
-                        continue;
-                    }
-                    if (!normalized.empty()) {
-                        normalized += '\n';
-                    }
-                    normalized += line;
-                }
-                value = std::move(normalized);
+                value = keyListValue(editors_[i].as<TextBox>());
             }
         }
         result.push_back({option.path, std::move(value)});

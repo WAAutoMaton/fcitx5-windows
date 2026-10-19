@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: fcitx5-windows\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 22:38+0800\n"
+"POT-Creation-Date: 2026-10-19 22:17+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,552 +17,598 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: win32/settings/SettingsWindow.cpp:68
-msgctxt "settings"
-msgid "Plugins"
-msgstr ""
-
-msgctxt "settings"
-msgid "Open Personal Plugin Folder"
-msgstr ""
-
-msgctxt "settings"
-msgid "Not loaded"
-msgstr ""
-
-msgctxt "settings"
-msgid "No plugins"
-msgstr ""
-
-msgctxt "settings"
-msgid "Cannot open the plugin folder."
-msgstr ""
-
-msgctxt "settings"
-msgid "Developer options"
-msgstr ""
-
-msgctxt "settings"
-msgid "Enable detailed logging"
-msgstr ""
-
-msgctxt "settings"
-msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
-msgstr ""
-
-msgctxt "settings"
-msgid "Log folder"
-msgstr ""
-
-msgctxt "settings"
-msgid "Open log folder"
-msgstr ""
-
-msgctxt "settings"
-msgid "Starting"
-msgstr ""
-
-msgctxt "settings"
-msgid "On"
-msgstr ""
-
-msgctxt "settings"
-msgid "Off"
-msgstr ""
-
-msgctxt "settings"
-msgid "Recording"
-msgstr ""
-
-msgctxt "settings"
-msgid "Unavailable"
-msgstr ""
-
-msgctxt "settings"
-msgid "{0} log files, {1} bytes"
-msgstr ""
-
+#: win32/settings/SettingsWindow.cpp:83 win32/settings/SettingsWindow.cpp:96
 msgctxt "settings"
 msgid "Loaded"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:70
+#: win32/settings/SettingsWindow.cpp:85
 msgctxt "settings"
 msgid "Failed to load"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:72
+#: win32/settings/SettingsWindow.cpp:87 win32/settings/SettingsWindow.cpp:98
 msgctxt "settings"
 msgid "Disabled"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:74
+#: win32/settings/SettingsWindow.cpp:89
 msgctxt "settings"
 msgid "Loading"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:79
+#: win32/settings/SettingsWindow.cpp:100
+msgctxt "settings"
+msgid "Not loaded"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:105
 msgctxt "settings"
 msgid "Ziranma"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:80
+#: win32/settings/SettingsWindow.cpp:106
 msgctxt "settings"
 msgid "Microsoft"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:81
+#: win32/settings/SettingsWindow.cpp:107
 msgctxt "settings"
 msgid "Ziguang"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:82
+#: win32/settings/SettingsWindow.cpp:108
 msgctxt "settings"
 msgid "Smart ABC"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:83
+#: win32/settings/SettingsWindow.cpp:109
 msgctxt "settings"
 msgid "Chinese Star"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:84
+#: win32/settings/SettingsWindow.cpp:110
 msgctxt "settings"
 msgid "Pinyin Jiajia"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:85
+#: win32/settings/SettingsWindow.cpp:111
 msgctxt "settings"
 msgid "Xiaohe"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:86
+#: win32/settings/SettingsWindow.cpp:112
 msgctxt "settings"
 msgid "GB Standard"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:87
+#: win32/settings/SettingsWindow.cpp:113
 msgctxt "settings"
 msgid "Existing custom profile"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:93
+#: win32/settings/SettingsWindow.cpp:119
 msgctxt "settings"
 msgid "Settings have changed. Reload before editing."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:96
+#: win32/settings/SettingsWindow.cpp:122
 msgctxt "settings"
 msgid "Keep at least one available input method. Add another before removing this one."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:100
+#: win32/settings/SettingsWindow.cpp:126
 msgctxt "settings"
 msgid "Cannot save settings. Check write permissions for the user configuration directory."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:104
+#: win32/settings/SettingsWindow.cpp:130
 msgctxt "settings"
 msgid "The input engine or input method is unavailable."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:107
+#: win32/settings/SettingsWindow.cpp:133
 msgctxt "settings"
 msgid "Cannot apply settings. Please retry."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:234
+#: win32/settings/SettingsWindow.cpp:260
 msgctxt "settings"
 msgid "Settings are being updated by another session. Please retry."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:240 win32/settings/SettingsWindow.cpp:432
+#: win32/settings/SettingsWindow.cpp:266 win32/settings/SettingsWindow.cpp:619
 msgctxt "settings"
 msgid "Input Method Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:243
+#: win32/settings/SettingsWindow.cpp:269
 msgctxt "settings"
 msgid "Input Methods"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:246 win32/settings/SettingsWindow.cpp:267
+#: win32/settings/SettingsWindow.cpp:272 win32/settings/SettingsWindow.cpp:331
 msgctxt "settings"
 msgid "Add Input Method"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:249 win32/settings/SettingsWindow.cpp:256
-#: win32/settings/SettingsWindow.cpp:298
+#: win32/settings/SettingsWindow.cpp:275 win32/settings/SettingsWindow.cpp:320
+#: win32/settings/SettingsWindow.cpp:364
 msgctxt "settings"
 msgid "Global Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:252 win32/settings/SettingsWindow.cpp:254
+#: win32/settings/SettingsWindow.cpp:278 win32/settings/SettingsWindow.cpp:318
 msgctxt "settings"
 msgid "Language"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:258
+#: win32/settings/SettingsWindow.cpp:281
 msgctxt "settings"
-msgid "Add"
+msgid "Shortcuts"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:259
-msgctxt "settings"
-msgid "Reset to Defaults"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:260
-msgctxt "settings"
-msgid "Reload"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:261
-msgctxt "settings"
-msgid "Close"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:262
-msgctxt "settings"
-msgid "Apply"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:268
-msgctxt "settings"
-msgid "Remove"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:269
-msgctxt "settings"
-msgid "Move Up"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:270
-msgctxt "settings"
-msgid "Move Down"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:276
-msgctxt "settings"
-msgid "Dictionaries"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:282
-msgctxt "settings"
-msgid "Open Third-party Dictionary Folder"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:285
-msgctxt "settings"
-msgid "Follow System Language"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:319 win32/settings/SettingsWindow.cpp:358
-#: win32/settings/SettingsWindow.cpp:1152
-#: win32/settings/SettingsWindow.cpp:1214
-#: win32/settings/SettingsWindow.cpp:1331
-#: win32/settings/SettingsWindow.cpp:1361
-msgctxt "settings"
-msgid "Cannot connect to Core."
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:369
-msgctxt "settings"
-msgid "Language saved. Restart services to apply it to Settings."
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:390
-msgctxt "settings"
-msgid "Save changes?"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:391
-msgctxt "settings"
-msgid "Save"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:392
-msgctxt "settings"
-msgid "Discard"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:393 win32/settings/SettingsWindow.cpp:1018
-msgctxt "settings"
-msgid "Cancel"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:642
-msgctxt "settings"
-msgid "Loading..."
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:666
-msgctxt "settings"
-msgid "Cannot connect to Core. Check that it is running and retry."
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:812
-msgctxt "settings"
-msgid "Pinyin Settings"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:813
-msgctxt "settings"
-msgid "Table Settings"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:814
-msgctxt "settings"
-msgid "Keyboard Settings"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:815
-msgctxt "settings"
-msgid "Settings"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:825
-msgctxt "settings"
-msgid "Keyboard layout: Windows"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:826
-msgctxt "settings"
-msgid "No settings available"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:832
-msgctxt "settings"
-msgid "Shuangpin Profile"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:833
-msgctxt "settings"
-msgid "Candidates Per Page"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:834
-msgctxt "settings"
-msgid "English Candidates"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:835
-msgctxt "settings"
-msgid "Symbol Candidates"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:836
-msgctxt "settings"
-msgid "Character Decomposition Candidates"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:837
-msgctxt "settings"
-msgid "Extended Chinese Characters"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:838
-msgctxt "settings"
-msgid "Stroke Candidates"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:839
-msgctxt "settings"
-msgid "Prediction"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:840
-msgctxt "settings"
-msgid "Preedit Mode"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:842
-msgctxt "settings"
-msgid "Keep Preedit Cursor at Beginning"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:843
-msgctxt "settings"
-msgid "Show Full Pinyin in Preedit"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:844
-msgctxt "settings"
-msgid "Show Shuangpin Mode"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:845
-msgctxt "settings"
-msgid "Common Mistakes"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:846
-msgctxt "settings"
-msgid "Match Letters in Lowercase"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:847
-msgctxt "settings"
-msgid "Inner Fuzzy Syllables (xian -> xi'an)"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:850
-msgctxt "settings"
-msgid "Inner Fuzzy Syllables for Short Pinyin (qie -> qi'e)"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:852
-msgctxt "settings"
-msgid "Match Incomplete Finals (e -> en, eng, ei)"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:854
-msgctxt "settings"
-msgid "Partial Shuangpin Matching for Input Longer Than 4"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:855
-msgctxt "settings"
-msgid "Automatically Select Candidates"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:857
-msgctxt "settings"
-msgid "Unique Candidate Auto-selection Length"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:858
-msgctxt "settings"
-msgid "Commit After Auto-selection"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:859
-msgctxt "settings"
-msgid "Commit When Deactivated"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:860
-msgctxt "settings"
-msgid "Use Full Width"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:861
-msgctxt "settings"
-msgid "Show Code Hints"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:862
-msgctxt "settings"
-msgid "Learn Word Frequency"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:863
-msgctxt "settings"
-msgid "Order by Context"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:864
-msgctxt "settings"
-msgid "Use System Language Model"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:865
-msgctxt "settings"
-msgid "Ordering Policy"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:866
-msgctxt "settings"
-msgid "Previous Page"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:867
-msgctxt "settings"
-msgid "Next Page"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:868
-msgctxt "settings"
-msgid "Previous Candidate"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:869
-msgctxt "settings"
-msgid "Next Candidate"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:870 win32/settings/SettingsWindow.cpp:873
-msgctxt "settings"
-msgid "Select Current Candidate"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:872
-msgctxt "settings"
-msgid "Choose Last Character from Phrase"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:885
-msgctxt "settings"
-msgid "Fuzzy Pinyin"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:886
+#: win32/settings/SettingsWindow.cpp:284 win32/settings/SettingsWindow.cpp:1174
 msgctxt "settings"
 msgid "General"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:978 win32/settings/SettingsWindow.cpp:980
+#: win32/settings/SettingsWindow.cpp:287
+msgctxt "settings"
+msgid "Plugins"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:290 win32/settings/SettingsWindow.cpp:292
+msgctxt "settings"
+msgid "Open Personal Plugin Folder"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:295
+msgctxt "settings"
+msgid "Developer options"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:298 win32/settings/SettingsWindow.cpp:312
+msgctxt "settings"
+msgid "Enable detailed logging"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:302
+msgctxt "settings"
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:307
+msgctxt "settings"
+msgid "Log folder"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:310 win32/settings/SettingsWindow.cpp:316
+msgctxt "settings"
+msgid "Open log folder"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:313
+msgctxt "settings"
+msgid "On"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:314 win32/settings/SettingsWindow.cpp:1859
+msgctxt "settings"
+msgid "Off"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:322
+msgctxt "settings"
+msgid "Add"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:323
+msgctxt "settings"
+msgid "Reset to Defaults"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:324
+msgctxt "settings"
+msgid "Reload"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:325
+msgctxt "settings"
+msgid "Close"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:326
+msgctxt "settings"
+msgid "Apply"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:332
+msgctxt "settings"
+msgid "Remove"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:333
+msgctxt "settings"
+msgid "Move Up"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:334
+msgctxt "settings"
+msgid "Move Down"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:340
+msgctxt "settings"
+msgid "Dictionaries"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:346
+msgctxt "settings"
+msgid "Open Third-party Dictionary Folder"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:349
+msgctxt "settings"
+msgid "Follow System Language"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:375 win32/settings/SettingsWindow.cpp:1820
+#: win32/settings/SettingsWindow.cpp:1861
+msgctxt "settings"
+msgid "Starting"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:401
+msgctxt "settings"
+msgid "Quick switches follow the input method order. Missing or unavailable entries are ignored. Empty shortcuts disable the action."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:407
+msgctxt "settings"
+msgid "Switch input method"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:409
+#, c++-format
+msgctxt "settings"
+msgid "Quick switch to input method {0}"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:456 win32/settings/SettingsWindow.cpp:458
 msgctxt "settings"
 msgid "Record shortcut"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1017
+#: win32/settings/SettingsWindow.cpp:487 win32/settings/SettingsWindow.cpp:536
+#: win32/settings/SettingsWindow.cpp:1409
+#: win32/settings/SettingsWindow.cpp:1473
+#: win32/settings/SettingsWindow.cpp:1599
+#: win32/settings/SettingsWindow.cpp:1633
+#: win32/settings/SettingsWindow.cpp:1728
+msgctxt "settings"
+msgid "Cannot connect to Core."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:506
+msgctxt "settings"
+msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:552
+msgctxt "settings"
+msgid "Language saved. Restart services to apply it to Settings."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:572
+msgctxt "settings"
+msgid "Save changes?"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:573
+msgctxt "settings"
+msgid "Save"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:574
+msgctxt "settings"
+msgid "Discard"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:575 win32/settings/SettingsWindow.cpp:1281
+msgctxt "settings"
+msgid "Cancel"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:917
+msgctxt "settings"
+msgid "Loading..."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:943
+msgctxt "settings"
+msgid "Cannot connect to Core. Check that it is running and retry."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1100
+msgctxt "settings"
+msgid "Pinyin Settings"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1101
+msgctxt "settings"
+msgid "Table Settings"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1102
+msgctxt "settings"
+msgid "Keyboard Settings"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1103
+msgctxt "settings"
+msgid "Settings"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1113
+msgctxt "settings"
+msgid "Keyboard layout: Windows"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1114
+msgctxt "settings"
+msgid "No settings available"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1120
+msgctxt "settings"
+msgid "Shuangpin Profile"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1121
+msgctxt "settings"
+msgid "Candidates Per Page"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1122
+msgctxt "settings"
+msgid "English Candidates"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1123
+msgctxt "settings"
+msgid "Symbol Candidates"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1124
+msgctxt "settings"
+msgid "Character Decomposition Candidates"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1125
+msgctxt "settings"
+msgid "Extended Chinese Characters"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1126
+msgctxt "settings"
+msgid "Stroke Candidates"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1127
+msgctxt "settings"
+msgid "Prediction"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1128
+msgctxt "settings"
+msgid "Preedit Mode"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1130
+msgctxt "settings"
+msgid "Keep Preedit Cursor at Beginning"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1131
+msgctxt "settings"
+msgid "Show Full Pinyin in Preedit"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1132
+msgctxt "settings"
+msgid "Show Shuangpin Mode"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1133
+msgctxt "settings"
+msgid "Common Mistakes"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1134
+msgctxt "settings"
+msgid "Match Letters in Lowercase"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1135
+msgctxt "settings"
+msgid "Inner Fuzzy Syllables (xian -> xi'an)"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1138
+msgctxt "settings"
+msgid "Inner Fuzzy Syllables for Short Pinyin (qie -> qi'e)"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1140
+msgctxt "settings"
+msgid "Match Incomplete Finals (e -> en, eng, ei)"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1142
+msgctxt "settings"
+msgid "Partial Shuangpin Matching for Input Longer Than 4"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1143
+msgctxt "settings"
+msgid "Automatically Select Candidates"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1145
+msgctxt "settings"
+msgid "Unique Candidate Auto-selection Length"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1146
+msgctxt "settings"
+msgid "Commit After Auto-selection"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1147
+msgctxt "settings"
+msgid "Commit When Deactivated"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1148
+msgctxt "settings"
+msgid "Use Full Width"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1149
+msgctxt "settings"
+msgid "Show Code Hints"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1150
+msgctxt "settings"
+msgid "Learn Word Frequency"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1151
+msgctxt "settings"
+msgid "Order by Context"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1152
+msgctxt "settings"
+msgid "Use System Language Model"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1153
+msgctxt "settings"
+msgid "Ordering Policy"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1154
+msgctxt "settings"
+msgid "Previous Page"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1155
+msgctxt "settings"
+msgid "Next Page"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1156
+msgctxt "settings"
+msgid "Previous Candidate"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1157
+msgctxt "settings"
+msgid "Next Candidate"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1158
+#: win32/settings/SettingsWindow.cpp:1161
+msgctxt "settings"
+msgid "Select Current Candidate"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1160
+msgctxt "settings"
+msgid "Choose Last Character from Phrase"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1173
+msgctxt "settings"
+msgid "Fuzzy Pinyin"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1280
 msgctxt "settings"
 msgid "Use shortcut"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1023
+#: win32/settings/SettingsWindow.cpp:1286
 msgctxt "settings"
 msgid "Recording..."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1025
+#: win32/settings/SettingsWindow.cpp:1288
 msgctxt "settings"
 msgid "Recorded shortcut"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1039
-#: win32/settings/SettingsWindow.cpp:1088
+#: win32/settings/SettingsWindow.cpp:1302
+#: win32/settings/SettingsWindow.cpp:1352
 msgctxt "settings"
 msgid "Cannot record shortcut."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1174
+#: win32/settings/SettingsWindow.cpp:1432
 msgctxt "settings"
 msgid "Check the setting values."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1368
+#: win32/settings/SettingsWindow.cpp:1640
 msgctxt "settings"
 msgid "Pinyin dictionaries are unavailable."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1370
+#: win32/settings/SettingsWindow.cpp:1642
 msgctxt "settings"
 msgid "Cannot read the dictionary directory."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1372
+#: win32/settings/SettingsWindow.cpp:1644
 msgctxt "settings"
 msgid "No third-party dictionaries"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1419
+#: win32/settings/SettingsWindow.cpp:1697
 msgctxt "settings"
 msgid "Cannot open the dictionary folder."
 msgstr ""
 
-#: win32/settings/main.cpp:65
+#: win32/settings/SettingsWindow.cpp:1733
+msgctxt "settings"
+msgid "No plugins"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1798
+msgctxt "settings"
+msgid "Cannot open the plugin folder."
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1857
+msgctxt "settings"
+msgid "Unavailable"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1862
+msgctxt "settings"
+msgid "Recording"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1867
+#, c++-format
+msgctxt "settings"
+msgid "{0} log files, {1} bytes"
+msgstr ""
+
+#: win32/settings/main.cpp:123
 msgctxt "settings"
 msgid "The Windows App SDK 1.8 x64 runtime is required."
 msgstr ""
@@ -652,30 +698,32 @@ msgctxt "about"
 msgid "Close"
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:157
-msgctxt "settings"
-msgid "Cannot open the user data folder."
-msgstr ""
-
-#: win32/tsf/servicecontrol.cpp:158
-msgctxt "settings"
-msgid "Service operation failed."
-msgstr ""
-
-msgctxt "settings"
-msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
-msgstr ""
-
+#: win32/tsf/servicecontrol.cpp:167
 msgctxt "settings"
 msgid "Cannot reach the host Core named pipe. Start Core outside Sandboxie, add the Fcitx5 OpenPipePath rule to this sandbox, and reopen the application."
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:162
+#: win32/tsf/servicecontrol.cpp:174
+msgctxt "settings"
+msgid "Cannot open the user data folder."
+msgstr ""
+
+#: win32/tsf/servicecontrol.cpp:176
+msgctxt "settings"
+msgid "Service operation failed."
+msgstr ""
+
+#: win32/tsf/servicecontrol.cpp:180
 msgctxt "settings"
 msgid "If services are stopped, restart services. Check that the DLL, Core and Settings are in the same installation directory."
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:166
+#: win32/tsf/servicecontrol.cpp:186
+msgctxt "settings"
+msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
+msgstr ""
+
+#: win32/tsf/servicecontrol.cpp:196
 #, c++-format
 msgctxt "settings"
 msgid "Windows error: {0}"

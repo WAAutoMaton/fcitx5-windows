@@ -14,7 +14,7 @@ int main() {
     assert(globalSettingsRequest(MessageType::StopServices));
     assert(globalSettingsRequest(MessageType::GetGlobalSettings));
     assert(globalSettingsRequest(MessageType::SetGlobalSettings));
-    assert(kVersion == 11);
+    assert(kVersion == 12);
     GlobalSettings global{UiLanguage::TraditionalChinese, 42, true};
     GlobalSettings restoredGlobal;
     assert(decodeGlobalSettings(encodeGlobalSettings(global), restoredGlobal) &&
@@ -31,6 +31,14 @@ int main() {
     globalPayload = encodeGlobalSettings(global);
     globalPayload.pop_back();
     assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
+    global.shortcuts[0] = "Control+Shift+J\nAlt+<59>";
+    global.shortcuts[5].clear();
+    assert(decodeGlobalSettings(encodeGlobalSettings(global), restoredGlobal) &&
+           restoredGlobal == global);
+    auto oversizedGlobal = global;
+    oversizedGlobal.shortcuts[0] = std::string(513, 'x');
+    assert(!decodeGlobalSettings(encodeGlobalSettings(oversizedGlobal),
+                                 restoredGlobal));
     GlobalSettingsReply globalReply;
     globalReply.settings = global;
     globalReply.resolvedLanguage = UiLanguage::TraditionalChinese;
@@ -40,7 +48,8 @@ int main() {
     assert(decodeGlobalSettingsReply(globalReplyPayload, decodedGlobalReply));
     assert(decodedGlobalReply.settings == global &&
            decodedGlobalReply.coreActiveLanguage == UiLanguage::English);
-    globalReplyPayload[11] = static_cast<uint8_t>(UiLanguage::System);
+    globalReplyPayload[globalReplyPayload.size() - 2] =
+        static_cast<uint8_t>(UiLanguage::System);
     assert(!decodeGlobalSettingsReply(globalReplyPayload, decodedGlobalReply));
     Frame source;
     source.type = MessageType::KeyDown;

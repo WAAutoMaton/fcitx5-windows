@@ -26,6 +26,11 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     winrt::Windows::Foundation::IAsyncOperation<bool> loadGlobal();
     winrt::Windows::Foundation::IAsyncOperation<bool> saveGlobal();
     void renderGlobal();
+    void renderShortcuts();
+    ipc::GlobalSettings globalDraft() const;
+    winrt::Microsoft::UI::Xaml::Controls::StackPanel
+    shortcutEditor(winrt::Microsoft::UI::Xaml::Controls::TextBox text,
+                   const std::wstring &label, const std::string &id);
     std::wstring tr(const char *context, const char *english) const;
     std::wstring errorText(ipc::SettingsError error) const;
     void translateStatic();
@@ -68,6 +73,8 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     win32::i18n::Translator translator_;
     bool languageInitialized_ = false;
     ipc::GlobalSettingsReply global_;
+    std::array<winrt::Microsoft::UI::Xaml::Controls::TextBox, 6>
+        shortcutEditors_{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Primitives::ToggleButton
         globalButton_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TabView globalPanel_{nullptr};

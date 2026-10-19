@@ -126,8 +126,9 @@ and packaging instructions belong in each plugin's own repository.
 In Settings, open **Global Settings > Developer options** and enable detailed
 logging, then apply. Core applies the change immediately; TSF learns the setting
 from its next Core reply. Core, TSF and Settings must be deployed together using
-IPC v10. `windows-ui.conf` now uses version 2; version 1 loads with logging off
-and migrates on the next successful save. Language and logging share a revision.
+IPC v12. `windows-ui.conf` now uses version 3; versions 1/2 gain the default
+shortcuts, and version 1 loads with logging off. Migration happens on the next
+successful save. Language, logging and shortcuts share a revision.
 
 Logs are JSON Lines under `%LOCALAPPDATA%/Fcitx5/logs`, split by role and TSF or
 Settings PID. The files rotate at 8 MiB and UTC date changes, expire after 7
@@ -181,6 +182,12 @@ See [developer logging design and event scope](windows-developer-logging-design.
 for the shared logger, privacy boundaries and Settings exit diagnostics.
 
 ## Settings Shortcut Recording
+
+Global Settings → Shortcuts configures input-method cycling (Ctrl+Space by
+default) and direct selection of entries 1–5 (Ctrl+Alt+1…5). These settings use
+the existing multiline editor and recorder. Apply saves them; empty values
+disable an action. Core, TSF and Settings must be deployed together for IPC v12.
+The global file is now `windows-ui.conf` v3, with v1/v2 migration defaults.
 
 Engine key-list options have a record button alongside the editable text list.
 Recording changes the draft; use **Apply** to save it through Core. The UI keeps

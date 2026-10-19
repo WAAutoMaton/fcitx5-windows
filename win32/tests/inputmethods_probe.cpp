@@ -133,6 +133,15 @@ int main(int argc, char **argv) {
                             config) &&
                         config.error == SettingsError::None,
                     "persist table failed");
+            GlobalSettingsReply global;
+            require(client.getGlobalSettings(global),
+                    "shortcut persistence read failed");
+            auto custom = global.settings;
+            custom.shortcuts[0] = "Control+Shift+J";
+            custom.shortcuts[5].clear();
+            require(client.setGlobalSettings(custom, global) &&
+                        global.error == SettingsError::None,
+                    "shortcut persistence write failed");
             return 0;
         }
         if (argc == 2 && std::string(argv[1]) == "--persistence-read") {
@@ -151,6 +160,16 @@ int main(int argc, char **argv) {
             require(client.getMethodConfig("wbx", config) &&
                         option(config, "PageSize").value == "6",
                     "restart lost table config");
+            GlobalSettingsReply global;
+            require(client.getGlobalSettings(global) &&
+                        global.settings.shortcuts[0] == "Control+Shift+J" &&
+                        global.settings.shortcuts[5].empty(),
+                    "restart lost shortcuts");
+            auto defaults = global.settings;
+            defaults.shortcuts = defaultShortcuts();
+            require(client.setGlobalSettings(defaults, global) &&
+                        global.error == SettingsError::None,
+                    "persisted shortcuts restore failed");
             std::cout << "PASS: restart preserves list order, shared pinyin "
                          "options/profile and table options\n";
             return 0;
@@ -185,7 +204,7 @@ int main(int argc, char **argv) {
                     client.focusIn(context),
                 "context setup failed");
         auto next = catalog.selection;
-        next.enabled = {"keyboard-us", "pinyin", "shuangpin", "wbx"};
+        next.enabled = {"keyboard-us", "pinyin", "shuangpin", "wbx", "wbpy"};
         require(client.setInputMethods(next, catalog) &&
                     catalog.error == SettingsError::None,
                 "add failed");
@@ -193,7 +212,8 @@ int main(int argc, char **argv) {
         require(client.selectInputMethod(context, "keyboard-us", reply) &&
                     !reply.enabled,
                 "keyboard select failed");
-        for (const auto &id : {"pinyin", "shuangpin", "wbx", "keyboard-us"}) {
+        for (const auto &id :
+             {"pinyin", "shuangpin", "wbx", "wbpy", "keyboard-us"}) {
             require(client.key(context, false, VK_SPACE, 0, 2, 0, reply) &&
                         reply.consumed && reply.inputMethod == id,
                     "Ctrl+Space order failed");
@@ -205,6 +225,51 @@ int main(int argc, char **argv) {
                         reply.inputMethod == previous,
                     "release cycled input method");
         }
+        GlobalSettingsReply global;
+        require(client.getGlobalSettings(global),
+                "global shortcuts unavailable");
+        const auto originalShortcuts = global.settings.shortcuts;
+        for (unsigned i = 1; i <= 5; ++i) {
+            require(client.key(context, false, '0' + i, 0, 6, 0, reply),
+                    "quick switch request failed");
+            require(reply.consumed, "available quick switch was not consumed");
+            require(reply.inputMethod == catalog.selection.enabled[i - 1],
+                    "quick switch ignored method order");
+            const auto selected = reply.inputMethod;
+            require(client.key(context, false, '0' + i, 0, 6 | 32, 0, reply) &&
+                        reply.inputMethod == selected,
+                    "quick switch repeat changed selection");
+            require(client.key(context, true, '0' + i, 0, 0, 0, reply) &&
+                        reply.consumed && reply.inputMethod == selected,
+                    "quick switch release lost consumption");
+        }
+        auto custom = global.settings;
+        custom.shortcuts[0] = "Control+Shift+J";
+        custom.shortcuts[1] = "Alt+<59>";
+        custom.shortcuts[5].clear();
+        require(client.setGlobalSettings(custom, global) &&
+                    global.error == SettingsError::None,
+                "custom shortcuts save failed");
+        const auto beforeShortcut = reply.inputMethod;
+        require(client.key(context, false, VK_SPACE, 0x39, 2, 0, reply) &&
+                    !reply.consumed && reply.inputMethod == beforeShortcut,
+                "old Ctrl+Space binding remained active");
+        require(client.key(context, false, 'J', 0x24, 3, 0, reply) &&
+                    reply.consumed && reply.inputMethod != beforeShortcut,
+                "custom cycle shortcut did not apply immediately");
+        require(client.key(context, true, 'J', 0x24, 0, 0, reply) &&
+                    reply.consumed,
+                "custom cycle release failed");
+        require(client.key(context, false, VK_F1, 0x3b, 4, 0, reply) &&
+                    reply.consumed && reply.inputMethod == "keyboard-us",
+                "recorded scan-code shortcut failed");
+        require(client.key(context, true, VK_F1, 0x3b, 0, 0, reply),
+                "recorded scan-code release failed");
+        custom = global.settings;
+        custom.shortcuts = originalShortcuts;
+        require(client.setGlobalSettings(custom, global) &&
+                    global.error == SettingsError::None,
+                "restore shortcuts failed");
         require(client.selectInputMethod(context, "pinyin", reply),
                 "pinyin select failed");
         candidate(client, context, "NIHAO", "\xe4\xbd\xa0\xe5\xa5\xbd");
@@ -280,6 +345,15 @@ int main(int argc, char **argv) {
         require(client.cycleInputMethod(context, reply) &&
                     reply.inputMethod == "pinyin",
                 "reordered wrap failed");
+        require(client.key(context, false, '2', 0, 6, 0, reply) &&
+                    reply.consumed && reply.inputMethod == "keyboard-us",
+                "quick switch did not follow reordered list");
+        require(client.key(context, true, '2', 0, 0, 0, reply) &&
+                    reply.consumed,
+                "reordered quick switch release failed");
+        require(client.key(context, false, '5', 0, 6, 0, reply) &&
+                    !reply.consumed && reply.inputMethod == "keyboard-us",
+                "missing quick switch was consumed");
         next = catalog.selection;
         next.enabled = {"keyboard-us"};
         require(client.setInputMethods(next, catalog) &&

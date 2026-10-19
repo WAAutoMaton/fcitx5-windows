@@ -1,9 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <atlcomcli.h>
 #include <ctffunc.h>
 #include <ctfutb.h>
 #include <msctf.h>
+#include <vector>
 
 class ThreadMgrAdapter : public ITfThreadMgr,
                          public ITfKeystrokeMgr,
@@ -125,16 +127,25 @@ class ThreadMgrAdapter : public ITfThreadMgr,
                              const TF_PRESERVEDKEY *key, const WCHAR *,
                              ULONG) override {
         ++preserveCalls;
-        if (!key || key->uVKey != VK_SPACE || key->uModifiers != TF_MOD_CONTROL)
+        if (!key)
             return E_INVALIDARG;
-        preservedGuid = guid;
+        if (key->uVKey == VK_SPACE && key->uModifiers == TF_MOD_CONTROL)
+            preservedGuid = guid;
+        if (SUCCEEDED(preserveResult))
+            preservedKeys.push_back({guid, *key});
         return preserveResult;
     }
     STDMETHODIMP UnpreserveKey(REFGUID guid,
                                const TF_PRESERVEDKEY *key) override {
-        if (!key || guid != preservedGuid || key->uVKey != VK_SPACE ||
-            key->uModifiers != TF_MOD_CONTROL)
+        const auto found = std::find_if(
+            preservedKeys.begin(), preservedKeys.end(), [&](const auto &item) {
+                return item.first == guid && key &&
+                       item.second.uVKey == key->uVKey &&
+                       item.second.uModifiers == key->uModifiers;
+            });
+        if (found == preservedKeys.end())
             return E_INVALIDARG;
+        preservedKeys.erase(found);
         ++unpreserveCalls;
         return S_OK;
     }
@@ -220,6 +231,7 @@ class ThreadMgrAdapter : public ITfThreadMgr,
         return E_NOTIMPL;
     }
 
+    std::vector<std::pair<GUID, TF_PRESERVEDKEY>> preservedKeys;
     GUID preservedGuid = GUID_NULL;
     unsigned int preserveCalls = 0;
     unsigned int unpreserveCalls = 0;

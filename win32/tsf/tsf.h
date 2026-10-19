@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ipc/diagnostic_log.h"
+#include "../ipc/shortcuts.h"
 #include "aboutwindow.h"
 #include "candidateuielement.h"
 #include "candidatewindow.h"
@@ -93,6 +94,9 @@ class Tsf : public ITfTextInputProcessorEx,
     bool scopeAllowsInputAtEdit(ITfContext *context, TfEditCookie cookie) const;
     HRESULT initKeyEventSink();
     void uninitKeyEventSink();
+    void refreshShortcuts();
+    void updatePreservedShortcuts();
+    bool pressedCycleShortcut(UINT &key, UINT &scan, unsigned &modifiers) const;
     HRESULT initKeyboardCompartment();
     void uninitKeyboardCompartment();
     HRESULT initLangBarItem();
@@ -193,7 +197,19 @@ class Tsf : public ITfTextInputProcessorEx,
     bool serviceHostClosing_ = false;
     TfGuidAtom attributeAtom_ = TF_INVALID_GUIDATOM;
     bool keyEventSinkAdvised_ = false;
-    bool modeSwitchPreserved_ = false;
+    ipc::Shortcuts shortcuts_ = ipc::defaultShortcuts();
+    ULONGLONG nextShortcutCheck_ = 0;
+    struct PreservedShortcut {
+        GUID guid;
+        TF_PRESERVEDKEY key;
+        UINT scan;
+        unsigned modifiers;
+    };
+    std::vector<PreservedShortcut> preservedShortcuts_;
+    uint32_t preservedShortcutSequence_ = 0;
+    UINT modeSwitchVirtualKey_ = VK_SPACE;
+    UINT modeSwitchScan_ = 0;
+    unsigned modeSwitchModifiers_ = 2;
     bool modeSwitchKeyDown_ = false;
     bool modeSwitchPending_ = false;
     static constexpr UINT kModeSwitchMessage = WM_APP + 9;

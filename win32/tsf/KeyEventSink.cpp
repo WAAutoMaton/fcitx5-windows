@@ -9,7 +9,7 @@ constexpr GUID kModeSwitchPreservedKey = {
     0x6d73,
     0x4a6d,
     {0x9d, 0x4f, 0x8a, 0x61, 0x72, 0x5e, 0x31, 0x09}};
-constexpr wchar_t kModeSwitchDescription[] = L"Fcitx5 Pinyin mode switch";
+constexpr wchar_t kModeSwitchDescription[] = L"Fcitx5 input method shortcut";
 constexpr uint32_t kModifierCaps = 1U << 4;
 constexpr uint32_t kModifierRepeat = 1U << 5;
 
@@ -79,10 +79,9 @@ HRESULT Tsf::initKeyEventSink() {
                                               (ITfKeyEventSink *)this, TRUE);
     keyEventSinkAdvised_ = SUCCEEDED(result);
     if (keyEventSinkAdvised_) {
-        constexpr TF_PRESERVEDKEY key{VK_SPACE, TF_MOD_CONTROL};
-        modeSwitchPreserved_ = SUCCEEDED(keystrokeMgr->PreserveKey(
-            clientId_, kModeSwitchPreservedKey, &key, kModeSwitchDescription,
-            static_cast<ULONG>(std::size(kModeSwitchDescription) - 1)));
+        refreshShortcuts();
+        if (preservedShortcuts_.empty())
+            updatePreservedShortcuts();
     }
     return result;
 }
@@ -95,13 +94,76 @@ void Tsf::uninitKeyEventSink() {
     if (threadMgr_->QueryInterface(&keystrokeMgr) != S_OK) {
         return;
     }
-    if (modeSwitchPreserved_) {
-        constexpr TF_PRESERVEDKEY key{VK_SPACE, TF_MOD_CONTROL};
-        keystrokeMgr->UnpreserveKey(kModeSwitchPreservedKey, &key);
-        modeSwitchPreserved_ = false;
-    }
+    for (const auto &shortcut : preservedShortcuts_)
+        keystrokeMgr->UnpreserveKey(shortcut.guid, &shortcut.key);
+    preservedShortcuts_.clear();
     keystrokeMgr->UnadviseKeyEventSink(clientId_);
     keyEventSinkAdvised_ = false;
+}
+
+void Tsf::refreshShortcuts() {
+    if (!pipe_.connected() || GetTickCount64() < nextShortcutCheck_)
+        return;
+    nextShortcutCheck_ = GetTickCount64() + 1000;
+    ipc::GlobalSettingsReply reply;
+    if (!pipe_.getGlobalSettings(reply) ||
+        reply.error != ipc::SettingsError::None)
+        return;
+    if (reply.settings.shortcuts != shortcuts_ || preservedShortcuts_.empty()) {
+        shortcuts_ = std::move(reply.settings.shortcuts);
+        updatePreservedShortcuts();
+    }
+}
+
+void Tsf::updatePreservedShortcuts() {
+    if (!keyEventSinkAdvised_)
+        return;
+    CComPtr<ITfKeystrokeMgr> manager;
+    if (FAILED(threadMgr_->QueryInterface(&manager)))
+        return;
+    for (const auto &shortcut : preservedShortcuts_)
+        manager->UnpreserveKey(shortcut.guid, &shortcut.key);
+    preservedShortcuts_.clear();
+    for (const auto &list : shortcuts_) {
+        for (const auto &line : ipc::shortcutLines(list)) {
+            ipc::ShortcutKey parsed;
+            if (!ipc::parseShortcut(line, parsed))
+                continue;
+            const auto scan = parsed.scan;
+            parsed.key = ipc::shortcutVirtualKey(parsed);
+            if (!parsed.key)
+                continue;
+            UINT modifiers = 0;
+            if (parsed.modifiers & kModifierControl)
+                modifiers |= TF_MOD_CONTROL;
+            if (parsed.modifiers & kModifierShift)
+                modifiers |= TF_MOD_SHIFT;
+            if (parsed.modifiers & kModifierAlt)
+                modifiers |= TF_MOD_ALT;
+            if (parsed.modifiers & kModifierSuper)
+                continue; // TSF preserved keys have no Windows-key modifier.
+            auto guid = kModeSwitchPreservedKey;
+            guid.Data1 += preservedShortcutSequence_++;
+            TF_PRESERVEDKEY key{parsed.key, modifiers};
+            if (SUCCEEDED(manager->PreserveKey(
+                    clientId_, guid, &key, kModeSwitchDescription,
+                    static_cast<ULONG>(std::size(kModeSwitchDescription) - 1))))
+                preservedShortcuts_.push_back(
+                    {guid, key, scan, parsed.modifiers});
+        }
+    }
+}
+
+bool Tsf::pressedCycleShortcut(UINT &key, UINT &scan,
+                               unsigned &modifiers) const {
+    ipc::ShortcutKey shortcut;
+    if (!ipc::pressedShortcut(shortcuts_[0], currentModifiers(0), keyDown,
+                              shortcut))
+        return false;
+    key = ipc::shortcutVirtualKey(shortcut);
+    scan = shortcut.scan;
+    modifiers = shortcut.modifiers;
+    return true;
 }
 
 BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
@@ -121,29 +183,23 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
     if (modifiers == UINT32_MAX) {
         modifiers = currentModifiers(lParam);
     }
-    if (!release && isModeSwitchKey(static_cast<uint32_t>(wParam), modifiers)) {
-        if (!(modifiers & kModifierRepeat) &&
-            (!modeSwitchKeyDown_ || modeSwitchPending_)) {
-            modeSwitchPending_ = false;
-            if (!cycleMode(true)) {
-                modeSwitchKeyDown_ = false;
-                return FALSE;
-            }
-            modeSwitchKeyDown_ = true;
-        }
-        handledKeys_.set(VK_SPACE);
-        return TRUE;
+    const auto action = ipc::shortcutAction(
+        shortcuts_, static_cast<UINT>(wParam), scanCode(lParam), modifiers);
+    if (!release && action == 0) {
+        if ((modifiers & kModifierRepeat) ||
+            (modeSwitchKeyDown_ && wParam == modeSwitchVirtualKey_ &&
+             !modeSwitchPending_))
+            return handledKeys_.test(wParam) ? TRUE : FALSE;
+        modeSwitchPending_ = false;
     }
-    if (release && wParam == VK_SPACE) {
+    if (release && wParam == modeSwitchVirtualKey_)
         modeSwitchKeyDown_ = false;
-    }
-    if (!release &&
+    if (!release && action < 0 &&
         !routesKey(static_cast<uint32_t>(wParam), modifiers, keyboardOpen_,
                    !state_.preedit.empty() || !state_.candidates.empty(),
                    state_.inputMethodPanel != "pinyin" &&
-                       !state_.inputMethodPanel.empty())) {
+                       !state_.inputMethodPanel.empty()))
         return FALSE;
-    }
     if (state_.enabled != keyboardOpen_ && !applyKeyboardMode(true)) {
         return FALSE;
     }
@@ -156,6 +212,12 @@ BOOL Tsf::processKey(ITfContext *context, WPARAM wParam, LPARAM lParam,
         return FALSE;
     }
     bool consumed = reply.consumed;
+    if (!release && action == 0 && consumed) {
+        modeSwitchKeyDown_ = true;
+        modeSwitchVirtualKey_ = static_cast<UINT>(wParam);
+        modeSwitchScan_ = scanCode(lParam);
+        modeSwitchModifiers_ = modifiers & 15;
+    }
     if (win32::diagnostic::tsfLogger().enabled())
         win32::diagnostic::tsfLogger().event(
             win32::diagnostic::Level::Debug, "key_result",
@@ -200,11 +262,14 @@ STDMETHODIMP Tsf::OnTestKeyDown(ITfContext *context, WPARAM key, LPARAM details,
     }
     *pfEaten = contextAllowsInput(context) && context == textEditSinkContext_ &&
                foreground_ && remoteContextId_ && pipe_.connected() &&
-               routesKey(static_cast<uint32_t>(key), currentModifiers(details),
-                         keyboardOpen_,
-                         !state_.preedit.empty() || !state_.candidates.empty(),
-                         state_.inputMethodPanel != "pinyin" &&
-                             !state_.inputMethodPanel.empty());
+               (ipc::shortcutAction(shortcuts_, static_cast<UINT>(key),
+                                    scanCode(details),
+                                    currentModifiers(details)) >= 0 ||
+                routesKey(static_cast<uint32_t>(key), currentModifiers(details),
+                          keyboardOpen_,
+                          !state_.preedit.empty() || !state_.candidates.empty(),
+                          state_.inputMethodPanel != "pinyin" &&
+                              !state_.inputMethodPanel.empty()));
     return S_OK;
 }
 
@@ -243,8 +308,15 @@ STDMETHODIMP Tsf::OnPreservedKey(ITfContext *context, REFGUID guid,
         return E_INVALIDARG;
     }
     *pfEaten = FALSE;
-    if (guid == kModeSwitchPreservedKey) {
-        *pfEaten = processKey(context, VK_SPACE, 0, false, kModifierControl);
+    for (const auto &shortcut : preservedShortcuts_) {
+        if (guid == shortcut.guid) {
+            const LPARAM details =
+                static_cast<LPARAM>(shortcut.scan & 0xff) << 16 |
+                static_cast<LPARAM>((shortcut.scan & 0x100) != 0) << 24;
+            *pfEaten = processKey(context, shortcut.key.uVKey, details, false,
+                                  shortcut.modifiers);
+            break;
+        }
     }
     return S_OK;
 }

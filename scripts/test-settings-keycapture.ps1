@@ -25,6 +25,7 @@ public static class FcitxKeyCaptureInput {
     [DllImport("user32.dll")] static extern uint SendInput(uint count, Input[] inputs, int size);
     [DllImport("user32.dll")] static extern uint MapVirtualKey(uint key, uint type);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
     public static void Chord(params ushort[] keys) {
         var inputs = new Input[keys.Length * 2];
         for (int i = 0; i < keys.Length; ++i) {
@@ -42,6 +43,7 @@ public static class FcitxKeyCaptureInput {
 }
 '@
 $fixture = $null; $settings = $null
+$script:shortcutId = 'PrevPage'
 function Find-Id([string]$Id) {
     $script:window.FindFirst([Windows.Automation.TreeScope]::Descendants,
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty, $Id))
@@ -60,14 +62,14 @@ function Value($Control) {
     $Control.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value.Replace("`r`n", "`n").Replace("`r", "`n")
 }
 function Set-Value([string]$Text) {
-    (Find-Id 'PrevPage').GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Text)
+    (Find-Id $script:shortcutId).GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($Text)
 }
 function Select-Method([string]$Id) {
     (Find-Id "method:$Id").GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
     Start-Sleep -Milliseconds 500
 }
 function Open-Recorder {
-    Invoke-Control (Find-Id 'PrevPage/record')
+    Invoke-Control (Find-Id "$script:shortcutId/record")
     $preview = Find-Id 'ShortcutPreview'
     if (!$preview) { throw 'Recorder did not open.' }
     if ((Find-Name 'Use shortcut').Current.IsEnabled) { throw 'Empty recorder accepted a shortcut.' }
@@ -106,6 +108,7 @@ try {
         if ($settings.HasExited) { throw "Settings exited: $($settings.ExitCode)" }
     }
     if (!$script:window) { throw 'Settings window missing.' }
+    [FcitxKeyCaptureInput]::ShowWindow([IntPtr]$script:window.Current.NativeWindowHandle, 9) | Out-Null
     Select-Method 'pinyin'
     [FcitxKeyCaptureInput]::SetForegroundWindow([IntPtr]$script:window.Current.NativeWindowHandle) | Out-Null
     (Find-Id 'PrevPage').SetFocus()
@@ -164,9 +167,49 @@ try {
     } finally { $other.Dispose() }
     Invoke-Control (Find-Name 'Cancel')
     Capture 'settings'
+    Invoke-Control (Find-Name 'Apply')
+    (Find-Id 'GlobalSettings').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+    Start-Sleep -Milliseconds 500
+    (Find-Id 'ShortcutOptionsTab').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    foreach ($i in 0..5) {
+        $expected = if ($i -eq 0) { 'Control+space' } else { "Control+Alt+$i" }
+        if ((Value (Find-Id "GlobalShortcut/$i")) -cne $expected) { throw "Wrong global shortcut default: $i" }
+    }
+    $script:shortcutId = 'GlobalShortcut/0'
+    Set-Value ''
+    Record @(0xa2, 0xa0, 0x4a) 'Control+Shift+J'
+    $script:shortcutId = 'GlobalShortcut/1'
+    Set-Value ''
+    Record @(0xa4, 0x70) 'Alt+<59>'
+    $script:shortcutId = 'GlobalShortcut/5'
+    Set-Value ''
+    Invoke-Control (Find-Name 'Apply')
+    Select-Method 'pinyin'
+    (Find-Id 'GlobalSettings').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+    Start-Sleep -Milliseconds 500
+    (Find-Id 'ShortcutOptionsTab').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    if ((Value (Find-Id 'GlobalShortcut/0')) -cne 'Control+Shift+J' -or
+        (Value (Find-Id 'GlobalShortcut/1')) -cne 'Alt+<59>' -or
+        (Value (Find-Id 'GlobalShortcut/5')) -cne '') { throw 'Global shortcut save/reload failed.' }
+    Record @(0xa2, 0xa0, 0x41) 'Control+Shift+A' $false
+    if ((Value (Find-Id 'GlobalShortcut/5')) -cne '') { throw 'Global recorder cancel changed the draft.' }
+    $script:shortcutId = 'GlobalShortcut/2'
+    Set-Value 'Control+Shift+J'
+    Invoke-Control (Find-Name 'Apply')
+    if (!(Find-Name 'Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut.')) { throw 'Duplicate global shortcut was accepted.' }
+    Invoke-Control (Find-Name 'Reset to Defaults')
+    foreach ($i in 0..5) {
+        $expected = if ($i -eq 0) { 'Control+space' } else { "Control+Alt+$i" }
+        if ((Value (Find-Id "GlobalShortcut/$i")) -cne $expected) { throw 'Global shortcut reset failed.' }
+    }
+    Invoke-Control (Find-Name 'Apply')
+    Capture 'global-shortcuts'
     Invoke-Control (Find-Name 'Close')
     if (!$settings.WaitForExit(5000)) { throw 'Settings did not close.' }
-    Write-Output "PASS: recording, modifiers, special keys, append, replacement, cancel, apply/reload, focus isolation, screenshots. Logs: $LogDirectory"
+    Write-Output "PASS: global shortcuts, defaults, duplicate validation, reset, recording, modifiers, special keys, append, replacement, cancel, apply/reload, focus isolation, screenshots. Logs: $LogDirectory"
+} catch {
+    if ($script:window) { Capture 'failure' }
+    throw
 } finally {
     foreach ($process in @($settings, $fixture)) {
         if ($process -and !$process.HasExited) { Stop-Process -Id $process.Id; $process.WaitForExit() }

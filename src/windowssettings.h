@@ -30,6 +30,7 @@ class WindowsSettings {
     applyMethodConfig(const ipc::MethodConfigRequest &request);
     bool select(InputContext *context, const std::string &id);
     bool cycle(InputContext *context);
+    bool selectIndex(InputContext *context, size_t index);
     bool setMode(InputContext *context, bool enabled);
     void decorate(InputContext *context, ipc::KeyReply &reply) const;
     void reconcile(InputContext *context);

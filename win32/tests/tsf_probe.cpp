@@ -69,6 +69,17 @@ class KeyboardState {
         state[side] = 0x80;
         require(SetKeyboardState(state), "test modifier setup failed");
     }
+    void shortcut(UINT key, unsigned modifiers) {
+        BYTE state[256]{};
+        state[key] = 0x80;
+        if (modifiers & 1)
+            state[VK_SHIFT] = state[VK_LSHIFT] = 0x80;
+        if (modifiers & 2)
+            state[VK_CONTROL] = state[VK_LCONTROL] = 0x80;
+        if (modifiers & 4)
+            state[VK_MENU] = state[VK_LMENU] = 0x80;
+        require(SetKeyboardState(state), "custom shortcut state failed");
+    }
     void controlSpace() {
         BYTE state[256]{};
         state[VK_CONTROL] = state[VK_LCONTROL] = state[VK_SPACE] = 0x80;
@@ -163,7 +174,8 @@ void cycleProbe(HMODULE module) {
     int currentRoute = 0;
     const auto check = [&](size_t expected) {
         require(currentIndex() == expected,
-                ("TSF shortcut skipped " + methods[expected].id + " on route " +
+                ("TSF shortcut skipped " + methods[expected].id + " (actual " +
+                 methods[currentIndex()].id + ") on route " +
                  std::to_string(currentRoute))
                     .c_str());
         CComVariant value;
@@ -176,7 +188,15 @@ void cycleProbe(HMODULE module) {
         require(store->text.empty(), "cycle unexpectedly edited the document");
     };
     KeyboardState keyboardState;
+    keyboardState.controlSpace();
+    const bool simulatedSpace = (GetKeyState(VK_SPACE) & 0x8000) != 0;
+    keyboardState.clear();
+    if (!simulatedSpace)
+        std::cout << "SKIP: compartment/key coalescing routes require a "
+                     "simulated held Space key, unavailable in this session\n";
     for (const int route : {0, 2, 1, 3, 4, 5}) {
+        if (!simulatedSpace && (route == 2 || route == 3 || route == 4))
+            continue;
         currentRoute = route;
         for (size_t step = 0; step < methods.size() * 2; ++step) {
             BOOL handled = FALSE;
@@ -190,6 +210,7 @@ void cycleProbe(HMODULE module) {
                 CComVariant value;
                 require(SUCCEEDED(keyboard->GetValue(&value)),
                         "cycle mode query failed");
+                keyboardState.controlSpace();
                 CComVariant toggled(static_cast<LONG>(value.lVal == 0));
                 require(SUCCEEDED(keyboard->SetValue(clientId, &toggled)),
                         "system shortcut notification failed");
@@ -262,6 +283,88 @@ void cycleProbe(HMODULE module) {
         pump(200);
         check(static_cast<size_t>(chinese - methods.begin()));
     }
+    fcitx::ipc::GlobalSettingsReply global;
+    require(client.getGlobalSettings(global), "TSF shortcuts read failed");
+    const auto originalShortcuts = global.settings.shortcuts;
+    const auto oldPreserved = adapter->preservedGuid;
+    auto custom = global.settings;
+    custom.shortcuts[0] = "Control+Shift+J";
+    custom.shortcuts[1] = "Alt+<59>";
+    custom.shortcuts[5].clear();
+    require(client.setGlobalSettings(custom, global) &&
+                global.error == fcitx::ipc::SettingsError::None,
+            "TSF shortcuts save failed");
+    pump(1300);
+    BOOL handled = TRUE;
+    keyboardState.controlSpace();
+    require(SUCCEEDED(keys->OnTestKeyDown(context, VK_SPACE, 0, &handled)) &&
+                !handled &&
+                SUCCEEDED(keys->OnKeyDown(context, VK_SPACE, 0, &handled)) &&
+                !handled,
+            "TSF kept old Ctrl+Space routing");
+    require(SUCCEEDED(keys->OnPreservedKey(context, oldPreserved, &handled)) &&
+                !handled,
+            "TSF kept a stale preserved key");
+    keyboardState.clear();
+    const auto quick = [&](UINT key, UINT scan, unsigned modifiers,
+                           size_t expected) {
+        const LPARAM details = static_cast<LPARAM>(scan & 0xff) << 16 |
+                               static_cast<LPARAM>((scan & 0x100) != 0) << 24;
+        keyboardState.shortcut(key, modifiers);
+        const auto before = currentIndex();
+        require(
+            SUCCEEDED(keys->OnTestKeyDown(context, key, details, &handled)) &&
+                handled,
+            "configured shortcut not routed by TSF");
+        check(before); // Test callbacks must not change the input method.
+        require(SUCCEEDED(keys->OnKeyDown(context, key, details, &handled)) &&
+                    handled,
+                "configured shortcut not handled by TSF");
+        require(SUCCEEDED(keys->OnKeyDown(
+                    context, key, details | (static_cast<LPARAM>(1) << 30),
+                    &handled)) &&
+                    handled,
+                "configured shortcut repeat not handled");
+        pump();
+        check(expected);
+        keyboardState.clear();
+        require(SUCCEEDED(keys->OnKeyUp(context, key, details, &handled)) &&
+                    handled,
+                "configured shortcut release not handled");
+        pump();
+        check(expected);
+    };
+    quick('J', 0x24, 3, (currentIndex() + 1) % methods.size());
+    quick(VK_F1, 0x3b, 4, 0);
+    for (size_t i = 2; i <= std::min<size_t>(5, methods.size()); ++i) {
+        if (i != 5)
+            quick('0' + static_cast<UINT>(i), 0, 6, i - 1);
+    }
+    keyboardState.shortcut('5', 6);
+    require(
+        SUCCEEDED(keys->OnTestKeyDown(context, '5', 0, &handled)) && !handled &&
+            SUCCEEDED(keys->OnKeyDown(context, '5', 0, &handled)) && !handled,
+        "disabled quick switch was consumed");
+    keyboardState.clear();
+    const auto preserved = std::find_if(
+        adapter->preservedKeys.begin(), adapter->preservedKeys.end(),
+        [](const auto &item) { return item.second.uVKey == VK_F1; });
+    require(preserved != adapter->preservedKeys.end(),
+            "recorded key was not preserved");
+    require(
+        SUCCEEDED(keys->OnPreservedKey(context, preserved->first, &handled)) &&
+            handled,
+        "custom preserved quick switch failed");
+    pump();
+    check(0);
+    require(SUCCEEDED(keys->OnKeyUp(context, VK_F1, 0x3b << 16, &handled)) &&
+                handled,
+            "custom preserved release failed");
+    custom = global.settings;
+    custom.shortcuts = originalShortcuts;
+    require(client.setGlobalSettings(custom, global) &&
+                global.error == fcitx::ipc::SettingsError::None,
+            "TSF shortcuts restore failed");
     require(SUCCEEDED(service->Deactivate()), "cycle deactivation failed");
     manager->SetFocus(nullptr);
     document->Pop(TF_POPF_ALL);
@@ -270,9 +373,9 @@ void cycleProbe(HMODULE module) {
             "cycle thread deactivation failed");
     std::cout
         << "PASS: " << methods.size()
-        << " methods, ordinary/preserved/compartment Ctrl+Space routes, "
-           "duplicate/repeat/release suppression and indicator cycles "
-           "(simulated callbacks, no registration or configuration changes)\n";
+        << " methods, ordinary/preserved shortcuts, custom bindings, disabled "
+           "actions, cache updates, repeat/release suppression and indicator "
+           "cycles (simulated callbacks, no registration; settings restored)\n";
 }
 } // namespace
 
@@ -417,7 +520,7 @@ int wmain(int count, wchar_t **arguments) {
         require(SUCCEEDED(keys->OnTestKeyDown(context, 'N', 0, &handled)) &&
                     handled,
                 "input mode click did not reopen Pinyin");
-        require(adapter->preserveCalls == 1 &&
+        require(adapter->preserveCalls == 6 &&
                     adapter->preservedGuid != GUID_NULL,
                 "exact Ctrl+Space preserved key was not requested");
         const uint32_t directKeys[] = {VK_SPACE, VK_OEM_PLUS, VK_OEM_MINUS, '0',
@@ -680,7 +783,7 @@ int wmain(int count, wchar_t **arguments) {
                     (inactiveStatus & TF_LBI_STATUS_HIDDEN),
                 "retained input mode item was not detached");
         adapter->addItemResult = E_FAIL;
-        require(adapter->unpreserveCalls == 1,
+        require(adapter->unpreserveCalls == 6,
                 "initial preserved key cleanup failed");
         require(SUCCEEDED(service->ActivateEx(adapter, client, 0)) &&
                     !adapter->langBarItem,
@@ -688,7 +791,7 @@ int wmain(int count, wchar_t **arguments) {
         require(SUCCEEDED(service->Deactivate()),
                 "activation without language bar did not clean up");
         adapter->addItemResult = S_OK;
-        require(adapter->unpreserveCalls == 2,
+        require(adapter->unpreserveCalls == 12,
                 "preserved key was not removed on deactivation");
         adapter->preserveResult = E_FAIL;
         require(SUCCEEDED(service->ActivateEx(adapter, client, 0)),
@@ -714,7 +817,7 @@ int wmain(int count, wchar_t **arguments) {
         require(SUCCEEDED(service->Deactivate()), "second deactivation failed");
         require(adapter->removeItemCalls == 2 && !adapter->langBarItem,
                 "reactivated input mode item leaked");
-        require(adapter->unpreserveCalls == 2,
+        require(adapter->unpreserveCalls == 12,
                 "failed preserved-key registration was unregistered");
         require(SUCCEEDED(keyboard->SetValue(client, &closed)),
                 "keyboard close after deactivation failed");

@@ -72,28 +72,36 @@ Settings 使用 `coreActiveLanguage` 构建整个窗口，窗口生命周期内�
 
 ## 全局配置与所有权
 
-`%APPDATA%/Fcitx5/config/fcitx5/conf/windows-ui.conf` 是全局 UI 设置的唯一权威文件。它与 `windows.conf` 中的输入法和引擎配置分别保存，使用独立 revision，避免语言变更触发输入引擎 revision 或预编辑重置。语言与详细日志共享此全局 revision。
+`%APPDATA%/Fcitx5/config/fcitx5/conf/windows-ui.conf` 是全局 UI 设置的唯一权威文件。它与 `windows.conf` 中的输入法和引擎配置分别保存，使用独立 revision，避免语言变更触发输入引擎 revision 或预编辑重置。语言、详细日志与快捷键共享此全局 revision。
 
 ```ini
 [General]
-Version=2
+Version=3
 Language=system
 Revision=1
 DetailedLogging=false
+
+[Shortcuts]
+0=Control+space
+1=Control+Alt+1
+2=Control+Alt+2
+3=Control+Alt+3
+4=Control+Alt+4
+5=Control+Alt+5
 ```
 
 - Core 是唯一写入者；Settings 通过 IPC 读写。普通桌面 TSF 后台只读此固定路径，因此 Core 关闭时菜单和关于仍能使用已保存语言。Sandboxie/AppContainer 等 HostOnly 客户端通过 IPC 获取宿主解析后的语言，不读取隔离环境中的用户配置；断线时沿用已有快照。TSF 的日志开关从 Core 回复同步，不以后台文件读取开启。
 - 共享路径函数使用 `SHGetKnownFolderPath(FOLDERID_RoamingAppData)`，按已检查的上游 Windows StandardPaths 目录规则追加相对路径；不根据宿主 EXE、当前目录或 PATH 查找用户配置。
-- 文件采用 ASCII 字段和严格 schema。共享读写模块使用 Boost.PropertyTree 的 INI parser，校验版本、语言白名单、详细日志布尔值和非零 `uint64_t` revision；限制大小为 4 KiB。兼容读取 v1 并将日志设为关闭，下次成功保存写 v2。
+- 文件采用 ASCII 字段和严格 schema。共享读写模块使用 Boost.PropertyTree 的 INI parser，校验版本、语言白名单、详细日志布尔值、快捷键及非零 `uint64_t` revision；限制大小为 4 KiB。兼容读取 v1/v2，旧版本补齐默认快捷键，v1 的日志默认关闭，下次成功保存写 v3。
 - 无文件视为默认 `System`、revision 1。损坏、未知版本或权限失败应保留已有有效语言快照；初次读取失败回退系统解析结果或英文。写请求遇到损坏或不可读文件返回结构化错误，不自动覆盖用户文件。
 - 保存使用现有 `atomicfile.h` 的同目录临时文件和原子替换。读者使用允许替换的共享打开方式，取得完整的旧版或新版，失败后稍后重试。
 - 文件为用户级，各 session 的 Core 可能同时写入：同目录使用固定的 `windows-ui.conf.lock` 文件，通过非等待的 `LockFileEx` 获取写锁，并在锁内重新读取 revision 后校验。锁忙时返回可重试错误，Core 主事件循环不等待另一个 session。进程退出由操作系统释放锁，不删除锁文件，也不依赖 session 限定的服务互斥。
-- 语言和日志均未变化时幂等成功，不增加 revision；任一字段修改增加 revision，溢出拒绝写入。保存成功后发布新偏好并即时应用日志开关，保持 `coreActiveLanguage` 不变，不调用引擎 `setConfig`、context reset 或 `settingsEpoch_` 增量。
+- 语言、日志和快捷键均未变化时幂等成功，不增加 revision；任一字段修改增加 revision，溢出拒绝写入。保存成功后发布新偏好并即时应用日志开关和 Core 快捷键，保持 `coreActiveLanguage` 不变，不调用引擎 `setConfig`、context reset 或 `settingsEpoch_` 增量。
 - 隔离测试通过 `--windows-ui-settings-file ABSOLUTE_PATH` 注入全局配置路径，输入设置路径由 `--windows-settings-file` 独立指定。IPC 不接受客户端指定的读写路径；测试 runner 还需隔离上游用户数据和服务对象。
 
 ## IPC 扩展
 
-当前协议为 v11，Core、TSF 和 Settings 同步更新。`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId=0`。语言请求始于 v7，v10 增加详细日志字段，v11 增加独立的只读插件查询；以下为当前相关字段。AppContainer 仅允许读取，不允许 `SetGlobalSettings`。
+当前协议为 v12，Core、TSF 和 Settings 同步更新。`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId=0`。语言请求始于 v7，v10 增加详细日志字段，v11 增加独立的只读插件查询，v12 增加全局快捷键；以下为当前相关字段。AppContainer 仅允许读取，不允许 `SetGlobalSettings`。
 
 ```cpp
 enum class UiLanguage : uint8_t {
@@ -105,6 +113,7 @@ struct GlobalSettings {
     UiLanguage language = UiLanguage::System;
     uint64_t revision = 1;
     bool detailedLogging = false;
+    Shortcuts shortcuts = defaultShortcuts(); // 轮换和快速切换第 1～5 项
 };
 
 struct GlobalSettingsReply {
@@ -115,7 +124,7 @@ struct GlobalSettingsReply {
 };
 ```
 
-`SetGlobalSettings` 携带语言、日志开关及草稿读取时的 revision。服务端拒绝非法枚举/布尔值、零 revision、额外/截断字段和非零 contextId，回复实际保存状态。锁忙返回 `SettingsError::Busy`；解析故障返回结构化错误，不把错误当默认配置返回成功。
+`SetGlobalSettings` 携带语言、日志开关、六项快捷键及草稿读取时的 revision。服务端拒绝非法枚举/布尔值、无效或重复快捷键、零 revision、额外/截断字段和非零 contextId，回复实际保存状态。锁忙返回 `SettingsError::Busy`；解析故障返回结构化错误，不把错误当默认配置返回成功。
 
 保存超时不重放写请求，重连后先查询已保存选择和 revision。Settings 在更新全局页后不修改 `catalog_.selection.revision` 或 `config_.revision`。输入法列表变更只需处理当前草稿，并沿用已有输入法 revision。
 

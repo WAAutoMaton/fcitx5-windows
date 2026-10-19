@@ -442,6 +442,10 @@ bool WindowsSettings::select(InputContext *context, const std::string &id) {
     const auto *entry = instance_.inputMethodEntry(context);
     return entry && entry->uniqueName() == id;
 }
+bool WindowsSettings::selectIndex(InputContext *context, size_t index) {
+    return index < enabled_.size() && select(context, enabled_[index]);
+}
+
 bool WindowsSettings::cycle(InputContext *context) {
     const auto *entry = instance_.inputMethodEntry(context);
     auto current =

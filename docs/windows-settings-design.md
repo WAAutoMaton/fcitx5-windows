@@ -1,6 +1,6 @@
 # Windows 输入法设置设计与实现
 
-当前协议为 v11。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页包含只读“词库”tab，全局页包含“常规”、“开发者选项”和只读“插件”tab。插件页展示 Core 当前发现的 addon 信息和加载状态，并提供打开个人插件目录的按钮，不触发加载或卸载。插件目录与状态说明见 [windows-plugins.md](windows-plugins.md)。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
+当前协议为 v12。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页包含只读“词库”tab，全局页包含“常规”、“开发者选项”、只读“插件”和“快捷键”tab。插件页展示 Core 当前发现的 addon 信息和加载状态，并提供打开个人插件目录的按钮，不触发加载或卸载。插件目录与状态说明见 [windows-plugins.md](windows-plugins.md)。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
 
 ## 当前方案
 
@@ -15,7 +15,7 @@
 - `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，显示当前输入法图标/标签和名称，左键轮换输入法；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
 - `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
-- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v11 framing、输入法目录、选项描述、全局语言与详细日志设置、词库和插件状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。日志设计见 [windows-developer-logging-design.md](windows-developer-logging-design.md)，Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
+- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v12 framing、输入法目录、选项描述、全局语言与详细日志设置、词库和插件状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。日志设计见 [windows-developer-logging-design.md](windows-developer-logging-design.md)，Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
 - `src/main.cpp`：初始化 Core、预热拼音并创建 Windows 设置管理器；完整内存输入法组由 `src/windowsinputmethods.cpp` 按已安装可用条目建立。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置保存、真实 profile 应用、中文 entry 切换与 context 同步。
 - `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。
@@ -121,7 +121,7 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 
 ## IPC 与配置所有权
 
-当前 v11 协议包含输入法目录、有序选择、配置描述、全局语言/日志设置、插件状态、宿主命令及候选动作，`KeyReply` 返回实际 entry、显示信息、日志状态和候选代次。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 和候选动作则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求。
+当前 v12 协议包含输入法目录、有序选择、配置描述、全局语言/日志/快捷键设置、插件状态、宿主命令及候选动作，`KeyReply` 返回实际 entry、显示信息、日志状态和候选代次。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 和候选动作则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求。
 
 | 请求 | 内容 / 回复 |
 | --- | --- |
@@ -165,7 +165,7 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 
 ## 开发日志与 Settings 退出诊断
 
-全局配置保存在 `conf/windows-ui.conf` v2，与 `windows.conf` 的输入设置 revision 独立。v1 读取时日志默认关闭，下次成功保存写入 v2。语言和详细日志共享全局 revision，跨 tab 修改都计入草稿、重置和冲突检查。重置全局页恢复跟随系统并关闭日志，不立即保存。
+全局配置保存在 `conf/windows-ui.conf` v3，与 `windows.conf` 的输入设置 revision 独立。兼容读取 v1/v2，旧配置自动补齐默认快捷键；v1 的日志默认关闭，下次成功保存写入 v3。语言、详细日志和快捷键共享全局 revision，跨 tab 修改都计入草稿、重置和冲突检查。重置全局页恢复跟随系统、关闭日志并恢复默认快捷键，不立即保存。
 
 日志开关应用后 Core 和 Settings 立即更新，TSF 从下一次 Core 回复同步。开发者页显示本进程 logger 状态以及目录统计；打开目录不自动启用日志。日志位于 `%LOCALAPPDATA%/Fcitx5/logs`，按角色/PID 分文件并自动轮转和清理。具体格式、容量和隐私约束见 [开发日志设计](windows-developer-logging-design.md)。
 
@@ -175,6 +175,12 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 
 ## 快捷键录制
 
+全局“快捷键”页提供轮换输入法的快捷键（默认 `Control+space`），以及快速切换到列表第 1～5 项的快捷键（默认 `Control+Alt+1`～`Control+Alt+5`）。快速切换使用有序列表的原始位置；目标不存在或不可用时不消费按键，不跳过条目重新计数。每项使用与引擎 `KeyList` 相同的多行编辑框及录制对话框，清空可禁用，重复或无效组合不能保存。
+
+快捷键保存在 v3 的 `[Shortcuts]` 节，`0` 表示轮换、`1`～`5` 表示对应位置，多行组合在文件中使用分号分隔。每项最多 512 字节、16 个组合。Core 执行切换、清理旧预编辑并决定消费结果；TSF 在激活和轮询时读取全局配置，更新路由与 preserved keys，测试按键回调仅检查缓存。保存后 Core 即时生效，活动 TSF 在下一次成功的配置轮询时更新（目标间隔约 1 秒，连接和调度可能延迟）。语言栏左键仍轮换输入法，独立的系统开关仍在键盘与非键盘条目之间切换。
+
+共享的 Windows 快捷键解析与录制编码分别位于 `win32/ipc/shortcuts.h` 和 `portablekey.h`，各工具链分别编译。支持录制产生的修饰键、普通键、字符名与扫描码，以及手工填写的 `F1`～`F24`。Windows 键组合通过普通键回调路由，TSF preserved keys 不提供该修饰键；复杂布局和系统抢占组合仍需真实应用验证。
+
 引擎的 `KeyList` 选项保留多行文本编辑，并提供录制按钮。点击后打开独立的录制对话框，预览当前组合；确认时替换原文本选区，没有选区时追加一行。取消不改变草稿，确认录制后仍需点击页面的应用按钮才能保存配置。
 
 录制区域获得焦点时临时安装 `WH_KEYBOARD_LL` hook，在系统输入法快捷键、TSF 和文本编辑处理前消费按键。回调只在 Settings 窗口位于前台时录制和消费事件；失焦、关闭对话框或异常退出时释放 hook。每次按下更新预览，自动重复和释放修饰键不会覆盖已录制的完整组合，左右修饰键分别编码。
@@ -182,6 +188,8 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 结果遵循 Core 的 Windows 按键映射及 Fcitx portable 格式和 normalization。Core 尚未映射为符号的按键（例如 F1、带 Control/Alt 的 OEM 标点键）使用已有的 `<scanCode>` 语法按位置匹配，包含扩展键标记。Settings 不链接 Core 的 GNU 引擎库；协议不变，Core 继续负责校验配置和保存。系统保留组合、死键、AltGr 和复杂布局仍受现有 Windows 输入支持范围限制。
 
 `test_keycapture` 验证编码、normalization、左右修饰键、重复/释放状态；`scripts/test-settings-keycapture.ps1` 使用 `-UiTest` Settings 与 `ui_fixture` 的隔离端点验证实际录制、追加/替换、取消和应用后重新加载，不需要注册 TSF。
+
+`scripts/test-settings-shortcuts.ps1` 使用同一隔离端点验证六项默认值、录制对话框打开/取消、编辑、保存重载、清空、非法/重复值、恢复默认及 v2 迁移，不依赖物理按键注入。`inputmethods_probe` 覆盖真实 Core 的默认与自定义快捷键、排序、缺失位置、重复/松键和重启持久化；`tsf_probe --cycles` 覆盖缓存更新、过期 preserved GUID 和普通/保留键路由。若会话不支持用 `SetKeyboardState` 模拟 Space 按下，probe 显式跳过系统 compartment 与按键重合并路径；这些结果不代表真实系统派发验收。
 
 ## 持久化与状态一致性
 

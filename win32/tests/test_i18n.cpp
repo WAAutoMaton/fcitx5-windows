@@ -119,7 +119,7 @@ int main() {
     {
         std::ifstream input(file);
         const std::string contents{std::istreambuf_iterator<char>(input), {}};
-        assert(contents.find("Version=2") != std::string::npos);
+        assert(contents.find("Version=3") != std::string::npos);
         assert(contents.find("DetailedLogging=false") != std::string::npos);
     }
     request.detailedLogging = true;
@@ -135,6 +135,27 @@ int main() {
     assert(i18n::saveSettings(file, request, actual) ==
                ipc::SettingsError::None &&
            !actual.detailedLogging && actual.revision == 9);
+    request = actual;
+    request.shortcuts[0] = "Control+Shift+J\nAlt+<59>";
+    request.shortcuts[5].clear();
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::None);
+    ipc::GlobalSettings reloaded;
+    assert(i18n::readSettings(file, reloaded) && reloaded == actual &&
+           reloaded.shortcuts == request.shortcuts);
+    request = actual;
+    request.shortcuts[1] = request.shortcuts[0];
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::Invalid);
+    request = actual;
+    request.shortcuts[0] = "Control+NotAKey";
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::Invalid);
+    assert(ipc::replaceFile(file, "[General]\nVersion=2\nLanguage=en\nRevision="
+                                  "23\nDetailedLogging=true\n"));
+    assert(i18n::readSettings(file, reloaded) && reloaded.revision == 23 &&
+           reloaded.detailedLogging &&
+           reloaded.shortcuts == ipc::defaultShortcuts());
     assert(ipc::replaceFile(
         file,
         "[General]\nVersion=2\nLanguage=en\nRevision=1\nDetailedLogging=1\n"));
@@ -142,6 +163,7 @@ int main() {
     assert(ipc::replaceFile(
         file, "[General]\nVersion=1\nLanguage=invalid\nRevision=1\n"));
     assert(!i18n::readSettings(file, actual));
+    request = actual;
     assert(i18n::saveSettings(file, request, actual) ==
            ipc::SettingsError::SaveFailed);
     assert(ipc::replaceFile(file, std::string(4097, 'x')));

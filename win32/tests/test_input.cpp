@@ -1,15 +1,50 @@
+#include "../ipc/shortcuts.h"
 #include "../tsf/keypolicy.h"
 #include "../tsf/textutil.h"
 #include <cassert>
 
 int main() {
     using namespace fcitx;
+    namespace ipc = fcitx::win32::ipc;
     assert(routesKey('N', 0, true, false));
     assert(!routesKey('N', 0, false, false));
     assert(!routesKey('C', kModifierControl, true, true));
     assert(!routesKey('A', kModifierAlt, true, true));
-    assert(isModeSwitchKey(VK_SPACE, kModifierControl));
-    assert(routesKey(VK_SPACE, kModifierControl, false, false));
+    auto shortcuts = ipc::defaultShortcuts();
+    assert(ipc::validShortcuts(shortcuts));
+    ipc::ShortcutKey pressed;
+    assert(ipc::pressedShortcut(
+        shortcuts[0], 2, [](UINT key) { return key == VK_SPACE; }, pressed));
+    assert(!ipc::pressedShortcut(
+        shortcuts[0], 3, [](UINT) { return true; }, pressed));
+    assert(!ipc::pressedShortcut(
+        shortcuts[0], 2, [](UINT) { return false; }, pressed));
+    assert(ipc::shortcutAction(shortcuts, VK_SPACE, 0x39, kModifierControl) ==
+           0);
+    for (unsigned i = 1; i <= 5; ++i)
+        assert(ipc::shortcutAction(shortcuts, '0' + i, 0, 6) == i);
+    shortcuts[0] = "Control+Shift+J\nAlt+<59>";
+    assert(ipc::shortcutAction(shortcuts, VK_SPACE, 0, 2) == -1);
+    assert(ipc::shortcutAction(shortcuts, 'J', 0x24, 3) == 0);
+    assert(ipc::shortcutAction(shortcuts, VK_F1, 0x3b, 4) == 0);
+    assert(ipc::shortcutAction(shortcuts, VK_F1, 0x3b, 6) == -1);
+    shortcuts[5].clear();
+    assert(ipc::validShortcuts(shortcuts));
+    assert(ipc::shortcutAction(shortcuts, '5', 0, 6) == -1);
+    assert(ipc::pressedShortcut(
+        shortcuts[0], 3, [](UINT key) { return key == 'J'; }, pressed));
+    assert(!ipc::pressedShortcut(
+        shortcuts[0], 2, [](UINT key) { return key == VK_SPACE; }, pressed));
+    shortcuts[1] = "Shift_R";
+    assert(ipc::shortcutAction(shortcuts, VK_SHIFT, 0x36, 1) == 1);
+    assert(ipc::shortcutAction(shortcuts, VK_SHIFT, 0x2a, 1) == -1);
+    shortcuts[2] = "Control+Shift+J";
+    assert(!ipc::validShortcuts(shortcuts));
+    shortcuts[0] = "Alt+<59>";
+    shortcuts[2] = "Alt+F1";
+    assert(!ipc::validShortcuts(shortcuts));
+    shortcuts[2] = "InvalidKey";
+    assert(!ipc::validShortcuts(shortcuts));
     assert(
         !routesKey(VK_SPACE, kModifierControl | kModifierShift, false, false));
     assert(!routesKey('1', 0, true, false));

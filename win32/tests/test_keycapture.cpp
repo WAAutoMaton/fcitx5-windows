@@ -24,6 +24,7 @@ int main() {
     assert(portableKey(VK_CONTROL, 0x11d, Control) == "Control_R");
     assert(portableKey(VK_MENU, 0x138, Alt | Shift) == "Shift+Alt_R");
     assert(portableKey(VK_RWIN, 0x15c, Super) == "Super_R");
+    assert(portableKey('1', 0x02, Control | Shift) == "Control+Shift+1");
     assert(portableKey(VK_TAB, 0x0f, Shift) == "Shift+Tab");
     assert(portableKey(VK_ESCAPE, 1, 0) == "Escape");
     assert(portableKey(0, 0, 0).empty());

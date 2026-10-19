@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -10,7 +11,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 11;
+constexpr uint16_t kVersion = 12;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -91,10 +92,18 @@ enum class UiLanguage : uint8_t {
     English = 3,
 };
 
+using Shortcuts = std::array<std::string, 6>;
+
+inline Shortcuts defaultShortcuts() {
+    return {"Control+space", "Control+Alt+1", "Control+Alt+2",
+            "Control+Alt+3", "Control+Alt+4", "Control+Alt+5"};
+}
+
 struct GlobalSettings {
     UiLanguage language = UiLanguage::System;
     uint64_t revision = 1;
     bool detailedLogging = false;
+    Shortcuts shortcuts = defaultShortcuts();
     bool operator==(const GlobalSettings &) const = default;
 };
 
@@ -318,9 +327,9 @@ class Reader {
         return true;
     }
 
-    bool string(std::string &value) {
+    bool string(std::string &value, size_t maximum = kMaxPayloadSize) {
         uint32_t size = 0;
-        if (!u32(size) || size > remaining()) {
+        if (!u32(size) || size > maximum || size > remaining()) {
             return false;
         }
         value.assign(reinterpret_cast<const char *>(data_ + offset_), size);
@@ -350,18 +359,18 @@ encodeGlobalSettings(const GlobalSettings &settings) {
     writer.u8(static_cast<uint8_t>(settings.language));
     writer.u64(settings.revision);
     writer.u8(settings.detailedLogging);
+    for (const auto &keys : settings.shortcuts)
+        writer.string(keys);
     return writer.take();
 }
 
-inline bool decodeGlobalSettings(const std::vector<uint8_t> &payload,
-                                 GlobalSettings &settings) {
-    Reader reader(payload.data(), payload.size());
+inline bool readGlobalSettings(Reader &reader, GlobalSettings &settings) {
     GlobalSettings result;
     uint8_t language = 0;
     uint8_t detailedLogging = 0;
     if (!reader.u8(language) || !reader.u64(result.revision) ||
         !reader.u8(detailedLogging) || detailedLogging > 1 ||
-        !result.revision || reader.remaining()) {
+        !result.revision) {
         return false;
     }
     result.language = static_cast<UiLanguage>(language);
@@ -369,7 +378,20 @@ inline bool decodeGlobalSettings(const std::vector<uint8_t> &payload,
         return false;
     }
     result.detailedLogging = detailedLogging;
-    settings = result;
+    for (auto &keys : result.shortcuts)
+        if (!reader.string(keys, 512))
+            return false;
+    settings = std::move(result);
+    return true;
+}
+
+inline bool decodeGlobalSettings(const std::vector<uint8_t> &payload,
+                                 GlobalSettings &settings) {
+    Reader reader(payload.data(), payload.size());
+    GlobalSettings result;
+    if (!readGlobalSettings(reader, result) || reader.remaining())
+        return false;
+    settings = std::move(result);
     return true;
 }
 
@@ -386,22 +408,20 @@ encodeGlobalSettingsReply(const GlobalSettingsReply &reply) {
 
 inline bool decodeGlobalSettingsReply(const std::vector<uint8_t> &payload,
                                       GlobalSettingsReply &reply) {
-    if (payload.size() != 13) {
-        return false;
-    }
+    Reader reader(payload.data(), payload.size());
     GlobalSettingsReply result;
-    if (payload[0] > static_cast<uint8_t>(SettingsError::Busy) ||
-        !decodeGlobalSettings({payload.begin() + 1, payload.begin() + 11},
-                              result.settings)) {
+    uint8_t error = 0, resolved = 0, active = 0;
+    if (!reader.u8(error) ||
+        error > static_cast<uint8_t>(SettingsError::Busy) ||
+        !readGlobalSettings(reader, result.settings) || !reader.u8(resolved) ||
+        !reader.u8(active) || reader.remaining())
         return false;
-    }
-    result.error = static_cast<SettingsError>(payload[0]);
-    result.resolvedLanguage = static_cast<UiLanguage>(payload[11]);
-    result.coreActiveLanguage = static_cast<UiLanguage>(payload[12]);
+    result.error = static_cast<SettingsError>(error);
+    result.resolvedLanguage = static_cast<UiLanguage>(resolved);
+    result.coreActiveLanguage = static_cast<UiLanguage>(active);
     if (!validLanguage(result.resolvedLanguage, false) ||
-        !validLanguage(result.coreActiveLanguage, false)) {
+        !validLanguage(result.coreActiveLanguage, false))
         return false;
-    }
     reply = result;
     return true;
 }

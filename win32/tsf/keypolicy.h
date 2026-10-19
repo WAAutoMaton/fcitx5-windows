@@ -10,23 +10,8 @@ constexpr uint32_t kModifierControl = 1U << 1;
 constexpr uint32_t kModifierAlt = 1U << 2;
 constexpr uint32_t kModifierSuper = 1U << 3;
 
-inline bool isModeSwitchKey(uint32_t key, uint32_t modifiers) {
-    return key == VK_SPACE &&
-           (modifiers & (kModifierShift | kModifierControl | kModifierAlt |
-                         kModifierSuper)) == kModifierControl;
-}
-
-inline bool modeSwitchPressed() {
-    const auto down = [](int key) { return (GetKeyState(key) & 0x8000) != 0; };
-    return down(VK_SPACE) && down(VK_CONTROL) && !down(VK_SHIFT) &&
-           !down(VK_MENU) && !down(VK_LWIN) && !down(VK_RWIN);
-}
-
 inline bool routesKey(uint32_t key, uint32_t modifiers, bool enabled,
                       bool composing, bool codeInput = false) {
-    if (isModeSwitchKey(key, modifiers)) {
-        return true;
-    }
     if (!enabled ||
         (modifiers & (kModifierControl | kModifierAlt | kModifierSuper))) {
         return false;

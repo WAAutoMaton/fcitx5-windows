@@ -3,6 +3,7 @@
 #include "../win32/ipc/diagnostic_log.h"
 #include "../win32/ipc/pipeidentity.h"
 #include "../win32/ipc/service.h"
+#include "../win32/ipc/shortcuts.h"
 #include "../win32/ipc/transport.h"
 #include "windowslogging.h"
 #include "windowsplugins.h"
@@ -12,6 +13,7 @@
 #include <fcitx-utils/log.h>
 #include <fcitx-utils/standardpaths.h>
 #include <fcitx/candidatelist.h>
+#include <fcitx/globalconfig.h>
 #include <fcitx/inputmethodentry.h>
 #include <fcitx/inputmethodmanager.h>
 #include <fcitx/inputpanel.h>
@@ -281,7 +283,20 @@ WindowsPipeServer::WindowsPipeServer(Instance &instance,
       uiSettingsFile_(uiSettingsFile.empty() ? i18n::settingsPath()
                                              : std::move(uiSettingsFile)),
       activeLanguage_(i18n::resolveLanguage(activeLanguage)),
-      detailedLogging_(detailedLogging), settingsEpoch_(settings_.revision()) {}
+      detailedLogging_(detailedLogging), settingsEpoch_(settings_.revision()) {
+    ipc::GlobalSettings global;
+    if (i18n::readSettings(uiSettingsFile_, global))
+        shortcuts_ = global.shortcuts;
+    // Windows owns method selection; upstream default hotkeys must not remain
+    // active after the user replaces or clears the Windows shortcuts.
+    RawConfig hotkeys;
+    for (const auto *name :
+         {"TriggerKeys", "AltTriggerKeys", "ActivateKeys", "DeactivateKeys",
+          "EnumerateForwardKeys", "EnumerateBackwardKeys",
+          "EnumerateGroupForwardKeys", "EnumerateGroupBackwardKeys"})
+        hotkeys.get(std::string("Hotkey/") + name, true);
+    instance_.globalConfig().load(hotkeys, true);
+}
 
 ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
                                           bool consumed) {
@@ -621,6 +636,7 @@ void WindowsPipeServer::process(const ipc::Frame &request,
                               : ipc::SettingsError::Invalid;
         }
         if (reply.error == ipc::SettingsError::None) {
+            shortcuts_ = reply.settings.shortcuts;
             detailedLogging_ = reply.settings.detailedLogging;
             applyDiagnosticLogging(detailedLogging_);
         }
@@ -794,6 +810,7 @@ void WindowsPipeServer::process(const ipc::Frame &request,
         } else {
             iter->second->reset();
             iter->second->takeCommit();
+            iter->second->shortcutKeys.reset();
             iter->second->focusOut();
         }
         response.payload = writer.take();
@@ -806,6 +823,7 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             writer.string("unknown context");
         } else {
             if (iter->second->hasFocus()) {
+                iter->second->shortcutKeys.reset();
                 iter->second->focusOut();
             }
             contexts_.erase(iter);
@@ -842,16 +860,24 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             response.type = MessageType::Error;
             break;
         }
-        if (virtualKey == VK_SPACE &&
-            (modifiers & (kModifierControl | kModifierShift | kModifierAlt |
-                          kModifierSuper)) == kModifierControl) {
-            bool consumed = true;
-            if (request.type == MessageType::KeyDown &&
-                !(modifiers & kModifierRepeat)) {
+        const bool release = request.type == MessageType::KeyUp;
+        const bool held = virtualKey < context.shortcutKeys.size() &&
+                          context.shortcutKeys.test(virtualKey);
+        const auto action =
+            ipc::shortcutAction(shortcuts_, virtualKey, scanCode, modifiers);
+        if (held || action >= 0) {
+            bool consumed = held;
+            if (!release && action >= 0 && !(modifiers & kModifierRepeat)) {
                 context.takeCommit();
-                consumed = settings_.cycle(&context);
+                consumed = action == 0
+                               ? settings_.cycle(&context)
+                               : settings_.selectIndex(&context, action - 1);
                 context.takeCommit();
+                if (consumed && virtualKey < context.shortcutKeys.size())
+                    context.shortcutKeys.set(virtualKey);
             }
+            if (release && virtualKey < context.shortcutKeys.size())
+                context.shortcutKeys.reset(virtualKey);
             response.type = MessageType::KeyReply;
             response.payload = ipc::encodeKeyReply(snapshot(context, consumed));
             break;

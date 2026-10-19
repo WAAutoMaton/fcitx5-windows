@@ -52,8 +52,12 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
     if (self && message == kModeSwitchMessage) {
         self->AddRef();
         if (self->modeSwitchPending_) {
-            self->modeSwitchPending_ = false;
-            self->cycleMode(false);
+            const LPARAM details =
+                static_cast<LPARAM>(self->modeSwitchScan_ & 0xff) << 16 |
+                static_cast<LPARAM>((self->modeSwitchScan_ & 0x100) != 0) << 24;
+            self->processKey(self->textEditSinkContext_,
+                             self->modeSwitchVirtualKey_, details, false,
+                             self->modeSwitchModifiers_);
         } else {
             // Compartment writes from inside OnChange can be rejected.
             self->setKeyboardOpen(self->keyboardOpen_);
@@ -121,9 +125,6 @@ void Tsf::pollState() {
             langBarItem_.p->setTranslation(translation);
         about_.setTranslation(translation);
     }
-    if (!(GetKeyState(VK_SPACE) & 0x8000) && !modeSwitchPending_) {
-        modeSwitchKeyDown_ = false;
-    }
     pollServiceTask();
     if (!win32::ipc::clientInstallationAllowsUse()) {
         pipe_.disconnect();
@@ -156,6 +157,9 @@ void Tsf::pollState() {
             return;
         }
     }
+    if (!(GetKeyState(modeSwitchVirtualKey_) & 0x8000) && !modeSwitchPending_)
+        modeSwitchKeyDown_ = false;
+    refreshShortcuts();
     if (!remoteContextId_ && !initRemoteContext()) {
         return;
     }

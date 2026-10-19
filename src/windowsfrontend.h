@@ -5,6 +5,7 @@
 #include "windowsdictionaries.h"
 #include "windowssettings.h"
 #include <atomic>
+#include <bitset>
 #include <condition_variable>
 #include <cstdint>
 #include <fcitx-utils/eventdispatcher.h>
@@ -37,6 +38,7 @@ class WindowsInputContext final : public InputContext {
     uint32_t preeditCursor() const;
     ipc::KeyReply snapshot(bool consumed, bool enabled);
     void resetPreedit();
+    std::bitset<256> shortcutKeys;
     ipc::KeyReply candidateSnapshot() const;
     void updateCandidateIdentity(ipc::KeyReply &reply);
 
@@ -95,6 +97,7 @@ class WindowsPipeServer {
     std::filesystem::path uiSettingsFile_;
     ipc::UiLanguage activeLanguage_;
     bool detailedLogging_ = false;
+    ipc::Shortcuts shortcuts_ = ipc::defaultShortcuts();
     uint64_t settingsEpoch_ = 1;
     ipc::HostCommands hostCommands_;
     std::atomic_bool stopping_ = false;

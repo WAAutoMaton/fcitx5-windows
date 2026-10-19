@@ -1,5 +1,6 @@
 #include "settings.h"
 #include "../ipc/atomicfile.h"
+#include "../ipc/shortcuts.h"
 #include <algorithm>
 #include <boost/property_tree/ini_parser.hpp>
 #include <charconv>
@@ -119,8 +120,9 @@ bool readSettings(const std::filesystem::path &path,
         std::istringstream input(data);
         boost::property_tree::read_ini(input, tree);
         const auto version = tree.get<std::string>("General.Version");
-        if (tree.size() != 1 || (version != "1" && version != "2") ||
-            tree.get_child("General").size() != (version == "2" ? 4 : 3))
+        if (tree.size() != (version == "3" ? 2 : 1) ||
+            (version != "1" && version != "2" && version != "3") ||
+            tree.get_child("General").size() != (version == "1" ? 3 : 4))
             return false;
         const auto language = tree.get<std::string>("General.Language");
         const auto revision = tree.get<std::string>("General.Revision");
@@ -136,7 +138,7 @@ bool readSettings(const std::filesystem::path &path,
         if (found == std::end(names))
             return false;
         parsed.language = static_cast<UiLanguage>(found - std::begin(names));
-        if (version == "2") {
+        if (version != "1") {
             const auto detailed =
                 tree.get<std::string>("General.DetailedLogging");
             if (detailed != "true" && detailed != "false" &&
@@ -144,7 +146,19 @@ bool readSettings(const std::filesystem::path &path,
                 return false;
             parsed.detailedLogging = detailed == "true" || detailed == "True";
         }
-        settings = parsed;
+        if (version == "3") {
+            if (tree.get_child("Shortcuts").size() != parsed.shortcuts.size())
+                return false;
+            for (size_t i = 0; i < parsed.shortcuts.size(); ++i) {
+                auto value =
+                    tree.get<std::string>("Shortcuts." + std::to_string(i));
+                std::replace(value.begin(), value.end(), ';', '\n');
+                parsed.shortcuts[i] = std::move(value);
+            }
+            if (!ipc::validShortcuts(parsed.shortcuts))
+                return false;
+        }
+        settings = std::move(parsed);
         return true;
     } catch (...) {
         return false;
@@ -154,7 +168,8 @@ bool readSettings(const std::filesystem::path &path,
 ipc::SettingsError saveSettings(const std::filesystem::path &path,
                                 const ipc::GlobalSettings &requested,
                                 ipc::GlobalSettings &actual) {
-    if (!ipc::validLanguage(requested.language) || !requested.revision)
+    if (!ipc::validLanguage(requested.language) || !requested.revision ||
+        !ipc::validShortcuts(requested.shortcuts))
         return ipc::SettingsError::Invalid;
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
@@ -179,21 +194,28 @@ ipc::SettingsError saveSettings(const std::filesystem::path &path,
         return ipc::SettingsError::SaveFailed;
     actual = saved;
     const bool changed = saved.language != requested.language ||
-                         saved.detailedLogging != requested.detailedLogging;
+                         saved.detailedLogging != requested.detailedLogging ||
+                         saved.shortcuts != requested.shortcuts;
     if (changed && saved.revision != requested.revision)
         return ipc::SettingsError::Conflict;
     if (changed && saved.revision == std::numeric_limits<uint64_t>::max())
         return ipc::SettingsError::SaveFailed;
     saved.language = requested.language;
     saved.detailedLogging = requested.detailedLogging;
+    saved.shortcuts = requested.shortcuts;
     if (changed)
         ++saved.revision;
     boost::property_tree::ptree tree;
-    tree.put("General.Version", "2");
+    tree.put("General.Version", "3");
     tree.put("General.Language", names[static_cast<unsigned>(saved.language)]);
     tree.put("General.Revision", std::to_string(saved.revision));
     tree.put("General.DetailedLogging",
              saved.detailedLogging ? "true" : "false");
+    for (size_t i = 0; i < saved.shortcuts.size(); ++i) {
+        auto value = saved.shortcuts[i];
+        std::replace(value.begin(), value.end(), '\n', ';');
+        tree.put("Shortcuts." + std::to_string(i), value);
+    }
     std::ostringstream output;
     boost::property_tree::write_ini(output, tree);
     if (!ipc::replaceFile(path, output.str()))
