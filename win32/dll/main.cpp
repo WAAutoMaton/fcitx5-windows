@@ -95,18 +95,30 @@ __declspec(dllexport) STDAPI DllCanUnloadNow() {
 }
 
 __declspec(dllexport) STDAPI DllUnregisterServer() {
+#ifdef FCITX5_TSF_X86
+    return fcitx::UnregisterServer();
+#else
     const auto profile = fcitx::UnregisterCategoriesAndProfiles();
     const auto server = fcitx::UnregisterServer();
     return FAILED(profile) ? profile : server;
+#endif
 }
 
 __declspec(dllexport) STDAPI DllRegisterServer() {
+#ifdef FCITX5_TSF_X86
+    if (fcitx::RegisterServer()) {
+        return S_OK;
+    }
+    fcitx::UnregisterServer();
+    return E_FAIL;
+#else
     if (fcitx::RegisterServer() && fcitx::RegisterProfiles() &&
         fcitx::RegisterCategories()) {
         return S_OK;
     }
     DllUnregisterServer();
     return E_FAIL;
+#endif
 }
 
 BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID pvReserved) {

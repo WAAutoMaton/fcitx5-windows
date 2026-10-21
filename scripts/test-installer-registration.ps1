@@ -103,18 +103,11 @@ $registry[$profile].IconIndex = 1
 Assert-Failure { Assert-TsfRegistration -DllPath $dll -ModernApps } 'TSF language profile'
 $registry[$profile].IconIndex = 0
 Assert-TsfRegistration -DllPath $dll.ToLowerInvariant() -ModernApps
-$x86Tip = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\CTF\TIP\$clsid"
 $x86Server = "HKLM:\SOFTWARE\Classes\Wow6432Node\CLSID\$clsid\InprocServer32"
-$x86Profile = "$x86Tip\LanguageProfile\0x00000804\{9A92B895-29B9-4F19-9627-9F626C9490F2}"
 $x86Dll = 'C:\Program Files\Fcitx5\tsf\x86\fcitx5-x86.dll'
 $registry[$x86Server] = [pscustomobject]@{ '(default)' = $x86Dll; ThreadingModel = 'Apartment' }
-$registry[$x86Profile] = [pscustomobject]@{ Enable = 1; IconFile = $x86Dll; IconIndex = 0 }
-foreach ($category in @($desktopCategories) + @($modernCategories)) {
-    $registry["$x86Tip\Category\Category\$category\$clsid"] = $true
-    $registry["$x86Tip\Category\Item\$clsid\$category"] = $true
-}
-Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ModernApps
+Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $dll -ModernApps
 $registry[$x86Server].'(default)' = $dll
-Assert-Failure { Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ModernApps } 'TSF COM registration'
+Assert-Failure { Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $dll -ModernApps } 'TSF COM registration'
 Assert-TsfRegistration -DllPath $dll -ModernApps
 Write-Output 'PASS: desktop/modern categories, both category indexes, COM path/threading and enabled profile/icon checks (mock registry; no installation).'

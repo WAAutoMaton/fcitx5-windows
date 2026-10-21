@@ -62,13 +62,14 @@ function Assert-Path {
 
 function Assert-TsfRegistration {
     param([string]$DllPath, [switch]$ModernApps,
-        [ValidateSet('x64', 'x86')][string]$Architecture = 'x64')
+        [ValidateSet('x64', 'x86')][string]$Architecture = 'x64',
+        [string]$ProfileDllPath = '')
 
     $clsid = '{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}'
     $tip = "HKLM:\SOFTWARE\Microsoft\CTF\TIP\$clsid"
     $server = "HKLM:\SOFTWARE\Classes\CLSID\$clsid\InprocServer32"
+    if (!$ProfileDllPath) { $ProfileDllPath = $DllPath }
     if ($Architecture -eq 'x86') {
-        $tip = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\CTF\TIP\$clsid"
         $server = "HKLM:\SOFTWARE\Classes\Wow6432Node\CLSID\$clsid\InprocServer32"
     }
     Assert-Path $server
@@ -80,7 +81,7 @@ function Assert-TsfRegistration {
     $profile = "$tip\LanguageProfile\0x00000804\{9A92B895-29B9-4F19-9627-9F626C9490F2}"
     Assert-Path $profile
     $properties = Get-ItemProperty -LiteralPath $profile
-    if ($properties.Enable -ne 1 -or $properties.IconFile -ine $DllPath -or $properties.IconIndex -ne 0) {
+    if ($properties.Enable -ne 1 -or $properties.IconFile -ine $ProfileDllPath -or $properties.IconIndex -ne 0) {
         throw 'TSF language profile is disabled or does not reference the installed DLL icon.'
     }
 
@@ -154,7 +155,8 @@ try {
     Assert-Path ([string]$properties.NativeUninstaller)
     Assert-Path $uninstallKey
     Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll') -ModernApps:$ModernApps
-    Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll') -Architecture x86 -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll') -Architecture x86 `
+        -ProfileDllPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll') -ModernApps:$ModernApps
 
     # Each registrar must leave the other architecture's registration usable.
     $x86Dll = Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'
@@ -165,7 +167,7 @@ try {
     Assert-TsfRegistration -DllPath $x64Dll -ModernApps:$ModernApps
     Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', "`"$x86Dll`"") | Out-Null
     Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', '/u', "`"$x64Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $x64Dll -ModernApps:$ModernApps
     Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', "`"$x64Dll`"") | Out-Null
     Assert-TsfRegistration -DllPath $x64Dll -ModernApps:$ModernApps
 
