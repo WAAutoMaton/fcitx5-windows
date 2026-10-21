@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (!$BuildRoot) { $BuildRoot = "$root/build/tsf-$Architecture" }
 $BuildRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BuildRoot)
-$LLVMRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LLVMRoot)
+$LLVMRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LLVMRoot).Replace('\', '/')
 if ($BoostSource) { $BoostSource = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BoostSource) }
 if ($BoostHeaders) { $BoostHeaders = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BoostHeaders) }
 if (!$PSCmdlet.ShouldProcess($BuildRoot, "Build and test $Architecture TSF in a separate CMake tree")) { return }

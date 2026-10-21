@@ -49,6 +49,29 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "Resolved $tool could not be invoked." }
         }
     } finally { $env:PATH = $originalPath }
+    $tsfAst = [Management.Automation.Language.Parser]::ParseFile(
+        "$PSScriptRoot/build-tsf.ps1", [ref]$tokens, [ref]$parseErrors)
+    $llvmAssignment = $tsfAst.Find({ param($node)
+        $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+            $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+            $node.Left.VariablePath.UserPath -eq 'LLVMRoot'
+    }, $true)
+    $rcProbe = Join-Path $temporary 'rc-path.cmake'
+    @'
+set(expected "${CMAKE_RC_COMPILER}")
+configure_file("${CMAKE_ROOT}/Modules/CMakeRCCompiler.cmake.in" "${PROBE_OUTPUT}" @ONLY)
+include("${PROBE_OUTPUT}")
+if(NOT CMAKE_RC_COMPILER STREQUAL expected)
+    message(FATAL_ERROR "RC compiler path changed after loading generated configuration")
+endif()
+'@ | Set-Content -LiteralPath $rcProbe -Encoding ascii
+    $probeCmake = (Get-Command cmake.exe -CommandType Application | Select-Object -First 1).Source
+    foreach ($LLVMRoot in @('C:\Program Files\LLVM', (Join-Path $temporary 'LLVM tools'))) {
+        . ([scriptblock]::Create($llvmAssignment.Extent.Text))
+        & $probeCmake "-DCMAKE_RC_COMPILER=$LLVMRoot/bin/llvm-rc.exe" `
+            "-DPROBE_OUTPUT=$temporary/CMakeRCCompiler.cmake" -P $rcProbe
+        if ($LASTEXITCODE -ne 0) { throw 'TSF RC compiler path cannot round-trip through CMake.' }
+    }
     $archiveAst = [Management.Automation.Language.Parser]::ParseFile(
         "$PSScriptRoot/build-pinyin.ps1", [ref]$tokens, [ref]$parseErrors)
     $archiveFunction = $archiveAst.Find({ param($node)
@@ -115,7 +138,7 @@ try {
             Assert-Failure { & $entry -Prefix $prefix -BuildRoot $buildRoot } 'file is in use or not writable'
         } finally { [IO.File]::SetAttributes($locked, $attributes) }
         if ([IO.File]::ReadAllText($locked) -ne 'fixture; never loaded') { throw 'Preflight changed the file.' }
-        Write-Output 'PASS: multiple tools in PATH, archive reuse/hash rejection/cache repair, parsing, arbitrary-CWD/space/quote paths, WhatIf, environment preservation, invalid arguments, locked and read-only deployment rejection.'
+        Write-Output 'PASS: multiple tools in PATH, RC compiler path round-trip, archive reuse/hash rejection/cache repair, parsing, arbitrary-CWD/space/quote paths, WhatIf, environment preservation, invalid arguments, locked and read-only deployment rejection.'
     } finally { Pop-Location }
 } finally {
     # Delete only this test's verified unique workspace directory.
