@@ -1,5 +1,6 @@
 [CmdletBinding()]
-param([string]$Prefix = '', [string]$TsfBuild = '')
+param([string]$Prefix = '', [string]$TsfBuild = '',
+    [ValidateSet('x64', 'x86')][string]$Architecture = 'x64', [string]$PeerTsfBuild = '')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -9,7 +10,8 @@ $core = (Resolve-Path "$Prefix/bin/Fcitx5.exe").Path
 $probe = (Resolve-Path "$TsfBuild/tests/ipc_probe.exe").Path
 $tsfProbe = (Resolve-Path "$TsfBuild/tests/tsf_probe.exe").Path
 $settingsProbe = (Resolve-Path "$TsfBuild/tests/settings_probe.exe").Path
-$dll = (Resolve-Path "$TsfBuild/dll/fcitx5-x86_64.dll").Path
+$dllName = if ($Architecture -eq 'x86') { 'fcitx5-x86.dll' } else { 'fcitx5-x86_64.dll' }
+$dll = (Resolve-Path "$TsfBuild/dll/$dllName").Path
 $log = "$root/build/pinyin-test"
 New-Item -ItemType Directory -Force $log | Out-Null
 if (Get-Process Fcitx5 -ErrorAction SilentlyContinue) { throw 'Stop the running Core before this isolated test.' }
@@ -31,6 +33,9 @@ try {
         if ($ready) { $connected = $true; break }
     }
     if (!$connected) { throw 'Pinyin IPC integration failed.' }
+    if ($PeerTsfBuild) {
+        & "$PSScriptRoot/test-cross-arch.ps1" -TsfBuild $TsfBuild -PeerTsfBuild $PeerTsfBuild
+    }
     & $probe
     if ($LASTEXITCODE -ne 0) { throw 'Pinyin IPC regression failed.' }
     & $settingsProbe

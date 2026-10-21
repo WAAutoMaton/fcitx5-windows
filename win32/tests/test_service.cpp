@@ -35,6 +35,13 @@ void waitStarts(Counters *counts, LONG core, LONG settings) {
 } // namespace
 
 int main() {
+    const fs::path install = L"C:/Fcitx5";
+    for (const auto relative :
+         {L"tsf/fcitx5-x86_64.dll", L"tsf/x86/fcitx5-x86.dll",
+          L"TSF/X86/fcitx5-x86.dll", L"bin/Fcitx5.exe",
+          L"settings/Fcitx5Settings.exe"})
+        assert(ipc::installationRootForModulePath(install / relative) ==
+               install);
     const auto executable = fs::path(executablePath());
     const auto child = executable.filename() != L"test_service.exe";
     std::wstring identity;

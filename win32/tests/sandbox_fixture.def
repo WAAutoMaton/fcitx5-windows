@@ -1,0 +1,4 @@
+EXPORTS
+    SetSandboxState
+    SbieApi_QueryProcess
+    SbieApi_QueryProcessInfo

@@ -25,9 +25,9 @@ BOOL RegisterServer() {
         return FALSE;
     }
     HKEY classes = nullptr;
-    const auto opened =
-        RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Classes", 0, nullptr, 0,
-                        KEY_READ | KEY_WRITE, nullptr, &classes, nullptr);
+    const auto opened = RegCreateKeyExW(
+        HKEY_LOCAL_MACHINE, L"SOFTWARE\\Classes", 0, nullptr, 0,
+        KEY_READ | KEY_WRITE | kRegistrationView, nullptr, &classes, nullptr);
     if (opened != ERROR_SUCCESS) {
         return FALSE;
     }
@@ -36,16 +36,17 @@ BOOL RegisterServer() {
     return SUCCEEDED(result);
 }
 
-HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath) {
-    if (!root || dllPath.empty() || dllPath.find(L'\0') != std::wstring::npos) {
+HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath, REGSAM view) {
+    if (!root || dllPath.empty() || dllPath.find(L'\0') != std::wstring::npos ||
+        (view != KEY_WOW64_32KEY && view != KEY_WOW64_64KEY)) {
         return E_INVALIDARG;
     }
     const auto key =
         L"CLSID\\" + stringToWString(guidToString(FCITX_CLSID), CP_UTF8);
     HKEY clsid = nullptr;
     auto result =
-        RegCreateKeyExW(root, key.c_str(), 0, nullptr, 0, KEY_READ | KEY_WRITE,
-                        nullptr, &clsid, nullptr);
+        RegCreateKeyExW(root, key.c_str(), 0, nullptr, 0,
+                        KEY_READ | KEY_WRITE | view, nullptr, &clsid, nullptr);
     if (result != ERROR_SUCCESS) {
         return HRESULT_FROM_WIN32(result);
     }
@@ -55,7 +56,7 @@ HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath) {
     HKEY server = nullptr;
     if (result == ERROR_SUCCESS) {
         result = RegCreateKeyExW(clsid, L"InprocServer32", 0, nullptr, 0,
-                                 KEY_WRITE, nullptr, &server, nullptr);
+                                 KEY_WRITE | view, nullptr, &server, nullptr);
     }
     if (result == ERROR_SUCCESS) {
         result = RegSetValueExW(
@@ -77,8 +78,32 @@ HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath) {
 }
 
 HRESULT UnregisterServer() {
-    const auto key = "SOFTWARE\\Classes\\CLSID\\" + guidToString(FCITX_CLSID);
-    const auto result = RegDeleteTreeA(HKEY_LOCAL_MACHINE, key.c_str());
+    HKEY classes = nullptr;
+    const auto opened =
+        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Classes", 0,
+                      KEY_READ | KEY_WRITE | kRegistrationView, &classes);
+    if (opened == ERROR_FILE_NOT_FOUND)
+        return S_OK;
+    if (opened != ERROR_SUCCESS)
+        return HRESULT_FROM_WIN32(opened);
+    const auto result = UnregisterServerAt(classes);
+    RegCloseKey(classes);
+    return result;
+}
+
+HRESULT UnregisterServerAt(HKEY root, REGSAM view) {
+    if (!root || (view != KEY_WOW64_32KEY && view != KEY_WOW64_64KEY))
+        return E_INVALIDARG;
+    HKEY classes = nullptr;
+    const auto opened =
+        RegOpenKeyExW(root, L"CLSID", 0, KEY_READ | KEY_WRITE | view, &classes);
+    if (opened == ERROR_FILE_NOT_FOUND)
+        return S_OK;
+    if (opened != ERROR_SUCCESS)
+        return HRESULT_FROM_WIN32(opened);
+    const auto result =
+        RegDeleteTreeA(classes, guidToString(FCITX_CLSID).c_str());
+    RegCloseKey(classes);
     return result == ERROR_FILE_NOT_FOUND ? S_OK : HRESULT_FROM_WIN32(result);
 }
 
@@ -206,8 +231,8 @@ HRESULT UnregisterCategoriesAndProfiles() {
     const auto key =
         "SOFTWARE\\Microsoft\\CTF\\TIP\\" + guidToString(FCITX_CLSID);
     HKEY existing = nullptr;
-    const auto opened =
-        RegOpenKeyExA(HKEY_LOCAL_MACHINE, key.c_str(), 0, KEY_READ, &existing);
+    const auto opened = RegOpenKeyExA(HKEY_LOCAL_MACHINE, key.c_str(), 0,
+                                      KEY_READ | kRegistrationView, &existing);
     if (opened == ERROR_FILE_NOT_FOUND) {
         return S_OK;
     }

@@ -22,6 +22,7 @@ param(
     [string]$DataArchive = '',
     [ValidateRange(1, 256)][int]$Jobs = 6,
     [switch]$ModernApps,
+    [ValidateSet('x64', 'x86')][string[]]$TsfArchitectures = @('x64', 'x86'),
     [switch]$SkipTests
 )
 
@@ -81,6 +82,12 @@ if ($Prefix -ieq $BuildRoot -or
 }
 $staging = Join-Path $BuildRoot 'prefix'
 $tsfBuild = Join-Path $BuildRoot 'tsf'
+if ('x64' -notin $TsfArchitectures) { throw 'The AMD64 runtime requires x64 TSF; x86 is an additional frontend.' }
+if ('x86' -notin $TsfArchitectures -and
+    ((Test-Path -LiteralPath "$staging/tsf/x86/fcitx5-x86.dll") -or
+     (Test-Path -LiteralPath "$Prefix/tsf/x86/fcitx5-x86.dll"))) {
+    throw 'An existing dual-architecture tree requires both x64 and x86 TSF builds. Choose a new prefix/build root for an x64-only development deployment.'
+}
 if (!$PSCmdlet.ShouldProcess($Prefix,
     "Build AMD64 Release Core/TSF/Settings in '$BuildRoot', run CTest, and deploy the runtime tree")) {
     return
@@ -171,7 +178,14 @@ try {
     Write-Host '[3/5] Build WinUI Settings and stage TSF/Settings.'
     $settingsBoostSource = if ($BoostSource) { $BoostSource } else { "$tsfBuild/_deps/native_boost-src" }
     & "$PSScriptRoot/build-settings.ps1" -Configuration Release -Prefix $staging -BuildRoot "$BuildRoot/settings" -BoostSource $settingsBoostSource -BoostHeaders $(if ($DependencyPrefix) { "$DependencyPrefix/include" } else { "$MSYS2Root/clang64/include" })
-    & "$PSScriptRoot/deploy-tsf.ps1" -Prefix $staging -TsfBuild $tsfBuild
+    $tsfX86Build = ''
+    if ('x86' -in $TsfArchitectures) {
+        $tsfX86Build = Join-Path $BuildRoot 'tsf-x86'
+        & "$PSScriptRoot/build-tsf.ps1" -Architecture x86 -BuildRoot $tsfX86Build -LLVMRoot $LLVMRoot `
+            -BoostSource $settingsBoostSource -BoostHeaders $(if ($DependencyPrefix) { "$DependencyPrefix/include" } else { "$MSYS2Root/clang64/include" }) `
+            -Jobs $Jobs -ModernApps:$ModernApps -SkipTests:$SkipTests
+    }
+    & "$PSScriptRoot/deploy-tsf.ps1" -Prefix $staging -TsfBuild $tsfBuild -TsfX86Build $tsfX86Build
 
     Write-Host '[4/5] Validate staged outputs and run default CTest tests.'
     foreach ($file in @('bin/Fcitx5.exe', 'lib/fcitx5/libpinyin.dll', 'share/libime/sc.dict',
@@ -186,6 +200,9 @@ try {
             throw "Missing Windows translation catalog: $language"
         }
     }
+    if ($tsfX86Build -and !(Test-Path -LiteralPath "$staging/tsf/x86/fcitx5-x86.dll" -PathType Leaf)) {
+        throw 'Missing staged x86 TSF DLL.'
+    }
     if (!$SkipTests) {
         $ctest = Join-Path (Split-Path $cmake -Parent) 'ctest.exe'
         $null = Require-BuildTool $ctest
@@ -195,9 +212,10 @@ try {
     Write-Host '[5/5] Deploy the complete runtime tree.'
     Assert-DeploymentWritable $Prefix
     New-Item -ItemType Directory -Force $Prefix | Out-Null
-    foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'setup', 'settings', 'licenses')) {
+    foreach ($directory in @('bin', 'lib', 'share', 'settings', 'licenses')) {
         Copy-Item -LiteralPath "$staging/$directory" -Destination $Prefix -Recurse -Force
     }
+    & "$PSScriptRoot/deploy-tsf.ps1" -Prefix $Prefix -TsfBuild $tsfBuild -TsfX86Build $tsfX86Build
     Write-Output "Deployment ready: $Prefix"
     Write-Output "TSF tests/probes: $tsfBuild/tests"
     Write-Output 'Services were not started. TSF registration and system runtimes were not changed.'

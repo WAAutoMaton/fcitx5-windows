@@ -18,7 +18,10 @@ function Resolve-TsfDll {
 }
 
 function Get-TsfRegsvr32 {
-    $systemDirectory = if ([Environment]::Is64BitOperatingSystem -and
+    param([ValidateSet('x64', 'x86')][string]$Architecture = 'x64')
+    $systemDirectory = if ($Architecture -eq 'x86' -and [Environment]::Is64BitOperatingSystem) {
+        'SysWOW64'
+    } elseif ([Environment]::Is64BitOperatingSystem -and
                            ![Environment]::Is64BitProcess) { 'Sysnative' } else { 'System32' }
     return Join-Path $env:WINDIR "$systemDirectory/regsvr32.exe"
 }
@@ -26,6 +29,13 @@ function Get-TsfRegsvr32 {
 function Invoke-TsfRegistration {
     param([string]$DllPath, [switch]$Unregister)
 
+    . "$PSScriptRoot/pe-machine.ps1"
+    $machine = Get-PeMachine $DllPath
+    $architecture = switch ($machine) {
+        0x14c { 'x86' }
+        0x8664 { 'x64' }
+        default { throw ('Unsupported TSF PE machine: 0x{0:x4}' -f $machine) }
+    }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     try {
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -35,7 +45,7 @@ function Invoke-TsfRegistration {
     }
     $arguments = if ($Unregister) { "/s /u `"$DllPath`"" } else { "/s `"$DllPath`"" }
     $start = @{
-        FilePath = Get-TsfRegsvr32
+        FilePath = Get-TsfRegsvr32 -Architecture $architecture
         ArgumentList = $arguments
         Wait = $true
         PassThru = $true

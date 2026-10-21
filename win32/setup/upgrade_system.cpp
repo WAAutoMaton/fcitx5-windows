@@ -92,12 +92,12 @@ bool administrator() {
                               &size) &&
            CheckTokenMembership(nullptr, sid, &member) && member;
 }
-std::wstring regString(const wchar_t *key, const wchar_t *name) {
+std::wstring regString(const wchar_t *key, const wchar_t *name,
+                       DWORD view = RRF_SUBKEY_WOW6464KEY) {
     std::wstring result(32768, L'\0');
     DWORD size = DWORD(result.size() * sizeof(wchar_t));
-    reg(RegGetValueW(HKEY_LOCAL_MACHINE, key, name,
-                     RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, nullptr,
-                     result.data(), &size));
+    reg(RegGetValueW(HKEY_LOCAL_MACHINE, key, name, RRF_RT_REG_SZ | view,
+                     nullptr, result.data(), &size));
     result.resize(wcsnlen(result.c_str(), result.size()));
     return result;
 }
@@ -147,13 +147,13 @@ std::vector<BYTE> unhex(std::string_view text) {
 }
 
 Tree snapshotKey(HKEY parent, const std::wstring &path, bool deep = true,
-                 unsigned depth = 0) {
+                 unsigned depth = 0, REGSAM view = KEY_WOW64_64KEY) {
     if (depth > 32)
         fail(ERROR_INVALID_DATA);
     Tree result, values, children;
     Key key;
-    const auto opened = RegOpenKeyExW(parent, path.c_str(), 0,
-                                      KEY_READ | KEY_WOW64_64KEY, &key.value);
+    const auto opened =
+        RegOpenKeyExW(parent, path.c_str(), 0, KEY_READ | view, &key.value);
     result.put("exists", opened != ERROR_FILE_NOT_FOUND);
     if (opened == ERROR_FILE_NOT_FOUND)
         return result;
@@ -189,7 +189,7 @@ Tree snapshotKey(HKEY parent, const std::wstring &path, bool deep = true,
             if (error == ERROR_NO_MORE_ITEMS)
                 break;
             reg(error);
-            Tree child = snapshotKey(key.value, name, true, depth + 1);
+            Tree child = snapshotKey(key.value, name, true, depth + 1, view);
             child.put("name", utf8(name));
             children.push_back({"", child});
         }
@@ -198,20 +198,27 @@ Tree snapshotKey(HKEY parent, const std::wstring &path, bool deep = true,
     return result;
 }
 void restoreKey(HKEY parent, const std::wstring &path, const Tree &snapshot,
-                bool deep = true, unsigned depth = 0) {
+                bool deep = true, unsigned depth = 0,
+                REGSAM view = KEY_WOW64_64KEY) {
     if (depth > 32)
         fail(ERROR_INVALID_DATA);
     Key key;
     if (deep) {
-        const auto error = RegDeleteTreeW(parent, path.c_str());
-        if (error != ERROR_FILE_NOT_FOUND)
-            reg(error);
+        const auto opened = RegOpenKeyExW(
+            parent, path.c_str(), 0, KEY_READ | KEY_WRITE | view, &key.value);
+        if (opened != ERROR_FILE_NOT_FOUND) {
+            reg(opened);
+            reg(RegDeleteTreeW(key.value, nullptr));
+            RegCloseKey(key.value);
+            key.value = nullptr;
+            reg(RegDeleteKeyExW(parent, path.c_str(), view, 0));
+        }
     }
     if (!snapshot.get<bool>("exists"))
         return;
     reg(RegCreateKeyExW(parent, path.c_str(), 0, nullptr, 0,
-                        KEY_READ | KEY_WRITE | KEY_WOW64_64KEY, nullptr,
-                        &key.value, nullptr));
+                        KEY_READ | KEY_WRITE | view, nullptr, &key.value,
+                        nullptr));
     if (!deep) {
         wchar_t name[32768]{};
         DWORD size = 32768;
@@ -237,7 +244,7 @@ void restoreKey(HKEY parent, const std::wstring &path, const Tree &snapshot,
             if (name.empty() ||
                 name.find_first_of(L"\\/\0", 0, 3) != std::wstring::npos)
                 fail(ERROR_INVALID_DATA);
-            restoreKey(key.value, name, child, true, depth + 1);
+            restoreKey(key.value, name, child, true, depth + 1, view);
         }
     }
 }
@@ -317,6 +324,19 @@ class NativeMachine : public Machine {
                 if (error.code().value() != ERROR_FILE_NOT_FOUND ||
                     !hasTransaction(root_) ||
                     !busyState(transactionState(root_)))
+                    throw;
+            }
+        });
+        loggedPhase("x86 TSF registration ownership", [&] {
+            try {
+                if (!ipc::sameInstallationPath(
+                        regString((std::wstring(kClsid) + L"\\InprocServer32")
+                                      .c_str(),
+                                  nullptr, RRF_SUBKEY_WOW6432KEY),
+                        root_ / "tsf/x86/fcitx5-x86.dll"))
+                    fail(ERROR_ALREADY_EXISTS);
+            } catch (const std::system_error &error) {
+                if (error.code().value() != ERROR_FILE_NOT_FOUND)
                     throw;
             }
         });
@@ -541,6 +561,10 @@ class NativeMachine : public Machine {
         Tree snapshot;
         snapshot.add_child("clsid", snapshotKey(HKEY_LOCAL_MACHINE, kClsid));
         snapshot.add_child("tip", snapshotKey(HKEY_LOCAL_MACHINE, kTip));
+        snapshot.add_child("clsid32", snapshotKey(HKEY_LOCAL_MACHINE, kClsid,
+                                                  true, 0, KEY_WOW64_32KEY));
+        snapshot.add_child("tip32", snapshotKey(HKEY_LOCAL_MACHINE, kTip, true,
+                                                0, KEY_WOW64_32KEY));
         snapshot.add_child(
             "installer",
             snapshotKey(HKEY_LOCAL_MACHINE, win32::ipc::kInstallerKey, false));
@@ -552,12 +576,32 @@ class NativeMachine : public Machine {
         const auto snapshot = load(transaction / "registry.json");
         restoreKey(HKEY_LOCAL_MACHINE, kClsid, snapshot.get_child("clsid"));
         restoreKey(HKEY_LOCAL_MACHINE, kTip, snapshot.get_child("tip"));
+        if (const auto key = snapshot.get_child_optional("clsid32"))
+            restoreKey(HKEY_LOCAL_MACHINE, kClsid, *key, true, 0,
+                       KEY_WOW64_32KEY);
+        if (const auto key = snapshot.get_child_optional("tip32"))
+            restoreKey(HKEY_LOCAL_MACHINE, kTip, *key, true, 0,
+                       KEY_WOW64_32KEY);
         restoreKey(HKEY_LOCAL_MACHINE, win32::ipc::kInstallerKey,
                    snapshot.get_child("installer"), false);
         restoreKey(HKEY_LOCAL_MACHINE, kUninstall,
                    snapshot.get_child("uninstall"));
     }
     void registerVersion(const Manifest &value) override {
+        if (std::any_of(value.files.begin(), value.files.end(),
+                        [](const File &file) {
+                            return file.path == "tsf/x86/fcitx5-x86.dll";
+                        })) {
+            wchar_t directory[MAX_PATH]{};
+            if (!GetSystemWow64DirectoryW(directory, MAX_PATH))
+                fail();
+            const auto code = process(
+                fs::path(directory) / L"regsvr32.exe",
+                L"/s \"" + (root_ / "tsf/x86/fcitx5-x86.dll").wstring() +
+                    L"\"");
+            if (code)
+                fail(code);
+        }
         const auto dll = root_ / "tsf" / "fcitx5-x86_64.dll";
         auto module = LoadLibraryExW(dll.c_str(), nullptr,
                                      LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
@@ -573,29 +617,40 @@ class NativeMachine : public Machine {
         verifyVersion(value);
     }
     void verifyVersion(const Manifest &value) override {
-        const auto dll = root_ / "tsf" / "fcitx5-x86_64.dll";
+        verifyTsf(root_ / "tsf/fcitx5-x86_64.dll", RRF_SUBKEY_WOW6464KEY,
+                  KEY_WOW64_64KEY);
+        if (std::any_of(value.files.begin(), value.files.end(),
+                        [](const File &file) {
+                            return file.path == "tsf/x86/fcitx5-x86.dll";
+                        }))
+            verifyTsf(root_ / "tsf/x86/fcitx5-x86.dll", RRF_SUBKEY_WOW6432KEY,
+                      KEY_WOW64_32KEY);
+        if (regString(kUninstall, L"DisplayVersion") != wide(value.version))
+            fail(ERROR_INVALID_DATA);
+    }
+    void verifyTsf(const fs::path &dll, DWORD flags, REGSAM view) {
         const auto profile = std::wstring(kTip) +
                              L"\\LanguageProfile\\0x00000804\\"
                              L"{9A92B895-29B9-4F19-9627-9F626C9490F2}";
         if (!win32::ipc::sameInstallationPath(
                 regString((std::wstring(kClsid) + L"\\InprocServer32").c_str(),
-                          nullptr),
+                          nullptr, flags),
                 dll) ||
             regString((std::wstring(kClsid) + L"\\InprocServer32").c_str(),
-                      L"ThreadingModel") != L"Apartment")
+                      L"ThreadingModel", flags) != L"Apartment")
             fail(ERROR_INVALID_DATA);
         for (const auto &[name, expected] :
              {std::pair{L"Enable", DWORD(1)},
               std::pair{L"IconIndex", DWORD(0)}}) {
             DWORD actual = 0, size = sizeof(actual);
             reg(RegGetValueW(HKEY_LOCAL_MACHINE, profile.c_str(), name,
-                             RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY, nullptr,
-                             &actual, &size));
+                             RRF_RT_REG_DWORD | flags, nullptr, &actual,
+                             &size));
             if (actual != expected)
                 fail(ERROR_INVALID_DATA);
         }
         if (!win32::ipc::sameInstallationPath(
-                regString(profile.c_str(), L"IconFile"), dll))
+                regString(profile.c_str(), L"IconFile", flags), dll))
             fail(ERROR_INVALID_DATA);
         for (const auto &category : fcitx::RegistrationCategories()) {
             wchar_t name[40]{};
@@ -610,11 +665,9 @@ class NativeMachine : public Machine {
                       name}) {
                 Key key;
                 reg(RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.c_str(), 0,
-                                  KEY_READ | KEY_WOW64_64KEY, &key.value));
+                                  KEY_READ | view, &key.value));
             }
         }
-        if (regString(kUninstall, L"DisplayVersion") != wide(value.version))
-            fail(ERROR_INVALID_DATA);
     }
     DWORD dependencies(const fs::path &transaction,
                        const Manifest &value) override {

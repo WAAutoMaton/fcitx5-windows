@@ -2,7 +2,9 @@
 
 ## 状态与目标
 
-当前 Windows 发行包只提供 x64 TSF DLL。x86 应用无法把 x64 DLL 加载到自己的进程中，因此这类应用不会激活 Fcitx5 TSF，也不会产生对应的 TSF 诊断日志。Microsoft 对 TSF 的建议是在 64 位 Windows 上并行安装 32 位和 64 位文本服务版本，并让两个版本使用相同的 CLSID。[64-bit Considerations](https://learn.microsoft.com/zh-cn/windows/win32/tsf/64-bit-platform-considerations)
+本方案的实现采用独立 x64/x86 构建树，以及单根目录中的 `tsf/x86/fcitx5-x86.dll` 布局。构建、部署、打包、双 view 注册/注销和升级快照/恢复均已接入；CI 包含独立 x86 测试和双架构机器级注册 smoke。真实 x86 应用、签名部署和完整升级/重启卸载仍需隔离环境验收，不因自动化 probe 通过而宣称完成。
+
+x86 应用无法把 x64 DLL 加载到自己的进程中，因此缺少 x86 DLL 时不会激活 Fcitx5 TSF，也不会产生对应的 TSF 诊断日志。Microsoft 对 TSF 的建议是在 64 位 Windows 上并行安装 32 位和 64 位文本服务版本，并让两个版本使用相同的 CLSID。[64-bit Considerations](https://learn.microsoft.com/zh-cn/windows/win32/tsf/64-bit-platform-considerations)
 
 本设计的目标是在 x64 Windows 上支持 x86 Win32 应用，同时保留现有 x64 应用和 Core 的行为：
 

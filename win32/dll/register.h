@@ -9,7 +9,11 @@ namespace fcitx {
 extern HINSTANCE dllInstance;
 
 BOOL RegisterServer();
-HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath);
+inline constexpr REGSAM kRegistrationView =
+    sizeof(void *) == 4 ? KEY_WOW64_32KEY : KEY_WOW64_64KEY;
+HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath,
+                         REGSAM view = kRegistrationView);
+HRESULT UnregisterServerAt(HKEY root, REGSAM view = kRegistrationView);
 HRESULT UnregisterServer();
 BOOL RegisterProfiles();
 BOOL RegisterCategories();

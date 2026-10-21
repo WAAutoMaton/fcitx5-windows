@@ -5,6 +5,19 @@
 using namespace fcitx::win32::ipc;
 
 int main() {
+    Frame wideIds;
+    wideIds.type = MessageType::KeyDown;
+    wideIds.requestId = 0x8877665544332211ULL;
+    wideIds.contextId = 0xffeeddccbbaa0099ULL;
+    const std::vector<uint8_t> expected = {
+        0x58, 0x43, 0x57, 0x46, 12,   0,    8,    0,    0,    0,
+        0,    0,    0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+        0x99, 0,    0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    assert(encodeFrame(wideIds) == expected && expected.size() == kHeaderSize);
+    Frame restoredIds;
+    assert(decodeFrame(expected, restoredIds));
+    assert(restoredIds.requestId == wideIds.requestId &&
+           restoredIds.contextId == wideIds.contextId);
     assert(hostCommand(MessageType::OpenUserDataFolder));
     assert(hostCommand(MessageType::RestartServices));
     assert(hostCommand(MessageType::StopServices));

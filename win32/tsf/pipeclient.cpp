@@ -1,4 +1,5 @@
 #include "pipeclient.h"
+#include "../ipc/installation.h"
 #include "../ipc/pipeidentity.h"
 #include "../ipc/transport.h"
 #include <filesystem>
@@ -12,7 +13,8 @@ struct ConnectionTrace {
     ~ConnectionTrace() {
         if (logger && logger->enabled())
             logger->event(win32::diagnostic::Level::Info, "pipe_connect",
-                          {{"stage", client.connectionStage()},
+                          {{"client_arch", sizeof(void *) == 4 ? "x86" : "x64"},
+                           {"stage", client.connectionStage()},
                            {"error", client.connectionError()},
                            {"server_pid", client.serverProcessId()},
                            {"elapsed_ms", GetTickCount64() - started}});
@@ -117,14 +119,13 @@ bool PipeClient::connect() {
                            reinterpret_cast<LPCWSTR>(&ipc::inputPipeName),
                            &module);
         const auto length = GetModuleFileNameW(module, modulePath, 32768);
-        const auto expected = length && length < 32768
-                                  ? (std::filesystem::path(modulePath)
-                                         .parent_path()
-                                         .parent_path() /
-                                     L"bin" / L"Fcitx5.exe")
-                                        .lexically_normal()
-                                        .wstring()
-                                  : std::wstring{};
+        const auto expected =
+            length && length < 32768
+                ? (ipc::installationRootForModulePath(modulePath) / L"bin" /
+                   L"Fcitx5.exe")
+                      .lexically_normal()
+                      .wstring()
+                : std::wstring{};
         ULONG peerId = 0;
         const bool bound = GetNamedPipeServerProcessId(pipe_, &peerId) &&
                            GetProcessId(process) == peerId;
@@ -386,8 +387,7 @@ bool PipeClient::request(ipc::MessageType type, uint64_t contextId,
     frame.contextId = contextId;
     frame.payload = payload;
     const bool transferred = writeFrame(frame) && readFrame(response);
-    if (!transferred ||
-        response.requestId != frame.requestId ||
+    if (!transferred || response.requestId != frame.requestId ||
         (type != ipc::MessageType::CreateContext &&
          response.contextId != contextId)) {
         const auto error = transferred ? ERROR_INVALID_DATA : GetLastError();
@@ -416,15 +416,16 @@ bool PipeClient::request(ipc::MessageType type, uint64_t contextId,
                 logger_->setEnabled(reply.settings.detailedLogging);
         }
         if (logger_->enabled())
-            logger_->event(win32::diagnostic::Level::Debug, "pipe_request",
-                           {{"type", static_cast<unsigned>(type)},
-                            {"request", frame.requestId},
-                            {"context", contextId},
-                            {"payload_bytes", payload.size()},
+            logger_->event(
+                win32::diagnostic::Level::Debug, "pipe_request",
+                {{"type", static_cast<unsigned>(type)},
+                 {"request", frame.requestId},
+                 {"context", contextId},
+                 {"payload_bytes", payload.size()},
                  {"reply_bytes", response.payload.size()},
                  {"reply_type", static_cast<unsigned>(response.type)},
                  {"server_pid", serverProcessId_},
-                            {"elapsed_ms", GetTickCount64() - started}});
+                 {"elapsed_ms", GetTickCount64() - started}});
     }
     return response.type != ipc::MessageType::Error;
 }

@@ -24,7 +24,7 @@ foreach ($path in @($Prefix, $Dependencies, $Output)) {
         throw "Installer paths must be inside the repository: $path"
     }
 }
-foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll',
+foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll', 'tsf/x86/fcitx5-x86.dll',
         'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
     if (!(Test-Path -LiteralPath (Join-Path $Prefix $file) -PathType Leaf)) {
         throw "Missing staged installer file: $file"
@@ -45,6 +45,9 @@ if (!$SkipRuntimes) {
     }
 }
 if (!$PSCmdlet.ShouldProcess($Output, 'Build Fcitx5 Inno Setup installer')) { return }
+. "$root/win32/scripts/pe-machine.ps1"
+Assert-PeMachine "$Prefix/tsf/fcitx5-x86_64.dll" x64
+Assert-PeMachine "$Prefix/tsf/x86/fcitx5-x86.dll" x86
 $iscc = if ($IsccPath) { Get-Command $IsccPath -ErrorAction Stop } else { Get-Command ISCC.exe -ErrorAction SilentlyContinue }
 if (!$iscc) {
     $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7',

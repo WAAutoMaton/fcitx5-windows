@@ -16,7 +16,7 @@ function Assert-Failure([scriptblock]$Action, [string]$Message) {
 }
 
 try {
-    foreach ($file in @($entry, "$PSScriptRoot/build-pinyin.ps1")) {
+    foreach ($file in @($entry, "$PSScriptRoot/build-pinyin.ps1", "$PSScriptRoot/build-tsf.ps1", "$PSScriptRoot/deploy-tsf.ps1")) {
         $tokens = $null
         $parseErrors = $null
         [void][Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors)
@@ -86,6 +86,7 @@ try {
         $prefix = Join-Path $temporary 'deployment'
         $environmentBefore = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
         & $entry -Prefix './deployment' -BuildRoot './build' -ModernApps -WhatIf
+        & "$PSScriptRoot/build-tsf.ps1" -Architecture x86 -BuildRoot './build' -WhatIf
         if ((Test-Path $prefix) -or (Test-Path $buildRoot)) { throw 'WhatIf created build/deployment files.' }
         $environmentAfter = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
         if (Compare-Object $environmentBefore $environmentAfter) { throw 'WhatIf changed the environment.' }
@@ -95,6 +96,11 @@ try {
         Assert-Failure { & $entry -Prefix "$buildRoot/prefix" -BuildRoot $buildRoot -WhatIf } 'without overlap'
         Assert-Failure { & $entry -Prefix $prefix -BuildRoot "$prefix/build" -WhatIf } 'without overlap'
         Assert-Failure { & $entry -Jobs 0 -WhatIf } 'Jobs'
+        Assert-Failure { & $entry -Prefix $prefix -BuildRoot $buildRoot -TsfArchitectures x86 -WhatIf } 'requires x64 TSF'
+        New-Item -ItemType Directory -Force "$prefix/tsf/x86" | Out-Null
+        [IO.File]::WriteAllText("$prefix/tsf/x86/fcitx5-x86.dll", 'fixture')
+        Assert-Failure { & $entry -Prefix $prefix -BuildRoot $buildRoot -TsfArchitectures x64 -WhatIf } 'requires both x64 and x86'
+        Remove-Item -LiteralPath "$prefix/tsf/x86/fcitx5-x86.dll"
         New-Item -ItemType Directory -Force $prefix | Out-Null
         $locked = Join-Path $prefix 'locked.dll'
         [IO.File]::WriteAllText($locked, 'fixture; never loaded')

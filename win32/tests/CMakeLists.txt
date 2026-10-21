@@ -20,6 +20,8 @@ add_test_target(test_upgrade test_upgrade.cpp)
 target_link_libraries(test_upgrade PRIVATE setup_upgrade)
 
 add_test_target(test_dll test_dll.cpp ../dll/util.cpp)
+add_test_target(test_registration_views test_registration_views.cpp ../dll/util.cpp)
+target_link_libraries(test_registration_views PRIVATE advapi32 user32 shell32 ole32 oleaut32 uuid)
 add_test_target(test_protocol test_protocol.cpp)
 add_test_target(test_diagnostic_log test_diagnostic_log.cpp)
 target_link_libraries(test_diagnostic_log PRIVATE windows_diagnostic Boost::property_tree)
@@ -64,7 +66,7 @@ add_executable(test_sandbox test_sandbox.cpp ../tsf/pipeclient.cpp)
 target_compile_options(test_sandbox PRIVATE -UNDEBUG)
 target_compile_definitions(test_sandbox PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(test_sandbox PRIVATE advapi32 secur32 user32)
-add_library(sandbox_fixture SHARED sandbox_fixture.cpp)
+add_library(sandbox_fixture SHARED sandbox_fixture.cpp sandbox_fixture.def)
 set_target_properties(sandbox_fixture PROPERTIES OUTPUT_NAME SbieDll)
 add_dependencies(test_sandbox sandbox_fixture)
 add_test(NAME test_sandbox COMMAND test_sandbox --fixture $<TARGET_FILE:sandbox_fixture>)
@@ -99,8 +101,8 @@ if(ENABLE_MODERN_TSF_CATEGORIES)
 endif()
 target_compile_options(test_register PRIVATE -UNDEBUG)
 target_link_libraries(test_register PRIVATE advapi32 user32 shell32 ole32 oleaut32 uuid)
-add_dependencies(test_register fcitx5-x86_64)
-add_test(NAME test_register COMMAND test_register $<TARGET_FILE:fcitx5-x86_64>)
+add_dependencies(test_register ${TSF_TARGET})
+add_test(NAME test_register COMMAND test_register $<TARGET_FILE:${TSF_TARGET}>)
 
 add_executable(test_register_other test_register.cpp ../dll/register.cpp ../dll/util.cpp)
 target_compile_options(test_register_other PRIVATE -UNDEBUG)
@@ -108,14 +110,16 @@ if(NOT ENABLE_MODERN_TSF_CATEGORIES)
     target_compile_definitions(test_register_other PRIVATE FCITX5_MODERN_TSF_CATEGORIES)
 endif()
 target_link_libraries(test_register_other PRIVATE advapi32 user32 shell32 ole32 oleaut32 uuid)
-add_dependencies(test_register_other fcitx5-x86_64)
-add_test(NAME test_register_other COMMAND test_register_other $<TARGET_FILE:fcitx5-x86_64>)
+add_dependencies(test_register_other ${TSF_TARGET})
+add_test(NAME test_register_other COMMAND test_register_other $<TARGET_FILE:${TSF_TARGET}>)
 
 configure_file("${CMAKE_SOURCE_DIR}/scripts/check-tsf-runtime.ps1"
     "${CMAKE_CURRENT_BINARY_DIR}/check-tsf-runtime.ps1" COPYONLY)
+configure_file("${CMAKE_SOURCE_DIR}/scripts/pe-machine.ps1"
+    "${CMAKE_CURRENT_BINARY_DIR}/pe-machine.ps1" COPYONLY)
 add_test(NAME test_tsf_runtime_imports COMMAND powershell.exe -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_BINARY_DIR}/check-tsf-runtime.ps1"
-    -DllPath $<TARGET_FILE:fcitx5-x86_64>)
+    -DllPath $<TARGET_FILE:${TSF_TARGET}> -Architecture ${TSF_ARCH})
 foreach(target Fcitx5SetupHelper Fcitx5Upgrade)
     add_test(NAME test_${target}_runtime_imports COMMAND powershell.exe -NoProfile
         -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_BINARY_DIR}/check-tsf-runtime.ps1"
@@ -125,12 +129,12 @@ endforeach()
 add_executable(test_tsf_runtime_host test_tsf_runtime_host.cpp ../dll/util.cpp)
 target_compile_definitions(test_tsf_runtime_host PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(test_tsf_runtime_host PRIVATE ole32 oleaut32 uuid user32)
-add_dependencies(test_tsf_runtime_host fcitx5-x86_64)
-add_test(NAME test_tsf_runtime_host COMMAND test_tsf_runtime_host $<TARGET_FILE:fcitx5-x86_64>)
+add_dependencies(test_tsf_runtime_host ${TSF_TARGET})
+add_test(NAME test_tsf_runtime_host COMMAND test_tsf_runtime_host $<TARGET_FILE:${TSF_TARGET}>)
 set(TSF_PRELOAD_RUNTIME "" CACHE FILEPATH "Optional old MSVCP140.dll for the isolated TSF host regression")
 if(TSF_PRELOAD_RUNTIME)
     add_test(NAME test_tsf_old_runtime_host COMMAND test_tsf_runtime_host
-        $<TARGET_FILE:fcitx5-x86_64> "${TSF_PRELOAD_RUNTIME}")
+        $<TARGET_FILE:${TSF_TARGET}> "${TSF_PRELOAD_RUNTIME}")
 endif()
 
 # Intentionally unsafe fixtures verify rejection of both PE import tables.
@@ -150,7 +154,7 @@ target_link_libraries(runtime_delay_import_fixture PRIVATE delayimp)
 configure_file(test_runtime_audit.ps1 test_runtime_audit.ps1 COPYONLY)
 add_test(NAME test_tsf_runtime_audit COMMAND powershell.exe -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_BINARY_DIR}/test_runtime_audit.ps1"
-    -StaticDllPath $<TARGET_FILE:fcitx5-x86_64>
+    -StaticDllPath $<TARGET_FILE:${TSF_TARGET}>
     -DynamicDllPath $<TARGET_FILE:runtime_import_fixture>
     -DelayDllPath $<TARGET_FILE:runtime_delay_import_fixture>)
 
@@ -185,6 +189,6 @@ target_link_libraries(service_probe PRIVATE ole32 oleaut32 uuid user32 advapi32 
 option(ENABLE_PINYIN_INTEGRATION_TESTS "Run probes against a running Pinyin Core" OFF)
 if(ENABLE_PINYIN_INTEGRATION_TESTS)
     add_test(NAME pinyin_ipc COMMAND ipc_probe)
-    add_test(NAME pinyin_tsf COMMAND tsf_probe $<TARGET_FILE:fcitx5-x86_64>)
+    add_test(NAME pinyin_tsf COMMAND tsf_probe $<TARGET_FILE:${TSF_TARGET}>)
     add_test(NAME pinyin_settings COMMAND settings_probe)
 endif()

@@ -63,8 +63,9 @@ user's input method and starts Core. Optional login startup is unchecked by
 default and respects a manual service stop. CI has a no-runtime, machine-only
 install/registration/uninstall smoke test; complete clean-machine user setup,
 upgrades, UAC user handling and restart cleanup still need validation.
-Only x64 TSF is built; x86 and native ARM64
-applications are not covered. See [installer status and limits](docs/windows-installer-design.md).
+The build includes separate x64 and x86 TSF DLLs sharing the x64 Core. x86
+registered application input still needs system acceptance; native ARM64 TSF
+is not provided. See [installer status and limits](docs/windows-installer-design.md).
 
 For an installer-managed copy, use **Uninstall Fcitx5** in the Start menu or
 Windows' installed-apps list. User data and shared runtimes are retained;

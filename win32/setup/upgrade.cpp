@@ -301,6 +301,12 @@ DWORD Engine::begin(const fs::path &manifestPath) {
     logMessage("upgrade phase=completed transaction cleanup complete");
     logMessage("upgrade phase=manifest load begin");
     const auto target = manifest(manifestPath);
+    if (fs::exists(root_ / "tsf/x86/fcitx5-x86.dll") &&
+        std::none_of(target.files.begin(), target.files.end(),
+                     [](const File &file) {
+                         return file.path == "tsf/x86/fcitx5-x86.dll";
+                     }))
+        fail(ERROR_REVISION_MISMATCH);
     logMessage("upgrade phase=manifest load complete");
     if (target.protocolVersion != win32::ipc::kVersion)
         fail(ERROR_REVISION_MISMATCH);
@@ -345,6 +351,12 @@ DWORD Engine::begin(const fs::path &manifestPath) {
         binaries.push_back({"", file});
     }
     plan.add_child("sourceBinaries", binaries);
+    if (fs::exists(root_ / "tsf/x86/fcitx5-x86.dll")) {
+        Tree file;
+        file.put("path", "tsf/x86/fcitx5-x86.dll");
+        file.put("sha256", sha256(root_ / "tsf/x86/fcitx5-x86.dll"));
+        plan.get_child("sourceBinaries").push_back({"", file});
+    }
     save(transaction_ / "plan.json", plan);
     state("preparing");
     logMessage("upgrade phase=transaction plan write complete");

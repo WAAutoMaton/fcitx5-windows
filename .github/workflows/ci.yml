@@ -47,7 +47,7 @@ jobs:
           $bundle = 'build/ci-x64/test-bundle'
           New-Item -ItemType Directory -Force "$bundle/tests", "$bundle/dll", "$bundle/setup" | Out-Null
           Copy-Item "$build/tests/*.exe" "$bundle/tests"
-          Copy-Item "$build/tests/*.dll", "$build/tests/check-tsf-runtime.ps1", "$build/tests/test_runtime_audit.ps1", "$build/tests/test_sandboxie_template.ps1", "$build/tests/sandboxie-template.ps1" "$bundle/tests"
+          Copy-Item "$build/tests/*.dll", "$build/tests/check-tsf-runtime.ps1", "$build/tests/pe-machine.ps1", "$build/tests/test_runtime_audit.ps1", "$build/tests/test_sandboxie_template.ps1", "$build/tests/sandboxie-template.ps1" "$bundle/tests"
           Copy-Item "$build/share" "$bundle/share" -Recurse
           Copy-Item "$build/dll/fcitx5-x86_64.dll", "$build/dll/penguin.ico" "$bundle/dll"
           Copy-Item "$build/setup/Fcitx5SetupHelper.exe", "$build/setup/Fcitx5Upgrade.exe" "$bundle/setup"
@@ -169,6 +169,39 @@ jobs:
             build/engine-localization-test/**/*.log
             build/ci-tests/Testing/Temporary/*.log
 
+  test-x86:
+    needs: build-x64
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install portable headers and build tools
+        run: |
+          C:/msys64/usr/bin/pacman -Syu --noconfirm
+          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-clang-x86_64-boost mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-gettext-tools
+          Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
+      - name: Build and test independent x86 TSF
+        run: ./scripts/build-tsf.ps1 -Architecture x86 -BuildRoot ./build/ci-x86 -ModernApps
+      - uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-runtime-x64
+          path: dist/ci-runtime
+      - uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-tests-x64
+          path: build/ci-x64-tests
+      - name: Verify x86 Pinyin, TSF and concurrent x86/x64 clients
+        run: ./scripts/test-pinyin.ps1 -Prefix ./dist/ci-runtime -TsfBuild ./build/ci-x86 -Architecture x86 -PeerTsfBuild ./build/ci-x64-tests
+      - name: Verify dual-architecture deployment and single-DLL locks
+        run: ./scripts/test-deploy-tsf.ps1 -TsfBuild ./build/ci-x64-tests -TsfX86Build ./build/ci-x86
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: x86-tsf-test-logs
+          path: |
+            build/ci-x86/Testing/Temporary/*.log
+            build/pinyin-test/*.log
+            build/cross-arch-*/*.err
+
   package-installer-x64:
     needs: build-x64
     runs-on: windows-2025
@@ -275,7 +308,7 @@ jobs:
           path: build/installer-smoke
 
   release:
-    needs: [build-x64, test-x64, package-installer-x64, installer-smoke-x64]
+    needs: [build-x64, test-x64, test-x86, package-installer-x64, installer-smoke-x64]
     if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
     runs-on: ubuntu-latest
     permissions:

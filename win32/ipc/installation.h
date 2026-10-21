@@ -11,6 +11,17 @@ namespace fcitx::win32::ipc {
 inline constexpr wchar_t kInstallerKey[] = L"SOFTWARE\\Fcitx5\\Installer";
 inline constexpr char kManagedInstall[] = "FCITX5-MANAGED-1\n";
 
+inline std::filesystem::path
+installationRootForModulePath(const std::filesystem::path &path) {
+    auto root = path.parent_path().parent_path();
+    if (CompareStringOrdinal(root.filename().c_str(), -1, L"tsf", -1, TRUE) ==
+            CSTR_EQUAL &&
+        CompareStringOrdinal(path.parent_path().filename().c_str(), -1, L"x86",
+                             -1, TRUE) == CSTR_EQUAL)
+        root = root.parent_path();
+    return root;
+}
+
 inline std::filesystem::path installationRootForAddress(const void *address) {
     HMODULE module = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -25,7 +36,8 @@ inline std::filesystem::path installationRootForAddress(const void *address) {
         return {};
     }
     path.resize(size);
-    return std::filesystem::path(path).parent_path().parent_path();
+    // The x86 TIP shares the x64 installation's Core, Settings and state.
+    return installationRootForModulePath(path);
 }
 
 inline bool sameInstallationPath(const std::filesystem::path &left,

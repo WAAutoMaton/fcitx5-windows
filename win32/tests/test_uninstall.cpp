@@ -19,6 +19,11 @@ bool admin = false, locked = false, cancelElevation = false;
 DWORD nativeResult = 0;
 unsigned preparations = 0, registrations = 0, nativeCalls = 0;
 unsigned errors = 0, information = 0, restores = 0;
+unsigned x86Registrations = 0;
+DWORD x86Result = 0;
+bool foreignX86 = false;
+HRESULT registerResult = S_OK;
+std::vector<bool> x86Actions;
 std::map<HANDLE, DWORD> exitCodes;
 
 HANDLE completedProcess(DWORD result) {
@@ -33,9 +38,16 @@ BOOL WINAPI mockCheckTokenMembership(HANDLE, PSID, PBOOL member) {
     return TRUE;
 }
 
-LSTATUS WINAPI mockRegGetValueW(HKEY, LPCWSTR key, LPCWSTR name, DWORD, LPDWORD,
-                                PVOID data, LPDWORD size) {
+LSTATUS WINAPI mockRegGetValueW(HKEY, LPCWSTR key, LPCWSTR name, DWORD flags,
+                                LPDWORD, PVOID data, LPDWORD size) {
     if (std::wstring_view(key).starts_with(L"SOFTWARE\\Classes\\CLSID")) {
+        if (foreignX86 && (flags & RRF_SUBKEY_WOW6432KEY)) {
+            constexpr wchar_t other[] = L"C:\\Other\\fcitx5-x86.dll";
+            assert(*size >= sizeof(other));
+            memcpy(data, other, sizeof(other));
+            *size = sizeof(other);
+            return ERROR_SUCCESS;
+        }
         return ERROR_FILE_NOT_FOUND;
     }
     assert(std::wstring_view(key) == fcitx::win32::ipc::kInstallerKey);
@@ -64,11 +76,17 @@ HRESULT WINAPI mockUnregister() {
     ++registrations;
     return S_OK;
 }
+HRESULT WINAPI mockRegister() {
+    ++registrations;
+    return registerResult;
+}
 HMODULE WINAPI mockLoadLibraryExW(LPCWSTR path, HANDLE, DWORD) {
     assert(fs::path(path) == root / "tsf" / "fcitx5-x86_64.dll");
     return reinterpret_cast<HMODULE>(1);
 }
 FARPROC WINAPI mockGetProcAddress(HMODULE, LPCSTR name) {
+    if (std::string_view(name) == "DllRegisterServer")
+        return reinterpret_cast<FARPROC>(&mockRegister);
     assert(std::string_view(name) == "DllUnregisterServer");
     return reinterpret_cast<FARPROC>(&mockUnregister);
 }
@@ -80,8 +98,11 @@ DWORD WINAPI mockRmStartSession(DWORD *session, DWORD, WCHAR *) {
 }
 DWORD WINAPI mockRmRegisterResources(DWORD, UINT count, LPCWSTR files[], UINT,
                                      RM_UNIQUE_PROCESS[], UINT, LPCWSTR[]) {
-    assert(count == 1);
-    assert(fs::path(files[0]) == root / "tsf" / "fcitx5-x86_64.dll");
+    const bool dual = fs::exists(root / "tsf/x86/fcitx5-x86.dll");
+    assert(count == (dual ? 2u : 1u));
+    for (UINT index = 0; index < count; ++index)
+        assert(fs::path(files[index]) == root / "tsf/fcitx5-x86_64.dll" ||
+               fs::path(files[index]) == root / "tsf/x86/fcitx5-x86.dll");
     return ERROR_SUCCESS;
 }
 DWORD WINAPI mockRmGetList(DWORD, UINT *needed, UINT *count,
@@ -105,6 +126,21 @@ BOOL WINAPI mockCreateProcessW(LPCWSTR file, LPWSTR command,
                                LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
                                BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW,
                                LPPROCESS_INFORMATION process) {
+    if (fs::path(file).filename() == L"regsvr32.exe") {
+        wchar_t directory[MAX_PATH]{};
+        assert(GetSystemWow64DirectoryW(directory, MAX_PATH));
+        assert(fs::path(file) == fs::path(directory) / L"regsvr32.exe");
+        const bool uninstall = std::wstring_view(command).find(L"/s /u ") !=
+                               std::wstring_view::npos;
+        assert(std::wstring_view(command).ends_with(
+            std::wstring(uninstall ? L"/s /u \"" : L"/s \"") +
+            (root / "tsf" / "x86" / "fcitx5-x86.dll").wstring() + L"\""));
+        x86Actions.push_back(uninstall);
+        ++x86Registrations;
+        process->hProcess = completedProcess(x86Result);
+        process->hThread = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        return TRUE;
+    }
     assert(fs::path(file) == root / "unins000.exe");
     const auto silent = commandLine.find(L"--silent") != std::wstring::npos;
     const auto expected =
@@ -215,7 +251,8 @@ int main() {
         std::ofstream(root / "setup" / "install-state") << "maintenance\n";
         const auto outcome =
             static_cast<DWORD>(wWinMain(nullptr, nullptr, nullptr, 0));
-        if (outcome == ERROR_SUCCESS || outcome == ERROR_SUCCESS_REBOOT_REQUIRED)
+        if (outcome == ERROR_SUCCESS ||
+            outcome == ERROR_SUCCESS_REBOOT_REQUIRED)
             assert(!fs::exists(root / "setup" / "install-state"));
         else
             assert(fs::exists(root / "setup" / "install-state"));
@@ -245,6 +282,27 @@ int main() {
     cancelElevation = true;
     assert(run(false, false, 0, false) == ERROR_CANCELLED);
     assert(!errors && !registrations && !nativeCalls && restores == 1);
+    cancelElevation = false;
+    fs::create_directories(root / "tsf/x86");
+    std::ofstream(root / "tsf/x86/fcitx5-x86.dll") << "fixture";
+    assert(run(true, true, 0, false) == 0);
+    assert(x86Registrations == 1 && registrations == 1 && nativeCalls == 1);
+    x86Result = ERROR_ACCESS_DENIED;
+    assert(run(true, true, 0, false) == ERROR_ACCESS_DENIED);
+    assert(x86Registrations == 2 && !registrations && !nativeCalls);
+    foreignX86 = true;
+    assert(run(true, true, 0, false) == ERROR_ACCESS_DENIED);
+    assert(x86Registrations == 2 && !registrations && !nativeCalls);
+    foreignX86 = false;
+    x86Result = 0;
+    registerResult = E_ACCESSDENIED;
+    x86Actions.clear();
+    assert(registration(root, false) == static_cast<DWORD>(E_ACCESSDENIED));
+    assert((x86Actions == std::vector<bool>{false, true}));
+    registerResult = S_OK;
+    x86Actions.clear();
+    assert(registration(root, false) == 0);
+    assert((x86Actions == std::vector<bool>{false}));
     fs::remove_all(root);
     std::cout << "Uninstall reboot results, elevation, helper mode, silence "
                  "and failures passed.\n";

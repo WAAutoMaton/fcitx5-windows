@@ -1,11 +1,16 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$DllPath,
-    [string]$ReadObjPath = ''
+    [string]$ReadObjPath = '',
+    [ValidateSet('x86', 'x64')][string]$Architecture = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $dll = (Resolve-Path -LiteralPath $DllPath -ErrorAction Stop).Path
+if ($Architecture) {
+    . "$PSScriptRoot/pe-machine.ps1"
+    Assert-PeMachine $dll $Architecture
+}
 if (!$ReadObjPath) {
     $reader = Get-Command llvm-readobj.exe -CommandType Application -ErrorAction SilentlyContinue |
         Select-Object -First 1

@@ -21,23 +21,12 @@ void Tsf::requestService(UINT command) {
         }
         return;
     }
-    HMODULE module = nullptr;
-    std::wstring path(32768, L'\0');
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            reinterpret_cast<LPCWSTR>(&messageWindowProc),
-                            &module)) {
+    const auto root = ipc::installationRootForAddress(
+        reinterpret_cast<const void *>(&messageWindowProc));
+    if (root.empty()) {
         return;
     }
-    const auto size = GetModuleFileNameW(module, path.data(),
-                                         static_cast<DWORD>(path.size()));
-    if (!size || size >= path.size()) {
-        return;
-    }
-    path.resize(size);
-    const auto core = (std::filesystem::path(path).parent_path().parent_path() /
-                       "bin" / "Fcitx5.exe")
-                          .lexically_normal();
+    const auto core = (root / "bin" / "Fcitx5.exe").lexically_normal();
     if (command == LangBarItem::kRestartMessage ||
         command == LangBarItem::kStopMessage) {
         pipe_.disconnect();

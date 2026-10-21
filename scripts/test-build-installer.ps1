@@ -58,14 +58,30 @@ try {
     $parseErrors = $null
     [void][Management.Automation.Language.Parser]::ParseFile($entry, [ref]$tokens, [ref]$parseErrors)
     if ($parseErrors.Count) { throw "Parse error in $entry" }
-    foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll',
+    foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll', 'tsf/x86/fcitx5-x86.dll',
             'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
         $path = Join-Path $prefix $file
         New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
         Set-Content -LiteralPath $path -Value 'fixture' -Encoding ascii
     }
+    foreach ($pair in @(@('tsf/fcitx5-x86_64.dll', 0x8664), @('tsf/x86/fcitx5-x86.dll', 0x14c))) {
+        $bytes = New-Object byte[] 88
+        $bytes[0] = 0x4d; $bytes[1] = 0x5a; $bytes[0x3c] = 64
+        $bytes[64] = 0x50; $bytes[65] = 0x45
+        [BitConverter]::GetBytes([uint16]$pair[1]).CopyTo($bytes, 68)
+        [IO.File]::WriteAllBytes((Join-Path $prefix $pair[0]), $bytes)
+    }
     Push-Location $temporary
     try {
+        $x86Path = Join-Path $prefix 'tsf/x86/fcitx5-x86.dll'
+        $x86Bytes = [IO.File]::ReadAllBytes($x86Path)
+        Remove-Item -LiteralPath $x86Path
+        Assert-Failure { & $entry -Prefix $prefix -Output $output -SkipRuntimes -WhatIf } 'Missing staged installer file: tsf/x86/fcitx5-x86.dll'
+        $wrongMachine = $x86Bytes.Clone()
+        [BitConverter]::GetBytes([uint16]0x8664).CopyTo($wrongMachine, 68)
+        [IO.File]::WriteAllBytes($x86Path, $wrongMachine)
+        Assert-Failure { & $entry -Prefix $prefix -Output $output -SkipRuntimes } 'PE machine mismatch'
+        [IO.File]::WriteAllBytes($x86Path, $x86Bytes)
         & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -WhatIf
         & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -RebootUpgrade -WhatIf
         & $entry -Prefix './stage' -Dependencies './dependencies' -Output './output' -SkipRuntimes -RebootUpgrade:$false -WhatIf
@@ -94,6 +110,7 @@ try {
         if (Test-Path $dependencies) { throw 'No-runtime packaging created the dependency directory.' }
         $runtimeManifest = Get-Content -Raw -LiteralPath "$output/metadata/$lite.runtime.json" | ConvertFrom-Json
         if ($runtimeManifest.architecture -ne 'x64' -or $runtimeManifest.files.Count -lt 5 -or
+            @($runtimeManifest.files | Where-Object path -eq 'tsf/x86/fcitx5-x86.dll').Count -ne 1 -or
             $runtimeManifest.dependencies.Count -ne 0 -or
             @($runtimeManifest.files | Where-Object path -eq 'setup/Fcitx5Upgrade.exe').Count) {
             throw 'Incorrect runtime file manifest or maintenance host was included in the runtime payload.'

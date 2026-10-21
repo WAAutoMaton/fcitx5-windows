@@ -4,7 +4,7 @@
 
 ## 当前交付与支持范围
 
-使用 Inno Setup 7 生成 Windows 11 x64 EXE，安装到 Program Files 下的 `Fcitx5`。当前不提供 MSI、x86 TSF 或 ARM64 TSF；CI 不再构建 ARM64，单独的 ARM64 Core 编译也不代表原生 ARM64 应用可以加载输入法。
+使用 Inno Setup 7 生成 Windows 11 x64 EXE，安装到 Program Files 下的 `Fcitx5`，包含独立的 x64/x86 TSF。当前不提供 MSI 或 ARM64 TSF；CI 不再构建 ARM64，单独的 ARM64 Core 编译也不代表原生 ARM64 应用可以加载输入法。x86 免注册测试不代表真实应用系统派发验收完成。
 
 | CI 包名 | 运行库要求 |
 | --- | --- |
@@ -13,7 +13,7 @@
 
 两种包都包含完整 Core、TSF、Settings 和原生安装 helper。Settings 继续使用 framework-dependent Windows App SDK 1.8，要求当前用户有 x64 Framework/DDLM >= `8000.994.2142.0` 和 Visual C++ 运行库。不含运行库版本仍执行 Settings `--runtime-check`，缺少依赖时用户初始化不能成功完成。
 
-安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.22000` 和 `PrivilegesRequired=admin`，使用固定 AppId。不声明 Windows 10 或 ARM64 仿真安装支持。x64 TSF DLL 无法加载到 x86 应用，详见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)。
+安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.22000` 和 `PrivilegesRequired=admin`，使用固定 AppId。不声明 Windows 10 或 ARM64 仿真安装支持。x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册；两者使用同一 CLSID/profile 和独立 registry view，详见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)。
 
 ## 实现入口
 
@@ -41,6 +41,7 @@
   share/fcitx5/ + share/libime/sc.dict
   share/locale/ （Windows 与上游简体/繁体翻译目录）
   tsf/fcitx5-x86_64.dll
+  tsf/x86/fcitx5-x86.dll
   settings/Fcitx5Settings.exe + DLL/PRI/WinMD
   setup/Fcitx5SetupHelper.exe
   setup/managed-install + install-state
@@ -114,6 +115,7 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 | --- | --- |
 | `build-x64` | 统一 Release 构建一次，显式 `-ModernApps -SkipTests`，上传完整运行树、便携 TSF 测试/probes 及独立 Settings artifact |
 | `test-x64` | 复用运行树和测试包，执行脚本/注册检查回归、图标校验、默认 CTest、拼音/TSF/settings、五笔/输入法列表、引擎翻译及词库验证 |
+| `test-x86` | 独立构建/测试 x86 TSF；对 x64 Core 执行 x86 拼音/TSF 和双架构 Pipe 并发/断线 probe |
 | `package-installer-x64` | 与测试并行复用运行树，下载并核对运行库 SHA256，执行模拟打包回归，构建两种安装包并核对文件存在 |
 | `installer-smoke-x64` | 不含运行库包静默 machine-only 安装，检查实际 COM/profile/现代 category 双向注册、安装状态及卸载清理 |
 | `release` | 等待构建、测试、打包和安装 smoke 成功，在 master 且提交消息不含 `!release` 时用 GitHub CLI 更新 `latest` 预发布 |
@@ -145,6 +147,6 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 | DLL 被应用占用，多用户/RDP 会话 | 不结束用户应用；注销归属正确，延迟删除登记和重启后清理可核对 |
 | 用户改变默认、已有词库及学习历史 | 升级/卸载保留后续选择与用户数据 |
 | 静默、SYSTEM/无交互身份 | 退出码区分失败、待用户初始化及待重启，无弹窗阻塞 |
-| x86 TSF（后续实现） | 32/64 位真实应用均加载正确 DLL 并提交中文；方案见 [Windows x86 应用支持设计](windows-x86-tsf-design.md) |
+| x86 TSF 系统验收 | 32/64 位真实应用均加载正确 DLL 并提交中文；方案见 [Windows x86 应用支持设计](windows-x86-tsf-design.md) |
 
 后续应补充隔离 runner/VM 的真实安装测试、签名及完整发行依赖/源码清单。GitHub hosted runner 的开发运行库环境不能替代干净交互 VM，无法重启时也只能报告延迟删除登记。未完成这些验收前，不将说明改为“安装后可直接使用”。

@@ -61,11 +61,16 @@ function Assert-Path {
 }
 
 function Assert-TsfRegistration {
-    param([string]$DllPath, [switch]$ModernApps)
+    param([string]$DllPath, [switch]$ModernApps,
+        [ValidateSet('x64', 'x86')][string]$Architecture = 'x64')
 
     $clsid = '{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}'
     $tip = "HKLM:\SOFTWARE\Microsoft\CTF\TIP\$clsid"
     $server = "HKLM:\SOFTWARE\Classes\CLSID\$clsid\InprocServer32"
+    if ($Architecture -eq 'x86') {
+        $tip = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\CTF\TIP\$clsid"
+        $server = "HKLM:\SOFTWARE\Classes\Wow6432Node\CLSID\$clsid\InprocServer32"
+    }
     Assert-Path $server
     $properties = Get-ItemProperty -LiteralPath $server
     if ($properties.'(default)' -ine $DllPath -or $properties.ThreadingModel -ine 'Apartment') {
@@ -129,6 +134,7 @@ try {
     foreach ($path in @(
             (Join-Path $InstallRoot 'bin/Fcitx5.exe'),
             (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'),
+            (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'),
             (Join-Path $InstallRoot 'settings/Fcitx5Settings.exe'),
             $helper,
             (Join-Path $InstallRoot 'setup/maintenance-host/Fcitx5Upgrade.exe'),
@@ -148,6 +154,20 @@ try {
     Assert-Path ([string]$properties.NativeUninstaller)
     Assert-Path $uninstallKey
     Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll') -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll') -Architecture x86 -ModernApps:$ModernApps
+
+    # Each registrar must leave the other architecture's registration usable.
+    $x86Dll = Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'
+    $x64Dll = Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'
+    $x86Registrar = Join-Path $env:WINDIR 'SysWOW64/regsvr32.exe'
+    $x64Registrar = Join-Path $env:WINDIR 'System32/regsvr32.exe'
+    Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', '/u', "`"$x86Dll`"") | Out-Null
+    Assert-TsfRegistration -DllPath $x64Dll -ModernApps:$ModernApps
+    Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', "`"$x86Dll`"") | Out-Null
+    Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', '/u', "`"$x64Dll`"") | Out-Null
+    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ModernApps:$ModernApps
+    Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', "`"$x64Dll`"") | Out-Null
+    Assert-TsfRegistration -DllPath $x64Dll -ModernApps:$ModernApps
 
     $uninstallArguments = @('uninstall', '--silent', '--prefix', "`"$InstallRoot`"")
     $uninstallCode = Invoke-ProcessChecked -FilePath $helper -ArgumentList $uninstallArguments -AllowedExitCodes @(0, 3010)
@@ -158,7 +178,9 @@ try {
     if (Test-Path -LiteralPath $uninstallKey) {
         throw 'Windows uninstall registration remained after uninstall.'
     }
-    if ((Test-Path -LiteralPath $clsidKey) -or (Test-Path -LiteralPath $tipKey)) {
+    if ((Test-Path -LiteralPath $clsidKey) -or (Test-Path -LiteralPath $tipKey) -or
+        (Test-Path -LiteralPath "HKLM:\SOFTWARE\Classes\Wow6432Node\CLSID\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}") -or
+        (Test-Path -LiteralPath "HKLM:\SOFTWARE\Wow6432Node\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}")) {
         throw 'TSF COM or TIP registration remained after uninstall.'
     }
     if (Test-Path -LiteralPath $InstallRoot) {

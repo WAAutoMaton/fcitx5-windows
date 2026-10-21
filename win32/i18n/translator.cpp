@@ -1,4 +1,5 @@
 #include "translator.h"
+#include "../ipc/installation.h"
 #include <boost/locale/encoding_utf.hpp>
 #include <boost/locale/gnu_gettext.hpp>
 #include <boost/locale/message.hpp>
@@ -18,8 +19,7 @@ std::filesystem::path Translator::resourceDirectory() {
     if (!size || size >= path.size())
         throw std::runtime_error("Cannot locate translation directory");
     path.resize(size);
-    return std::filesystem::path(path).parent_path().parent_path() /
-           L"share/locale";
+    return ipc::installationRootForModulePath(path) / L"share/locale";
 }
 
 Translator::Translator(UiLanguage language,

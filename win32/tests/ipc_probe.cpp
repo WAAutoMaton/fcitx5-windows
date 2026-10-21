@@ -1,6 +1,7 @@
 #include "../ipc/transport.h"
 #include "../tsf/pipeclient.h"
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 
@@ -81,6 +82,34 @@ int main(int argumentCount, char **arguments) {
             return connected ? 0 : 1;
         }
         const auto context = create(client);
+        if (argumentCount == 4 && std::string(arguments[1]) == "--hold") {
+            const auto wideName = [](const char *text) {
+                return std::wstring(text, text + strlen(text));
+            };
+            const auto ready = OpenEventW(EVENT_MODIFY_STATE, FALSE,
+                                          wideName(arguments[2]).c_str());
+            const auto stop =
+                OpenEventW(SYNCHRONIZE, FALSE, wideName(arguments[3]).c_str());
+            require(ready && stop, "cross-architecture events missing");
+            std::cout << "server_pid=" << client.serverProcessId() << std::endl;
+            require(SetEvent(ready), "ready signal failed");
+            bool stopped = false;
+            for (unsigned attempt = 0; attempt < 1000; ++attempt) {
+                fcitx::PipeClient::KeyReply reply;
+                require(client.poll(context, reply),
+                        "peer disconnection interrupted polling");
+                if (WaitForSingleObject(stop, 10) == WAIT_OBJECT_0) {
+                    stopped = true;
+                    break;
+                }
+            }
+            CloseHandle(ready);
+            CloseHandle(stop);
+            require(stopped, "cross-architecture stop timed out");
+            require(client.focusOut(context) && client.destroyContext(context),
+                    "hold cleanup failed");
+            return 0;
+        }
         if (argumentCount == 2 &&
             std::string(arguments[1]) == "--check-candidates") {
             fcitx::PipeClient::KeyReply reply;

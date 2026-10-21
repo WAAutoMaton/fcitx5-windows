@@ -93,6 +93,22 @@ int wmain(int count, wchar_t **arguments) {
     if (count != 2 && count != 3)
         return 2;
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    if (count == 3 && std::wstring(arguments[2]) == L"--wrong-arch") {
+        const auto module = LoadLibraryW(arguments[1]);
+        const auto error = GetLastError();
+        if (module) {
+            FreeLibrary(module);
+            std::cerr << "Opposite-architecture DLL unexpectedly loaded\n";
+            return 1;
+        }
+        if (error != ERROR_BAD_EXE_FORMAT) {
+            std::cerr << "Wrong-architecture load returned " << error << '\n';
+            return 1;
+        }
+        std::cout
+            << "PASS: wrong-architecture DLL rejected (ERROR_BAD_EXE_FORMAT)\n";
+        return 0;
+    }
     HMODULE runtime = nullptr;
     HMODULE module = nullptr;
     bool comInitialized = false;

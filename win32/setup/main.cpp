@@ -32,13 +32,12 @@ bool administrator() {
     return member != FALSE;
 }
 
-std::wstring registryString(HKEY root, const wchar_t *key,
-                            const wchar_t *name) {
+std::wstring registryString(HKEY root, const wchar_t *key, const wchar_t *name,
+                            DWORD view = RRF_SUBKEY_WOW6464KEY) {
     wchar_t buffer[32768]{};
     DWORD size = sizeof(buffer);
-    const auto result =
-        RegGetValueW(root, key, name, RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY,
-                     nullptr, buffer, &size);
+    const auto result = RegGetValueW(root, key, name, RRF_RT_REG_SZ | view,
+                                     nullptr, buffer, &size);
     if (result == ERROR_FILE_NOT_FOUND) {
         return {};
     }
@@ -49,9 +48,15 @@ std::wstring registryString(HKEY root, const wchar_t *key,
 }
 
 bool ownsRegistration(const fs::path &root) {
-    const auto path = registryString(HKEY_LOCAL_MACHINE, kClsidKey, nullptr);
-    return path.empty() ||
-           ipc::sameInstallationPath(path, root / "tsf" / "fcitx5-x86_64.dll");
+    for (const auto &[view, relative] :
+         {std::pair{RRF_SUBKEY_WOW6464KEY, L"tsf/fcitx5-x86_64.dll"},
+          std::pair{RRF_SUBKEY_WOW6432KEY, L"tsf/x86/fcitx5-x86.dll"}}) {
+        const auto path =
+            registryString(HKEY_LOCAL_MACHINE, kClsidKey, nullptr, view);
+        if (!path.empty() && !ipc::sameInstallationPath(path, root / relative))
+            return false;
+    }
+    return true;
 }
 
 void setRegistryString(const wchar_t *name, const std::wstring &value) {
@@ -220,6 +225,33 @@ DWORD registration(const fs::path &root, bool uninstall) {
     if (!ownsRegistration(root)) {
         return ERROR_ALREADY_EXISTS;
     }
+    const auto x86Dll = root / "tsf" / "x86" / "fcitx5-x86.dll";
+    const auto x86Registered = registryString(HKEY_LOCAL_MACHINE, kClsidKey,
+                                              nullptr, RRF_SUBKEY_WOW6432KEY);
+    fs::path x86Registrar;
+    const auto finish = [&](DWORD result) {
+        if (result && !uninstall && x86Registered.empty() &&
+            !x86Registrar.empty()) {
+            const auto rollback = runProcess(
+                x86Registrar, L"/s /u \"" + x86Dll.wstring() + L"\"");
+            fcitx::setup::logStep("rollback new x86 registration", rollback);
+        }
+        return result;
+    };
+    if (fs::exists(x86Dll) || !x86Registered.empty()) {
+        if (!fs::exists(x86Dll))
+            return ERROR_FILE_NOT_FOUND;
+        wchar_t directory[MAX_PATH]{};
+        if (!GetSystemWow64DirectoryW(directory, MAX_PATH))
+            return GetLastError();
+        const auto code =
+            runProcess(fs::path(directory) / L"regsvr32.exe",
+                       std::wstring(uninstall ? L"/s /u \"" : L"/s \"") +
+                           x86Dll.wstring() + L"\"");
+        if (code)
+            return code;
+        x86Registrar = fs::path(directory) / L"regsvr32.exe";
+    }
     const auto dll = root / "tsf" / "fcitx5-x86_64.dll";
     if (uninstall && !fs::exists(dll)) {
         const auto profiles = fcitx::UnregisterCategoriesAndProfiles();
@@ -230,14 +262,14 @@ DWORD registration(const fs::path &root, bool uninstall) {
                                        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
                                            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (!module) {
-        return GetLastError();
+        return finish(GetLastError());
     }
     const auto method = reinterpret_cast<HRESULT(WINAPI *)()>(GetProcAddress(
         module, uninstall ? "DllUnregisterServer" : "DllRegisterServer"));
     const auto result =
         method ? method() : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     FreeLibrary(module);
-    return static_cast<DWORD>(result);
+    return finish(static_cast<DWORD>(result));
 }
 
 DWORD setState(const fs::path &root, const std::string &state) {

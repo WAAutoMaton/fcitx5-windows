@@ -10,7 +10,14 @@ $testState = [pscustomobject]@{
     Dll = Join-Path $temporary 'fcitx5-x86_64.dll'
     Starts = @(); Stops = @(); ExitCode = 0; Owners = @()
 }
-[IO.File]::WriteAllText($testState.Dll, 'test fixture; never loaded')
+function Write-PeFixture([string]$Path, [uint16]$Machine) {
+    $bytes = New-Object byte[] 88
+    $bytes[0] = 0x4d; $bytes[1] = 0x5a; $bytes[0x3c] = 64
+    $bytes[64] = 0x50; $bytes[65] = 0x45
+    [BitConverter]::GetBytes($Machine).CopyTo($bytes, 68)
+    [IO.File]::WriteAllBytes($Path, $bytes)
+}
+Write-PeFixture $testState.Dll 0x8664
 
 function Assert-True {
     param([bool]$Value, [string]$Message)
@@ -59,7 +66,7 @@ function Get-Command {
 }
 
 try {
-    foreach ($name in @('tsf-common', 'install', 'uninstall', 'release-tsf')) {
+    foreach ($name in @('tsf-common', 'install', 'uninstall', 'release-tsf', 'pe-machine')) {
         $tokens = $null
         $parseErrors = $null
         [void][Management.Automation.Language.Parser]::ParseFile(
@@ -95,6 +102,19 @@ try {
     $testState.ExitCode = 5
     Assert-Fails { & "$helpers/install.ps1" -DllPath $testState.Dll }
     Assert-Fails { & "$helpers/uninstall.ps1" -DllPath $testState.Dll }
+    $testState.ExitCode = 0
+    $x86Dll = Join-Path $temporary 'fcitx5-x86.dll'
+    Write-PeFixture $x86Dll 0x14c
+    & "$helpers/install.ps1" -DllPath $x86Dll | Out-Null
+    & "$helpers/uninstall.ps1" -DllPath $x86Dll | Out-Null
+    foreach ($start in $testState.Starts | Select-Object -Last 2) {
+        Assert-True ($start.FilePath -match '\\SysWOW64\\regsvr32.exe$') 'Wrong x86 registration binary.'
+    }
+    . "$helpers/pe-machine.ps1"
+    Assert-PeMachine $x86Dll x86
+    Assert-Fails { Assert-PeMachine $x86Dll x64 }
+    Write-PeFixture $x86Dll 0xaa64
+    Assert-Fails { & "$helpers/install.ps1" -DllPath $x86Dll }
     $testState.Starts = @()
     foreach ($name in @('install', 'uninstall', 'release-tsf')) {
         Assert-Fails { & "$helpers/$name.ps1" -Prefix $root -DllPath $testState.Dll -WhatIf }
@@ -122,5 +142,6 @@ try {
     Write-Output 'PASS: script parsing, paths, quoting, registration exit codes, WhatIf and exact-path owner selection (mocked system mutations).'
 } finally {
     Remove-Item -LiteralPath $testState.Dll -Force
+    if ($x86Dll -and (Test-Path -LiteralPath $x86Dll)) { Remove-Item -LiteralPath $x86Dll -Force }
     Remove-Item -LiteralPath $temporary
 }

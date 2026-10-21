@@ -86,11 +86,9 @@ class Fixture {
           source(root / "source"), machine(root), engine(root, machine) {
         fs::create_directories(root / "setup");
         fs::create_directories(source / "setup");
-        paths = {"bin/Fcitx5.exe",
-                 "tsf/fcitx5-x86_64.dll",
-                 "setup/Fcitx5SetupHelper.exe",
-                 "setup/managed-install",
-                 "settings/Fcitx5Settings.exe",
+        paths = {"bin/Fcitx5.exe",         "tsf/fcitx5-x86_64.dll",
+                 "tsf/x86/fcitx5-x86.dll", "setup/Fcitx5SetupHelper.exe",
+                 "setup/managed-install",  "settings/Fcitx5Settings.exe",
                  "share/data.txt"};
         for (const auto &path : paths) {
             fs::create_directories((root / path).parent_path());
@@ -123,6 +121,10 @@ class Fixture {
                "installed\n");
     }
     void oldVersion() {
+        assert(upgrade::readText(root / "tsf/fcitx5-x86_64.dll") ==
+               "old:tsf/fcitx5-x86_64.dll");
+        assert(upgrade::readText(root / "tsf/x86/fcitx5-x86.dll") ==
+               "old:tsf/x86/fcitx5-x86.dll");
         assert(upgrade::readText(root / "bin/Fcitx5.exe") ==
                "old:bin/Fcitx5.exe");
         assert(upgrade::readText(root / "share/obsolete.txt") == "obsolete");
@@ -148,6 +150,13 @@ int main() {
         test.machine.boot = false;
         {
             upgrade::FileGuard occupied(test.root / "tsf/fcitx5-x86_64.dll");
+            assert(test.engine.complete() == ERROR_SUCCESS_REBOOT_REQUIRED);
+            assert(upgrade::transactionState(test.root) == "staged");
+        }
+        test.oldVersion();
+        test.machine.boot = false;
+        {
+            upgrade::FileGuard occupied(test.root / "tsf/x86/fcitx5-x86.dll");
             assert(test.engine.complete() == ERROR_SUCCESS_REBOOT_REQUIRED);
             assert(upgrade::transactionState(test.root) == "staged");
         }
@@ -181,8 +190,9 @@ int main() {
         assert(!test.machine.armed);
     }
     unsigned index = 10;
-    for (auto checkpoint : {"applying", "bin/Fcitx5.exe", "share/new.txt",
-                            "verifying", "commit-ready", "committed"}) {
+    for (auto checkpoint :
+         {"applying", "bin/Fcitx5.exe", "tsf/x86/fcitx5-x86.dll",
+          "share/new.txt", "verifying", "commit-ready", "committed"}) {
         Fixture test(index++);
         test.stage();
         test.machine.boot = false;
@@ -373,6 +383,36 @@ int main() {
         assert(test.engine.complete(true) == 0);
         assert(!upgrade::hasTransaction(test.root));
     }
-    std::cout << "PASS: stage, same-boot refusal, lock deferral, duplicate, "
+    {
+        Fixture test(40);
+        fs::remove(test.root / "tsf/x86/fcitx5-x86.dll");
+        std::vector<std::string> legacy;
+        for (const auto &path : test.paths)
+            if (path != "tsf/x86/fcitx5-x86.dll" && path != "share/new.txt")
+                legacy.push_back(path);
+        legacy.push_back("share/obsolete.txt");
+        saveManifest(test.root, legacy, "1.0.0.0");
+        test.stage();
+        test.machine.boot = false;
+        assert(test.engine.complete() == 0);
+        assert(upgrade::readText(test.root / "tsf/x86/fcitx5-x86.dll") ==
+               "new:tsf/x86/fcitx5-x86.dll");
+    }
+    {
+        Fixture test(41);
+        auto single = test.paths;
+        std::erase(single, "tsf/x86/fcitx5-x86.dll");
+        saveManifest(test.source, single, "2.0.0.0");
+        bool rejected = false;
+        try {
+            test.engine.begin(test.source / "setup/runtime-manifest.json");
+        } catch (const std::system_error &error) {
+            rejected = error.code().value() == ERROR_REVISION_MISMATCH;
+        }
+        assert(rejected && !upgrade::hasTransaction(test.root));
+        test.oldVersion();
+    }
+    std::cout << "PASS: stage, same-boot refusal, dual-architecture lock "
+                 "deferral, duplicate, "
                  "cancel, commit, rollback and durable crash recovery\n";
 }

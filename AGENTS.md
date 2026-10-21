@@ -7,7 +7,7 @@
 - 这是使用 C++20、CMake、PowerShell 和 Windows SDK 的 Fcitx5 Windows port。
 - 根工程、`win32` TSF 工程和 `win32/settings` WinUI 工程彼此独立。不要把它们的编译器、头文件、运行库或构建缓存混用。
 - Core 是独立进程，TSF DLL 加载到应用进程；两者通过用户级 Named Pipe 通信，不共享 C++ 对象、分配器或引擎 ABI。Settings 也通过 IPC 访问 Core。
-- `win32/ipc/protocol.h` 的协议变更必须同步更新 Core、TSF DLL 和 Settings。当前 TSF 只构建/验证 x64；CI 当前不再构建 ARM64，ARM64 输入法能力尚未验证。
+- `win32/ipc/protocol.h` 的协议变更必须同步更新 Core、TSF DLL 和 Settings。x64/x86 TSF 使用独立构建树，共享 x64 Core；x86 真实系统派发仍需验收。CI 当前不再构建 ARM64，ARM64 输入法能力尚未验证。
 - 报告结果时区分自动化 probe、免注册测试和真实系统/应用验证。
 
 ## 目录与文档
@@ -39,7 +39,7 @@
 - Core、真实 Pinyin、TSF composition、DirectWrite/Direct2D 候选窗、候选 UIElement/Behavior、语言栏输入法轮换、Settings 有序输入法列表/共享引擎选项/快捷键录制/拼音词库页/全局语言与开发日志和隔离部署链路已经接入；码表条目是否可用取决于已安装引擎与数据，probe 覆盖真实五笔提交。
 - 第三方词库使用 `%APPDATA%/Fcitx5/pinyin/dictionaries` 的 `.dict`/`.disable` 文件；加载状态通过 IPC 提供给 Settings。
 - AppContainer 真实 token 传输和免注册候选宿主动作已有 probe；CI/Nightly 显式启用 `UIELEMENTENABLED` / `IMMERSIVESUPPORT`，本地构建需 `-ModernApps`。安装器提供默认不选中的当前用户登录启动项，遵守手动停止状态。能力声明和机器级安装 smoke 不代表签名部署或真实现代应用输入验收。
-- 尚未完成或尚未全面验证：完整 Windows `InputContext`、全部双拼方案、五笔及其他码表的真实应用覆盖、Rime、死键/AltGr/复杂布局、完整密码 context、周边文本映射、断线提交可靠性、自绘候选鼠标交互、完整无障碍、普通托盘、剪贴板、跨屏 DPI/主题、真实 UWP/现代应用系统派发、ARM64/x86 TSF，以及完整用户安装/升级/重启卸载清理。
+- 尚未完成或尚未全面验证：完整 Windows `InputContext`、全部双拼方案、五笔及其他码表的真实应用覆盖、Rime、死键/AltGr/复杂布局、完整密码 context、周边文本映射、断线提交可靠性、自绘候选鼠标交互、完整无障碍、普通托盘、剪贴板、跨屏 DPI/主题、真实 UWP/现代应用系统派发、ARM64 TSF、x86 真实应用输入，以及完整用户安装/升级/重启卸载清理。
 - 注册 TSF category 不代表对应能力已经实现；新增 category、profile 图标或注册元数据后需要重新注册才能生效。
 
 ## 开始任务前

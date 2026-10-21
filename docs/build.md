@@ -21,7 +21,7 @@ Install the following before running the build scripts:
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
 | Core/input methods | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; the pinned libime/chinese-addons data supplies Pinyin, Shuangpin and table methods |
-| TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, ATL and ImageMagick (`magick`) |
+| TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
 | UI localization | Boost 1.92 portable headers, gettext tools; the SHA256-pinned Boost.Locale 1.92 source archive is downloaded by CMake |
@@ -80,6 +80,7 @@ It does not register/unregister TSF, stop applications or start services.
 | `-Jobs` | `6`; parallel jobs for CMake builds |
 | `-SkipTests` | Skip default CTest tests |
 | `-ModernApps` | Explicitly declare immersive/UIElement TSF categories for system acceptance; no registration or signing |
+| `-TsfArchitectures` | `x64,x86`; independent frontend builds sharing the x64 Core/Settings; `x64` alone is a development-only option |
 | `-WhatIf` | Preview without builds, submodule initialization or file copies |
 
 Default paths are resolved relative to the repository; explicit relative paths
@@ -89,6 +90,31 @@ are resolved from the current working directory. For an isolated deployment:
 ./scripts/build-and-deploy.ps1 -Prefix ./dist/next
 ./scripts/build-and-deploy.ps1 -WhatIf
 ```
+
+TSF uses `BuildRoot/tsf` for x64 and `BuildRoot/tsf-x86` for x86. Standalone
+frontend builds initialize the matching VS environment and reject a build tree
+with a different architecture:
+
+```powershell
+./scripts/build-tsf.ps1 -Architecture x86 -BuildRoot ./build/tsf-x86 -ModernApps
+./scripts/build-tsf.ps1 -Architecture x64 -BuildRoot ./build/tsf-x64 -ModernApps
+```
+
+The toolchains are `cmake/tsf-x86.cmake` and `cmake/tsf-x64.cmake`. CTest uses
+the current target DLL/probes for each tree. Deployment audits the PE machine
+and normal/delayed CRT imports before copying either frontend. The single
+runtime tree contains `tsf/fcitx5-x86_64.dll` and `tsf/x86/fcitx5-x86.dll`.
+Both resolve Core, Settings, translations and installation state from the same
+root; x86 does not require an x86 Core or an additional VC++ runtime.
+Installer packaging requires both DLLs with matching PE machines and includes
+both in the file/hash/upgrade ownership manifest. Individual development
+registration commands accept `-DllPath` and select `System32`/`SysWOW64`
+`regsvr32` from the PE machine. Registration remains an explicit system action.
+
+`test-pinyin.ps1 -Architecture x86` runs the x86 probes against an isolated
+x64 Core when no user Core is running. `-PeerTsfBuild <x64 tree>` also runs
+concurrent x86/x64 Pipe clients and verifies peer disconnect isolation. These
+are automated/registration-free checks, not real registered application input.
 
 The unified build places Settings' independent MSVC translation-library build,
 MSBuild output and object files under `BuildRoot/settings`, then stages them.
@@ -278,6 +304,7 @@ run in separate jobs:
 | --- | --- |
 | `build-x64` | Run the unified build with `-ModernApps -SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
 | `test-x64` | Download the x64 runtime and tests; run build-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, relocated engine translations, default CTest and dictionary integration checks |
+| `test-x86` | Build/test x86 in an independent VS/LLVM tree; run x86 Pinyin/TSF probes and concurrent x86/x64 Pipe clients against the shared x64 Core |
 | `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
 | `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install, require modern TSF registration, uninstall and check registration cleanup, and upload the installer log |
 | `release` | Wait for the x64 build, tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
@@ -381,6 +408,7 @@ Keep the complete runtime tree together:
 dist/pinyin/
   bin/Fcitx5.exe
   tsf/fcitx5-x86_64.dll
+  tsf/x86/fcitx5-x86.dll
   settings/Fcitx5Settings.exe
   lib/
   share/

@@ -1,12 +1,14 @@
 [CmdletBinding()]
 param(
     [string]$TsfBuild = '',
+    [string]$TsfX86Build = '',
     [string]$IsccPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (!$TsfBuild) { $TsfBuild = Join-Path $root 'win32/build/pinyin-tsf' }
+if (!$TsfX86Build) { $TsfX86Build = Join-Path $root 'build/tsf-x86' }
 if (!$IsccPath) { $IsccPath = [IO.Path]::GetFullPath("$env:LOCALAPPDATA/Programs/Inno Setup 7/ISCC.exe") }
 $temporary = Join-Path $root "build/reboot-package-test $([guid]::NewGuid().ToString('N'))"
 $prefix = Join-Path $temporary 'stage'
@@ -19,6 +21,8 @@ try {
     }
     Copy-Item -LiteralPath "$TsfBuild/setup/Fcitx5Upgrade.exe" -Destination "$prefix/setup/Fcitx5Upgrade.exe"
     Copy-Item -LiteralPath "$TsfBuild/tests/upgrade_fixture.dll" -Destination "$prefix/tsf/fcitx5-x86_64.dll"
+    New-Item -ItemType Directory -Force "$prefix/tsf/x86" | Out-Null
+    Copy-Item -LiteralPath "$TsfX86Build/tests/upgrade_fixture.dll" -Destination "$prefix/tsf/x86/fcitx5-x86.dll"
     $dependencies = Join-Path $temporary 'dependencies'
     New-Item -ItemType Directory -Force $dependencies | Out-Null
     foreach ($file in @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')) {
