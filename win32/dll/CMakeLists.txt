@@ -14,12 +14,6 @@ target_include_directories(${TSF_TARGET} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 target_compile_options(${TSF_TARGET} PRIVATE "-Wno-dll-attribute-on-redeclaration")
 
-if(TSF_ARCH STREQUAL "x86")
-    # CTF TIP profile/category keys are shared between WOW64 views. The x64
-    # DLL owns that metadata; x86 only owns its redirected COM registration.
-    target_compile_definitions(${TSF_TARGET} PRIVATE FCITX5_TSF_X86)
-endif()
-
 target_link_libraries(${TSF_TARGET} tsf)
 
 option(ENABLE_MODERN_TSF_CATEGORIES "Declare UIElement/immersive support for explicit system acceptance" OFF)

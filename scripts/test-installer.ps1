@@ -154,22 +154,24 @@ try {
     }
     Assert-Path ([string]$properties.NativeUninstaller)
     Assert-Path $uninstallKey
-    Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll') -ModernApps:$ModernApps
-    Assert-TsfRegistration -DllPath (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll') -Architecture x86 `
-        -ProfileDllPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll') -ModernApps:$ModernApps
-
-    # Each registrar must leave the other architecture's registration usable.
     $x86Dll = Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'
     $x64Dll = Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'
+    # CTF TIP profile/category keys are shared; COM servers remain view-specific.
+    # The x86 registrar runs first in the machine registration helper.
+    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $x86Dll -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 `
+        -ProfileDllPath $x86Dll -ModernApps:$ModernApps
+
+    # Each registrar must leave the other architecture's registration usable.
     $x86Registrar = Join-Path $env:WINDIR 'SysWOW64/regsvr32.exe'
     $x64Registrar = Join-Path $env:WINDIR 'System32/regsvr32.exe'
     Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', '/u', "`"$x86Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x64Dll -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $x86Dll -ModernApps:$ModernApps
     Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', "`"$x86Dll`"") | Out-Null
     Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', '/u', "`"$x64Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $x64Dll -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $x86Dll -ModernApps:$ModernApps
     Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', "`"$x64Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x64Dll -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $x86Dll -ModernApps:$ModernApps
 
     $uninstallArguments = @('uninstall', '--silent', '--prefix', "`"$InstallRoot`"")
     $uninstallCode = Invoke-ProcessChecked -FilePath $helper -ArgumentList $uninstallArguments -AllowedExitCodes @(0, 3010)

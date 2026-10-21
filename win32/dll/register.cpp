@@ -107,6 +107,22 @@ HRESULT UnregisterServerAt(HKEY root, REGSAM view) {
     return result == ERROR_FILE_NOT_FOUND ? S_OK : HRESULT_FROM_WIN32(result);
 }
 
+bool ServerRegisteredAt(REGSAM view) {
+    if (view != KEY_WOW64_32KEY && view != KEY_WOW64_64KEY) {
+        return false;
+    }
+    HKEY server = nullptr;
+    const auto result = RegOpenKeyExW(
+        HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Classes\\CLSID\\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}\\InprocServer32",
+        0, KEY_READ | view, &server);
+    if (result != ERROR_SUCCESS) {
+        return false;
+    }
+    RegCloseKey(server);
+    return true;
+}
+
 /*
 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\CTF\TIP\{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}
   - LanguageProfile

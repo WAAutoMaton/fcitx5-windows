@@ -14,6 +14,7 @@ inline constexpr REGSAM kRegistrationView =
 HRESULT RegisterServerAt(HKEY root, const std::wstring &dllPath,
                          REGSAM view = kRegistrationView);
 HRESULT UnregisterServerAt(HKEY root, REGSAM view = kRegistrationView);
+bool ServerRegisteredAt(REGSAM view);
 HRESULT UnregisterServer();
 BOOL RegisterProfiles();
 BOOL RegisterCategories();
