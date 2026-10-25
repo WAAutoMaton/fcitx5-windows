@@ -1,3 +1,5 @@
+#include "../ipc/pipeidentity.h"
+#include "../ipc/serviceclient.h"
 #include "../ipc/transport.h"
 #include "../tsf/pipeclient.h"
 #include <algorithm>
@@ -50,7 +52,8 @@ int main(int argumentCount, char **arguments) {
         if (argumentCount == 2 && std::string(arguments[1]) == "--diagnose") {
             namespace ipc = fcitx::win32::ipc;
             const ipc::SandboxieApi sandbox;
-            const auto environment = ipc::clientEnvironment(sandbox);
+            const auto identity = ipc::uacLoginIdentity(sandbox);
+            const auto &environment = identity.local;
             std::wcout << L"sandboxState="
                        << static_cast<unsigned>(
                               sandbox.process(GetCurrentProcessId()))
@@ -63,6 +66,12 @@ int main(int argumentCount, char **arguments) {
                        << environment.sessionId << L"\nauthenticationId="
                        << environment.authenticationId.HighPart << L":"
                        << environment.authenticationId.LowPart << L"\n";
+            std::wcout << L"elevationKnown=" << environment.elevationKnown
+                       << L"\nelevation=" << environment.elevationType
+                       << L"\nlinkedError=" << identity.linkedError
+                       << L"\nlinkedValid=" << ipc::validUacLink(identity)
+                       << L"\nuacHostServices="
+                       << ipc::uacHostServiceClient(environment) << L"\n";
             std::wcout << L"pipe=" << ipc::pipeName() << L"\n";
             const bool connected = client.connect();
             std::wcout << L"pid=" << GetCurrentProcessId() << L"\nhostOnly="
@@ -70,6 +79,22 @@ int main(int argumentCount, char **arguments) {
                        << client.serverProcessId() << L"\nerror="
                        << client.connectionError() << L"\n";
             std::cout << "stage=" << client.connectionStage() << "\n";
+            HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                         FALSE, client.serverProcessId());
+            HANDLE token = nullptr;
+            if (process) {
+                if (OpenProcessToken(process, TOKEN_QUERY, &token)) {
+                    const ipc::TokenQueryHandle lifetime(token);
+                    const auto server = ipc::tokenEnvironment(token);
+                    const auto relation = ipc::pipeLoginDecision(
+                        identity, server, server.sessionId, false);
+                    std::cout << "serverLoginMatch="
+                              << static_cast<unsigned>(relation.match) << "\n";
+                } else {
+                    std::cout << "serverTokenError=" << GetLastError() << "\n";
+                }
+                CloseHandle(process);
+            }
             if (connected) {
                 fcitx::ipc::InputMethodsReply methods;
                 require(client.getInputMethods(methods) &&

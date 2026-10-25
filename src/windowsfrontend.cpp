@@ -444,7 +444,7 @@ void WindowsPipeServer::run(bool inputOnly) {
 
 void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId,
                                   bool inputOnly) {
-    const auto host = ipc::clientEnvironment();
+    const auto host = ipc::uacLoginIdentity();
     ipc::ClientEnvironment caller;
     ipc::Frame hello;
     bool restricted = inputOnly;
@@ -452,8 +452,28 @@ void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId,
     bool authenticated = false;
     if (!ipc::readFrame(pipe, hello, 2000, stopEvent_, 4096) ||
         hello.type != ipc::MessageType::Hello || hello.contextId ||
-        !hello.payload.empty() || !hello.requestId ||
-        !ipc::authorizedPipeClient(pipe, host, caller, inputOnly)) {
+        !hello.payload.empty() || !hello.requestId) {
+        DisconnectNamedPipe(pipe);
+        CloseHandle(pipe);
+        return;
+    }
+    const auto decision =
+        ipc::authorizedPipeClient(pipe, host, caller, inputOnly);
+    ULONG peerPid = 0;
+    GetNamedPipeClientProcessId(pipe, &peerPid);
+    diagnostic::coreLogger().event(
+        decision ? diagnostic::Level::Info : diagnostic::Level::Warning,
+        "pipe_identity",
+        {{"client", clientId},
+         {"peer_pid", peerPid},
+         {"input_only", inputOnly},
+         {"match", static_cast<unsigned>(decision.match)},
+         {"reason", static_cast<unsigned>(decision.reason)},
+         {"linked_error", host.linkedError},
+         {"elevation", static_cast<unsigned>(caller.elevationType)},
+         {"elevation_known", caller.elevationKnown},
+         {"error", decision.error}});
+    if (!decision) {
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
         return;

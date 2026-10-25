@@ -76,13 +76,20 @@ inline bool verifiedServerHandle(HANDLE pipe, HANDLE process,
     return success;
 }
 
-inline bool pipeClientIdentity(HANDLE pipe, ClientEnvironment &identity) {
+inline bool pipeClientIdentity(HANDLE pipe, ClientEnvironment &identity,
+                               DWORD *error = nullptr) {
     identity = {};
-    if (!ImpersonateNamedPipeClient(pipe))
+    if (error)
+        *error = ERROR_SUCCESS;
+    if (!ImpersonateNamedPipeClient(pipe)) {
+        if (error)
+            *error = GetLastError();
         return false;
+    }
     HANDLE token = nullptr;
     bool success =
         OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &token) != FALSE;
+    DWORD queryError = success ? ERROR_SUCCESS : GetLastError();
     try {
         if (success)
             identity = tokenEnvironment(token);
@@ -91,29 +98,100 @@ inline bool pipeClientIdentity(HANDLE pipe, ClientEnvironment &identity) {
             CloseHandle(token);
         if (!RevertToSelf())
             std::terminate();
+        if (error)
+            *error = ERROR_NOT_ENOUGH_MEMORY;
         return false;
     }
     if (token)
         CloseHandle(token);
     if (!RevertToSelf())
         std::terminate();
+    if (error)
+        *error = success && identity.tokenKnown
+                     ? ERROR_SUCCESS
+                     : (queryError ? queryError : ERROR_INVALID_DATA);
     return success && identity.tokenKnown;
+}
+
+enum class PipeLoginMatch {
+    Denied,
+    ExactLogin,
+    UacLinkedLogin,
+    SandboxAnonymous
+};
+enum class PipeLoginReason {
+    None,
+    UnknownToken,
+    PeerSession,
+    TokenSession,
+    InputOnly,
+    RestrictedEnvironment,
+    DifferentUser,
+    NoUacLink,
+    DifferentLogin,
+    TokenQuery,
+    SessionQuery
+};
+
+struct PipeLoginDecision {
+    PipeLoginMatch match = PipeLoginMatch::Denied;
+    PipeLoginReason reason = PipeLoginReason::None;
+    DWORD error = ERROR_SUCCESS;
+    explicit operator bool() const { return match != PipeLoginMatch::Denied; }
+};
+
+inline PipeLoginDecision pipeLoginDecision(const UacLoginIdentity &identity,
+                                           const ClientEnvironment &caller,
+                                           ULONG peerSession, bool inputOnly) {
+    const auto &host = identity.local;
+    if (!host.tokenKnown || !caller.tokenKnown)
+        return {PipeLoginMatch::Denied, PipeLoginReason::UnknownToken};
+    if (peerSession != host.sessionId)
+        return {PipeLoginMatch::Denied, PipeLoginReason::PeerSession};
+    const bool anonymous = caller.userSid == L"S-1-5-7";
+    if (!anonymous && caller.sessionId != host.sessionId)
+        return {PipeLoginMatch::Denied, PipeLoginReason::TokenSession};
+    if (sameLogin(host, caller))
+        return {PipeLoginMatch::ExactLogin};
+    // Sandboxie opens with the original user's authority under the existing
+    // user-only DACL, then exposes an anonymous sender. Only the kernel peer
+    // session retains the session boundary in this separate exception.
+    if (!inputOnly && !caller.appContainer && anonymous)
+        return {PipeLoginMatch::SandboxAnonymous};
+    if (inputOnly)
+        return {PipeLoginMatch::Denied, PipeLoginReason::InputOnly};
+    if (host.isolation != IsolationKind::Host || host.appContainer ||
+        caller.appContainer || host.lowIntegrity || caller.lowIntegrity)
+        return {PipeLoginMatch::Denied, PipeLoginReason::RestrictedEnvironment};
+    if (host.userSid != caller.userSid)
+        return {PipeLoginMatch::Denied, PipeLoginReason::DifferentUser};
+    if (!validUacLink(identity))
+        return {PipeLoginMatch::Denied, PipeLoginReason::NoUacLink};
+    if (!caller.elevationKnown ||
+        caller.elevationType != identity.linked.elevationType ||
+        !sameLogin(identity.linked, caller))
+        return {PipeLoginMatch::Denied, PipeLoginReason::DifferentLogin};
+    return {PipeLoginMatch::UacLinkedLogin};
+}
+
+inline PipeLoginDecision authorizedPipeClient(HANDLE pipe,
+                                              const UacLoginIdentity &host,
+                                              ClientEnvironment &caller,
+                                              bool inputOnly) {
+    DWORD error = ERROR_SUCCESS;
+    if (!pipeClientIdentity(pipe, caller, &error))
+        return {PipeLoginMatch::Denied, PipeLoginReason::TokenQuery, error};
+    ULONG session = 0;
+    if (!GetNamedPipeClientSessionId(pipe, &session))
+        return {PipeLoginMatch::Denied, PipeLoginReason::SessionQuery,
+                GetLastError()};
+    return pipeLoginDecision(host, caller, session, inputOnly);
 }
 
 inline bool authorizedPipeClient(HANDLE pipe, const ClientEnvironment &host,
                                  ClientEnvironment &caller, bool inputOnly) {
-    ULONG session = 0;
-    if (!host.tokenKnown || !pipeClientIdentity(pipe, caller) ||
-        !GetNamedPipeClientSessionId(pipe, &session) ||
-        session != host.sessionId)
-        return false;
-    if (sameLogin(host, caller))
-        return true;
-    // Sandboxie security mode exposes an anonymous token to the host after
-    // opening the management pipe with the original user's authority. Its
-    // existing user-only DACL authorizes that open; use the kernel peer session
-    // here because the sandbox token does not retain the user's logon identity.
-    return !inputOnly && !caller.appContainer && caller.userSid == L"S-1-5-7";
+    return static_cast<bool>(
+        authorizedPipeClient(pipe, UacLoginIdentity{host}, caller, inputOnly));
 }
 
 inline bool pipeServerIdentity(HANDLE pipe, const ClientEnvironment &client,

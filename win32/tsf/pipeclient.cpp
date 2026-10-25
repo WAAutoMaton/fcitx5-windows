@@ -2,6 +2,8 @@
 #include "../ipc/installation.h"
 #include "../ipc/pipeidentity.h"
 #include "../ipc/transport.h"
+#include <atomic>
+#include <cstdio>
 #include <filesystem>
 
 namespace fcitx {
@@ -10,6 +12,8 @@ struct ConnectionTrace {
     PipeClient &client;
     win32::diagnostic::Logger *logger;
     ULONGLONG started = GetTickCount64();
+    TOKEN_ELEVATION_TYPE elevation = TokenElevationTypeDefault;
+    bool elevationKnown = false;
     ~ConnectionTrace() {
         if (logger && logger->enabled())
             logger->event(win32::diagnostic::Level::Info, "pipe_connect",
@@ -17,7 +21,22 @@ struct ConnectionTrace {
                            {"stage", client.connectionStage()},
                            {"error", client.connectionError()},
                            {"server_pid", client.serverProcessId()},
+                           {"elevation", static_cast<unsigned>(elevation)},
+                           {"elevation_known", elevationKnown},
                            {"elapsed_ms", GetTickCount64() - started}});
+        if (client.connectionError() && (!logger || !logger->enabled())) {
+            static std::atomic<ULONGLONG> nextTrace{0};
+            auto next = nextTrace.load();
+            if (started >= next &&
+                nextTrace.compare_exchange_strong(next, started + 5000)) {
+                wchar_t message[256]{};
+                swprintf_s(
+                    message,
+                    L"Fcitx5: pipe connection failed stage=%hs error=%lu\n",
+                    client.connectionStage(), client.connectionError());
+                OutputDebugStringW(message);
+            }
+        }
     }
 };
 } // namespace
@@ -26,11 +45,14 @@ PipeClient::~PipeClient() { disconnect(); }
 
 bool PipeClient::connect() {
     std::lock_guard<std::mutex> lock(mutex_);
-    const ConnectionTrace trace{*this, logger_};
+    ConnectionTrace trace{*this, logger_};
     if (connected()) {
         return true;
     }
+    serverProcessId_ = 0;
     const auto environment = ipc::clientEnvironment(sandbox_);
+    trace.elevation = environment.elevationType;
+    trace.elevationKnown = environment.elevationKnown;
     const auto policy = ipc::isolationPolicy(environment);
     const bool restricted = policy == ipc::IsolationPolicy::RestrictedInput;
     if (policy == ipc::IsolationPolicy::Refuse || !environment.tokenKnown) {
@@ -41,7 +63,6 @@ bool PipeClient::connect() {
     const auto name =
         name_.empty() ? (restricted ? ipc::inputPipeName() : ipc::pipeName())
                       : name_;
-    serverProcessId_ = 0;
     connectionStage_ = "WaitNamedPipe";
     if (name.empty() || !WaitNamedPipeW(name.c_str(), 50)) {
         connectionError_ = name.empty() ? ERROR_INVALID_NAME : GetLastError();
@@ -57,6 +78,8 @@ bool PipeClient::connect() {
         return false;
     }
     ULONG server = 0;
+    if (GetNamedPipeServerProcessId(pipe_, &server))
+        serverProcessId_ = server;
     connectionStage_ = "server ownership";
     if (sandbox_.hostOnly() && (!GetNamedPipeServerProcessId(pipe_, &server) ||
                                 !sandbox_.acceptsServer(server))) {

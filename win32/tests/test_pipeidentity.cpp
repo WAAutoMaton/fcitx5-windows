@@ -6,6 +6,7 @@ namespace ipc = fcitx::win32::ipc;
 
 int main() {
     const auto host = ipc::clientEnvironment();
+    const auto identity = ipc::uacLoginIdentity();
     assert(host.tokenKnown && !host.appContainer);
     const auto name = ipc::pipeName() + L"-identity-test-" +
                       std::to_wstring(GetCurrentProcessId());
@@ -56,6 +57,11 @@ int main() {
 
         ipc::ClientEnvironment caller;
         assert(ipc::authorizedPipeClient(server, host, caller, false));
+        const auto decision =
+            ipc::authorizedPipeClient(server, identity, caller, false);
+        assert(decision.match == (anonymousMessage
+                                      ? ipc::PipeLoginMatch::SandboxAnonymous
+                                      : ipc::PipeLoginMatch::ExactLogin));
         assert(caller.tokenKnown && !caller.appContainer);
         assert(ipc::sameLogin(host, caller) == !anonymousMessage);
         assert(ipc::authorizedPipeClient(server, host, caller, true) ==
@@ -84,4 +90,12 @@ int main() {
         DisconnectNamedPipe(server);
         CloseHandle(server);
     }
+    ipc::ClientEnvironment caller;
+    const auto failed = ipc::authorizedPipeClient(INVALID_HANDLE_VALUE,
+                                                  identity, caller, false);
+    assert(!failed && failed.reason == ipc::PipeLoginReason::TokenQuery &&
+           failed.error != ERROR_SUCCESS);
+    HANDLE token = nullptr;
+    assert(!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &token));
+    assert(GetLastError() == ERROR_NO_TOKEN);
 }
