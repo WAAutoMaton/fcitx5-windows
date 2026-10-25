@@ -63,13 +63,14 @@ jobs:
             return @{ value = $Value }
           }
           $registration = foreach ($test in $tests) {
-            if (@($test.properties | Where-Object name -ne 'WORKING_DIRECTORY').Count) {
+            if (@($test.properties | Where-Object name -notin 'WORKING_DIRECTORY', 'SKIP_RETURN_CODE', 'TIMEOUT').Count) {
               throw "Unsupported portable test properties: $($test.name)"
             }
             @{
               name = $test.name
               command = @($test.command | ForEach-Object { Convert-TestArgument $_ })
               workingDirectory = Convert-TestArgument ($test.properties | Where-Object name -eq 'WORKING_DIRECTORY').value
+              properties = @($test.properties | Where-Object name -in 'SKIP_RETURN_CODE', 'TIMEOUT')
             }
           }
           ConvertTo-Json -InputObject @($registration) -Depth 5 | Set-Content "$bundle/tests.json" -Encoding utf8
@@ -130,6 +131,11 @@ jobs:
             $arguments = @($test.command | ForEach-Object { Format-TestArgument $_ })
             'add_test(' + $name + ' ' + ($arguments -join ' ') + ')'
             'set_tests_properties(' + $name + ' PROPERTIES WORKING_DIRECTORY ' + (Format-TestArgument $test.workingDirectory) + ')'
+            foreach ($property in $test.properties) {
+              $propertyName = Format-TestArgument @{ value = $property.name }
+              $propertyValue = Format-TestArgument @{ value = [string]$property.value }
+              'set_tests_properties(' + $name + ' PROPERTIES ' + $propertyName + ' ' + $propertyValue + ')'
+            }
           }
           $registration | Set-Content "$bundle/CTestTestfile.cmake" -Encoding utf8
 
