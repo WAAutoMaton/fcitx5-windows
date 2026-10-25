@@ -110,4 +110,60 @@ Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $dll -
 $registry[$x86Server].'(default)' = $dll
 Assert-Failure { Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $dll -ModernApps } 'TSF COM registration'
 Assert-TsfRegistration -DllPath $dll -ModernApps
-Write-Output 'PASS: desktop/modern categories, both category indexes, COM path/threading and enabled profile/icon checks (mock registry; no installation).'
+
+# Replay the smoke test's actual assertions and registrar calls. Testing only
+# Assert-TsfRegistration missed hard-coded icon expectations at its call sites.
+$smoke = $ast.Find({ param($node)
+    $node -is [Management.Automation.Language.TryStatementAst]
+}, $false)
+$start = $smoke.Body.Statements | Where-Object {
+    $_ -is [Management.Automation.Language.AssignmentStatementAst] -and
+    $_.Left.Extent.Text -eq '$x86Dll'
+} | Select-Object -First 1
+$end = $smoke.Body.Statements | Where-Object {
+    $_ -is [Management.Automation.Language.AssignmentStatementAst] -and
+    $_.Left.Extent.Text -eq '$uninstallArguments'
+} | Select-Object -First 1
+if (!$start -or !$end) { throw 'Missing dual-architecture smoke sequence.' }
+$sequence = [scriptblock]::Create($ast.Extent.Text.Substring(
+    $start.Extent.StartOffset, $end.Extent.StartOffset - $start.Extent.StartOffset))
+$InstallRoot = 'C:\Program Files\Fcitx5'
+$ModernApps = $true
+$actions = [Collections.Generic.List[string]]::new()
+function Invoke-ProcessChecked {
+    param([string]$FilePath, [string[]]$ArgumentList)
+    $isX86 = $FilePath -ieq (Join-Path $env:WINDIR 'SysWOW64/regsvr32.exe')
+    $isX64 = $FilePath -ieq (Join-Path $env:WINDIR 'System32/regsvr32.exe')
+    if (!$isX86 -and !$isX64) { throw "Unexpected registrar: $FilePath" }
+    $key = if ($isX86) { $x86Server } else { $server }
+    $path = if ($isX86) { $x86Dll } else { $x64Dll }
+    if ($ArgumentList[-1] -cne "`"$path`"") { throw 'Unexpected registrar DLL argument.' }
+    if ($ArgumentList -contains '/u') {
+        $registry.Remove($key)
+        $actions.Add("unregister $key")
+    } else {
+        $registry[$key] = [pscustomobject]@{ '(default)' = $path; ThreadingModel = 'Apartment' }
+        if ($replaceIcon) { $registry[$profile].IconFile = $path }
+        $actions.Add("register $key")
+    }
+    return 0
+}
+foreach ($replaceIcon in @($false, $true)) {
+    foreach ($initialIcon in @($dll, $x86Dll)) {
+        $registry[$server].'(default)' = $dll
+        $registry[$x86Server].'(default)' = $x86Dll
+        $registry[$profile].IconFile = $initialIcon
+        $actions.Clear()
+        . $sequence
+        if (($actions -join ';') -cne (@("unregister $x86Server", "register $x86Server",
+                    "unregister $server", "register $server") -join ';')) {
+            throw 'Smoke sequence did not exercise both peer unregister/re-register orders.'
+        }
+    }
+}
+$registry[$profile].IconFile = 'C:\Other\tsf\x86\fcitx5-x86.dll'
+Assert-Failure { Assert-TsfRegistration -DllPath $dll -ProfileDllPath @($dll, $x86Dll) -ModernApps } 'TSF language profile'
+$registry[$profile].IconFile = $dll
+$registry[$x86Server].'(default)' = $dll
+Assert-Failure { Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath @($dll, $x86Dll) -ModernApps } 'TSF COM registration'
+Write-Output 'PASS: desktop/modern categories, both COM views, shared profile icons and smoke registrar sequence (mock registry; no installation).'

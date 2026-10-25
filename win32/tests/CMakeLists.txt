@@ -19,6 +19,13 @@ add_test(NAME test_upgrade_files COMMAND test_upgrade_files $<TARGET_FILE:upgrad
 add_test_target(test_upgrade test_upgrade.cpp)
 target_link_libraries(test_upgrade PRIVATE setup_upgrade)
 
+add_test_target(test_upgrade_registration test_upgrade_registration.cpp ../dll/register.cpp ../dll/util.cpp)
+
+target_link_libraries(test_upgrade_registration PRIVATE setup_upgrade windows_diagnostic advapi32 user32 shell32 ole32 oleaut32 uuid)
+if(ENABLE_MODERN_TSF_CATEGORIES)
+    target_compile_definitions(test_upgrade_registration PRIVATE FCITX5_MODERN_TSF_CATEGORIES)
+endif()
+
 add_test_target(test_dll test_dll.cpp ../dll/util.cpp)
 add_test_target(test_registration_views test_registration_views.cpp ../dll/util.cpp)
 target_link_libraries(test_registration_views PRIVATE advapi32 user32 shell32 ole32 oleaut32 uuid)

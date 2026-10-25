@@ -103,7 +103,7 @@ x86 和 x64 DLL 使用同一个逻辑 TSF 的 CLSID、语言 profile GUID、描�
 | x64 TSF | `%WINDIR%\System32\regsvr32.exe` |
 | x86 TSF | `%WINDIR%\SysWOW64\regsvr32.exe` |
 
-`RegisterServerAt`、profile/category 注册和注销代码需要支持明确的架构 view。注销 x86 版本不得删除仍在使用的 x64 view，反之亦然。注册测试必须检查同一 CLSID 的双架构路径、profile 可枚举性、category 双向索引和 DLL 路径归属。
+`RegisterServerAt` 按明确的架构 view 注册 COM server；`HKLM\SOFTWARE\Microsoft\CTF\TIP` 下的 profile/category 则由 x86/x64 共享。两种注册器都可能提供共享 profile 的图标，安装 smoke 和升级校验只接受当前安装包内的 x64 或 x86 DLL；每个 COM view 的 `InprocServer32` 仍必须匹配对应架构的唯一 DLL。注销任一版本时保留仍有 peer COM server 使用的共享元数据，最后一个版本注销时再清理。注册测试必须检查同一 CLSID 的双架构路径、profile 可枚举性、category 双向索引和 DLL 路径归属。
 
 ### 安装树
 

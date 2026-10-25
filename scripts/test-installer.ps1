@@ -63,7 +63,7 @@ function Assert-Path {
 function Assert-TsfRegistration {
     param([string]$DllPath, [switch]$ModernApps,
         [ValidateSet('x64', 'x86')][string]$Architecture = 'x64',
-        [string]$ProfileDllPath = '')
+        [string[]]$ProfileDllPath = @())
 
     $clsid = '{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}'
     $tip = "HKLM:\SOFTWARE\Microsoft\CTF\TIP\$clsid"
@@ -81,8 +81,8 @@ function Assert-TsfRegistration {
     $profile = "$tip\LanguageProfile\0x00000804\{9A92B895-29B9-4F19-9627-9F626C9490F2}"
     Assert-Path $profile
     $properties = Get-ItemProperty -LiteralPath $profile
-    if ($properties.Enable -ne 1 -or $properties.IconFile -ine $ProfileDllPath -or $properties.IconIndex -ne 0) {
-        throw 'TSF language profile is disabled or does not reference the installed DLL icon.'
+    if ($properties.Enable -ne 1 -or $properties.IconFile -notin $ProfileDllPath -or $properties.IconIndex -ne 0) {
+        throw "TSF language profile is disabled or does not reference an installed DLL icon: Enable=$($properties.Enable), IconFile='$($properties.IconFile)', IconIndex=$($properties.IconIndex); expected Enable=1, IconFile in [$($ProfileDllPath -join ', ')], IconIndex=0."
     }
 
     $categories = [ordered]@{
@@ -157,21 +157,22 @@ try {
     $x86Dll = Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'
     $x64Dll = Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'
     # CTF TIP profile/category keys are shared; COM servers remain view-specific.
-    # The x86 registrar runs first in the machine registration helper.
-    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $x86Dll -ModernApps:$ModernApps
+    # Either registrar can supply the shared icon; both DLLs belong to this install.
+    $profileDlls = @($x64Dll, $x86Dll)
+    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
     Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 `
-        -ProfileDllPath $x86Dll -ModernApps:$ModernApps
+        -ProfileDllPath $profileDlls -ModernApps:$ModernApps
 
     # Each registrar must leave the other architecture's registration usable.
     $x86Registrar = Join-Path $env:WINDIR 'SysWOW64/regsvr32.exe'
     $x64Registrar = Join-Path $env:WINDIR 'System32/regsvr32.exe'
     Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', '/u', "`"$x86Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $x86Dll -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
     Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', "`"$x86Dll`"") | Out-Null
     Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', '/u', "`"$x64Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $x86Dll -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $profileDlls -ModernApps:$ModernApps
     Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', "`"$x64Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $x86Dll -ModernApps:$ModernApps
+    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
 
     $uninstallArguments = @('uninstall', '--silent', '--prefix', "`"$InstallRoot`"")
     $uninstallCode = Invoke-ProcessChecked -FilePath $helper -ArgumentList $uninstallArguments -AllowedExitCodes @(0, 3010)

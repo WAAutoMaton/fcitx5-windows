@@ -617,21 +617,20 @@ class NativeMachine : public Machine {
         verifyVersion(value);
     }
     void verifyVersion(const Manifest &value) override {
-        verifyTsf(root_ / "tsf/fcitx5-x86_64.dll", RRF_SUBKEY_WOW6464KEY,
-                  KEY_WOW64_64KEY);
+        std::vector<fs::path> dlls{root_ / "tsf/fcitx5-x86_64.dll"};
+        verifyTsfServer(dlls.front(), RRF_SUBKEY_WOW6464KEY);
         if (std::any_of(value.files.begin(), value.files.end(),
                         [](const File &file) {
                             return file.path == "tsf/x86/fcitx5-x86.dll";
-                        }))
-            verifyTsf(root_ / "tsf/x86/fcitx5-x86.dll", RRF_SUBKEY_WOW6432KEY,
-                      KEY_WOW64_32KEY);
+                        })) {
+            dlls.push_back(root_ / "tsf/x86/fcitx5-x86.dll");
+            verifyTsfServer(dlls.back(), RRF_SUBKEY_WOW6432KEY);
+        }
+        verifyTsfProfile(dlls);
         if (regString(kUninstall, L"DisplayVersion") != wide(value.version))
             fail(ERROR_INVALID_DATA);
     }
-    void verifyTsf(const fs::path &dll, DWORD flags, REGSAM view) {
-        const auto profile = std::wstring(kTip) +
-                             L"\\LanguageProfile\\0x00000804\\"
-                             L"{9A92B895-29B9-4F19-9627-9F626C9490F2}";
+    void verifyTsfServer(const fs::path &dll, DWORD flags) {
         if (!win32::ipc::sameInstallationPath(
                 regString((std::wstring(kClsid) + L"\\InprocServer32").c_str(),
                           nullptr, flags),
@@ -639,18 +638,26 @@ class NativeMachine : public Machine {
             regString((std::wstring(kClsid) + L"\\InprocServer32").c_str(),
                       L"ThreadingModel", flags) != L"Apartment")
             fail(ERROR_INVALID_DATA);
+    }
+    void verifyTsfProfile(const std::vector<fs::path> &dlls) {
+        // CTF TIP metadata is shared by x86/x64; COM servers are not.
+        const auto profile = std::wstring(kTip) +
+                             L"\\LanguageProfile\\0x00000804\\"
+                             L"{9A92B895-29B9-4F19-9627-9F626C9490F2}";
         for (const auto &[name, expected] :
              {std::pair{L"Enable", DWORD(1)},
               std::pair{L"IconIndex", DWORD(0)}}) {
             DWORD actual = 0, size = sizeof(actual);
             reg(RegGetValueW(HKEY_LOCAL_MACHINE, profile.c_str(), name,
-                             RRF_RT_REG_DWORD | flags, nullptr, &actual,
-                             &size));
+                             RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY, nullptr,
+                             &actual, &size));
             if (actual != expected)
                 fail(ERROR_INVALID_DATA);
         }
-        if (!win32::ipc::sameInstallationPath(
-                regString(profile.c_str(), L"IconFile", flags), dll))
+        const auto icon = regString(profile.c_str(), L"IconFile");
+        if (std::none_of(dlls.begin(), dlls.end(), [&](const fs::path &dll) {
+                return win32::ipc::sameInstallationPath(icon, dll);
+            }))
             fail(ERROR_INVALID_DATA);
         for (const auto &category : fcitx::RegistrationCategories()) {
             wchar_t name[40]{};
@@ -665,7 +672,7 @@ class NativeMachine : public Machine {
                       name}) {
                 Key key;
                 reg(RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.c_str(), 0,
-                                  KEY_READ | view, &key.value));
+                                  KEY_READ | KEY_WOW64_64KEY, &key.value));
             }
         }
     }
