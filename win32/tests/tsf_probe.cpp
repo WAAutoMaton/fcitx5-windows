@@ -528,10 +528,8 @@ int wmain(int count, wchar_t **arguments) {
             requirePassedThrough(keys, context, key);
         for (const auto key : {VK_OEM_PLUS, VK_OEM_MINUS}) {
             require(SUCCEEDED(keys->OnTestKeyDown(context, key, 0, &handled)) &&
-                        handled &&
-                        SUCCEEDED(keys->OnKeyDown(context, key, 0, &handled)) &&
-                        !handled,
-                    "unmapped punctuation was not passed through by Core");
+                        handled,
+                    "unmapped punctuation was not routed to Core");
         }
         require(store->text.empty(), "pass-through key mutated the text store");
         require(SUCCEEDED(keyboard->SetValue(client, &closed)),
@@ -804,7 +802,8 @@ int wmain(int count, wchar_t **arguments) {
                             config.error == fcitx::ipc::SettingsError::None,
                         "TSF punctuation mode apply failed");
                 pump(200);
-                for (const auto key : {VK_OEM_COMMA, VK_OEM_PERIOD, int('1')}) {
+                for (const auto key : {VK_OEM_COMMA, VK_OEM_PERIOD, int('1'),
+                                       VK_OEM_PLUS, VK_OEM_MINUS}) {
                     keyboardState.shortcut(key, key == '1' ? 1 : 0);
                     const auto before = store->text;
                     const auto writes = store->writes;
@@ -814,14 +813,19 @@ int wmain(int count, wchar_t **arguments) {
                             "idle punctuation test callback failed");
                     require(
                         SUCCEEDED(keys->OnKeyDown(context, key, 0, &handled)) &&
-                            !!handled == (std::string(mode) == "Chinese"),
+                            handled,
                         "idle punctuation consumption did not follow Core");
                     pump();
                     const std::wstring expected =
-                        std::string(mode) == "English" ? L""
-                        : key == VK_OEM_COMMA          ? L"\uFF0C"
-                        : key == VK_OEM_PERIOD         ? L"\u3002"
-                                                       : L"\uFF01";
+                        key == VK_OEM_PLUS    ? L"="
+                        : key == VK_OEM_MINUS ? L"-"
+                        : std::string(mode) == "English"
+                            ? (key == VK_OEM_COMMA    ? L","
+                               : key == VK_OEM_PERIOD ? L"."
+                                                      : L"!")
+                        : key == VK_OEM_COMMA  ? L"\uFF0C"
+                        : key == VK_OEM_PERIOD ? L"\u3002"
+                                               : L"\uFF01";
                     require(store->text == before + expected,
                             ("idle punctuation commit failed: mode=" +
                              std::string(mode) + " key=" + std::to_string(key) +
@@ -833,6 +837,44 @@ int wmain(int count, wchar_t **arguments) {
                                 .c_str());
                     require(SUCCEEDED(keys->OnKeyUp(context, key, 0, &handled)),
                             "punctuation release failed");
+                }
+                if (std::string(mode) == "Chinese") {
+                    for (const auto key : {VK_OEM_COMMA, VK_OEM_PERIOD}) {
+                        keyboardState.clear();
+                        const auto before = store->text;
+                        press(keys, context, 'N');
+                        press(keys, context, VK_RETURN);
+                        require(store->text == before + L"n",
+                                "TSF raw Latin commit failed");
+                        const auto writes = store->writes;
+                        for (int test = 0; test < 2; ++test) {
+                            require(SUCCEEDED(keys->OnTestKeyDown(
+                                        context, key, 0, &handled)) &&
+                                        handled && store->writes == writes,
+                                    "punctuation test callback modified text");
+                        }
+                        press(keys, context, key);
+                        const auto halfWidth =
+                            key == VK_OEM_COMMA ? L"," : L".";
+                        require(store->text == before + L"n" + halfWidth,
+                                "TSF half-width punctuation after Latin lost");
+                        require(SUCCEEDED(
+                                    keys->OnKeyUp(context, key, 0, &handled)) &&
+                                    handled,
+                                "TSF half-width punctuation release failed");
+                        pump();
+                        require(store->text == before + L"n" + halfWidth,
+                                "TSF punctuation release duplicated text");
+                        press(keys, context, key);
+                        require(store->text == before + L"n" + halfWidth +
+                                                   (key == VK_OEM_COMMA
+                                                        ? L"\uFF0C"
+                                                        : L"\u3002"),
+                                "TSF second punctuation did not convert");
+                        require(
+                            SUCCEEDED(keys->OnKeyUp(context, key, 0, &handled)),
+                            "TSF second punctuation release failed");
+                    }
                 }
             }
             keyboardState.clear();

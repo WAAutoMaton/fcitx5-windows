@@ -309,8 +309,9 @@ int main(int argc, char **argv) {
                     require(
                         client.key(context, false, key, 0,
                                    c == '!' || c == ':' ? 1 : 0, 0, reply, c) &&
-                            reply.consumed == chinese &&
-                            reply.commit == (chinese ? expected : ""),
+                            reply.consumed &&
+                            reply.commit ==
+                                (chinese ? expected : std::string(1, c)),
                         ("idle punctuation conversion failed: " +
                          std::string(method) + " mode=" + mode + " key=" + c +
                          " consumed=" + std::to_string(reply.consumed) +
@@ -318,8 +319,53 @@ int main(int argc, char **argv) {
                          " preedit=" + reply.preedit)
                             .c_str());
                 }
+                if (chinese) {
+                    for (const auto c : {',', '.'}) {
+                        require(
+                            client.key(context, false, 'N', 0, 0, 0, reply) &&
+                                reply.consumed &&
+                                client.key(context, false, VK_RETURN, 0, 0, 0,
+                                           reply) &&
+                                reply.commit == "n",
+                            "raw Latin commit failed");
+                        const auto key =
+                            c == ',' ? VK_OEM_COMMA : VK_OEM_PERIOD;
+                        require(client.key(context, false, key, 0, 0, 0, reply,
+                                           c) &&
+                                    reply.consumed &&
+                                    reply.commit == std::string(1, c),
+                                "half-width punctuation after Latin was lost");
+                        require(
+                            client.key(context, true, key, 0, 0, 0, reply, c) &&
+                                reply.commit.empty(),
+                            "punctuation release committed text");
+                        require(client.key(context, false, key, 0, 0, 0, reply,
+                                           c) &&
+                                    reply.consumed &&
+                                    reply.commit ==
+                                        (c == ',' ? "\uFF0C" : "\u3002"),
+                                "second punctuation did not return to Chinese");
+                    }
+                    require(client.key(context, false, '1', 0, 0, 0, reply) &&
+                                !reply.consumed && reply.commit.empty() &&
+                                client.key(context, false, VK_OEM_PERIOD, 0, 0,
+                                           0, reply, '.') &&
+                                reply.consumed && reply.commit == ".",
+                            "half-width punctuation after a digit was lost");
+                }
+                for (const auto modifiers : {2U, 4U, 8U}) {
+                    require(client.key(context, false, VK_OEM_COMMA, 0,
+                                       modifiers, 0, reply, ',') &&
+                                !reply.consumed && reply.commit.empty(),
+                            "punctuation shortcut was committed as text");
+                }
             }
         }
+        require(
+            client.selectInputMethod(context, "keyboard-us", reply) &&
+                client.key(context, false, VK_OEM_COMMA, 0, 0, 0, reply, ',') &&
+                !reply.consumed && reply.commit.empty(),
+            "keyboard punctuation was consumed by Pinyin fallback");
         require(
             client.getMethodConfig("pinyin", pinyin) &&
                 client.setMethodConfig({"pinyin",
