@@ -16,6 +16,16 @@
 
 namespace fcitx::win32 {
 namespace {
+constexpr const char *punctuationOption = "WindowsPunctuation";
+
+i18n::Translator windowsTranslator() {
+    const auto language = getEnvironmentOrEmpty("FCITX_LOCALE");
+    return i18n::Translator(
+        language == "zh_CN"   ? ipc::UiLanguage::SimplifiedChinese
+        : language == "zh_TW" ? ipc::UiLanguage::TraditionalChinese
+                              : ipc::UiLanguage::English);
+}
+
 std::string field(const RawConfig &raw, const std::string &path) {
     const auto *value = raw.valueByPath(path);
     return value ? *value : "";
@@ -125,12 +135,7 @@ std::string WindowsSettings::configKey(const std::string &id) const {
 }
 
 void WindowsSettings::initializeMethods() {
-    const auto language = getEnvironmentOrEmpty("FCITX_LOCALE");
-    const auto selectedLanguage =
-        language == "zh_CN"   ? ipc::UiLanguage::SimplifiedChinese
-        : language == "zh_TW" ? ipc::UiLanguage::TraditionalChinese
-                              : ipc::UiLanguage::English;
-    i18n::Translator translator(selectedLanguage);
+    const auto translator = windowsTranslator();
     instance_.inputMethodManager().foreachEntries(
         [&](const InputMethodEntry &entry) {
             if (!ipc::validMethodId(entry.uniqueName()) ||
@@ -207,7 +212,7 @@ void WindowsSettings::initializeMethods() {
                 }
                 if (info.available) {
                     if (auto config = overrides_.get(configKey(info.id))) {
-                        addon->setConfigForInputMethod(entry, *config);
+                        setMethodValues(entry, *config);
                     }
                 }
             } catch (const std::exception &error) {
@@ -303,6 +308,63 @@ WindowsSettings::applySelection(const ipc::InputMethodSelection &selection) {
     return ipc::SettingsError::None;
 }
 
+RawConfig WindowsSettings::methodValues(const InputMethodEntry &entry) const {
+    RawConfig values;
+    auto *addon = engine(instance_, entry);
+    if (const auto *config = addon->getConfigForInputMethod(entry)) {
+        config->save(values);
+    }
+    if (entry.addon() == "pinyin") {
+        auto *punctuation = instance_.addonManager().addon("punctuation", true);
+        if (!punctuation || !punctuation->getConfig()) {
+            throw std::runtime_error("Punctuation configuration unavailable");
+        }
+        RawConfig config;
+        punctuation->getConfig()->save(config);
+        values.setValueByPath(punctuationOption,
+                              field(config, "Enabled") == "True" ? "Chinese"
+                                                                 : "English");
+    }
+    return values;
+}
+
+void WindowsSettings::setMethodValues(const InputMethodEntry &entry,
+                                      const RawConfig &values) {
+    RawConfig engineValues = values;
+    auto *addon = engine(instance_, entry);
+    AddonInstance *punctuation = nullptr;
+    RawConfig punctuationValues;
+    if (entry.addon() == "pinyin") {
+        engineValues.remove(punctuationOption);
+        if (values.get(punctuationOption)) {
+            const auto mode = field(values, punctuationOption);
+            if (mode != "Chinese" && mode != "English") {
+                throw std::runtime_error("Invalid punctuation mode");
+            }
+            punctuation = instance_.addonManager().addon("punctuation", true);
+            if (!punctuation || !punctuation->getConfig()) {
+                throw std::runtime_error(
+                    "Punctuation configuration unavailable");
+            }
+            punctuation->getConfig()->save(punctuationValues);
+            punctuationValues.setValueByPath(
+                "Enabled", mode == "Chinese" ? "True" : "False");
+        }
+    }
+    RawConfig current;
+    if (const auto *config = addon->getConfigForInputMethod(entry)) {
+        config->save(current);
+    }
+    if (engineValues != current) {
+        addon->setConfigForInputMethod(entry, engineValues);
+    }
+    if (punctuation) {
+        // Keep unrelated punctuation options intact. windows.conf remains the
+        // authority; the upstream file is a compatibility mirror.
+        punctuation->setConfig(punctuationValues);
+    }
+}
+
 ipc::MethodConfigReply
 WindowsSettings::methodConfig(const std::string &id,
                               ipc::SettingsError error) const {
@@ -324,9 +386,24 @@ WindowsSettings::methodConfig(const std::string &id,
         if (config) {
             RawConfig description, values;
             config->dumpDescription(description);
-            config->save(values);
+            values = methodValues(*entry);
             describe(description, config->typeName(), values, "",
                      reply.options);
+            if (entry->addon() == "pinyin") {
+                const auto translator = windowsTranslator();
+                ipc::ConfigOption option;
+                option.path = punctuationOption;
+                option.label = translator.text("input-method", "Punctuation");
+                option.value = field(values, punctuationOption);
+                option.defaultValue = "Chinese";
+                option.kind = ipc::ConfigKind::Enum;
+                option.choices = {
+                    {"Chinese",
+                     translator.text("input-method", "Chinese punctuation")},
+                    {"English",
+                     translator.text("input-method", "English punctuation")}};
+                reply.options.insert(reply.options.begin(), std::move(option));
+            }
         }
     } catch (const std::exception &) {
         reply.error = ipc::SettingsError::Unavailable;
@@ -353,7 +430,7 @@ WindowsSettings::applyMethodConfig(const ipc::MethodConfigRequest &request) {
                                       : ipc::SettingsError::Invalid;
     }
     RawConfig previous, next;
-    config->save(previous);
+    previous = methodValues(*entry);
     next = previous;
     for (const auto &value : request.values) {
         const auto option = std::find_if(
@@ -401,7 +478,7 @@ WindowsSettings::applyMethodConfig(const ipc::MethodConfigRequest &request) {
     }
     resetRequired_ = true;
     try {
-        addon->setConfigForInputMethod(*entry, next);
+        setMethodValues(*entry, next);
         const auto applied = methodConfig(request.id);
         if (applied.error != ipc::SettingsError::None) {
             throw std::runtime_error("Config unavailable after applying");
@@ -420,7 +497,7 @@ WindowsSettings::applyMethodConfig(const ipc::MethodConfigRequest &request) {
                       << error.what();
         overrides_ = oldOverrides;
         try {
-            addon->setConfigForInputMethod(*entry, previous);
+            setMethodValues(*entry, previous);
         } catch (...) {
         }
         if (!save(settings_)) {

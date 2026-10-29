@@ -47,6 +47,13 @@ uint64_t create(fcitx::PipeClient &client) {
 } // namespace
 
 int main(int argumentCount, char **arguments) {
+    if (argumentCount == 2 && std::string(arguments[1]) == "--check-ui-test") {
+#ifdef FCITX5_UI_TEST
+        return 0;
+#else
+        return 1;
+#endif
+    }
     try {
         fcitx::PipeClient client;
         if (argumentCount == 2 && std::string(arguments[1]) == "--diagnose") {

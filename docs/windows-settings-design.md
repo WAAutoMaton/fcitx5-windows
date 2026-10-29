@@ -149,7 +149,7 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 
 1. 启动时枚举已安装的 entry 和 addon。拼音、双拼、五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风、自然码可加入用户列表；缺失引擎或码表时标为不可用，不允许新添加。
 2. Core 保存有序列表，每个 TSF 实例保存当前 entry 并在焦点切换和重连时恢复。Windows compartment 的布尔值由实际 entry 是否为键盘推导；外部开关只在用户已选择的键盘/非键盘条目之间切换，没有对应条目时保持当前输入法。
-3. 通过 addon 的 `getConfigForInputMethod` / `setConfigForInputMethod` 读写公开配置。拼音/双拼共用上游配置，码表按各自输入法保存。引擎未声明或隐藏的选项不能通过协议修改。
+3. 通过 addon 的 `getConfigForInputMethod` / `setConfigForInputMethod` 读写公开配置。拼音/双拼共用上游配置，码表按各自输入法保存。除下述显式适配的标点选项外，引擎未声明或隐藏的选项不能通过协议修改。
 4. 在 Core 主事件循环内执行设置操作。Pipe worker 不直接操作 Instance、addon 或 context。
 5. 移除当前条目时回退到仍选中的可用条目。列表顺序和 Core 的内部组顺序分开：内部组第一项保留 Fcitx 的键盘槽位，但它不强迫用户保留英文键盘。
 6. scheme 或双拼键位改变时，取消旧方案尚未提交的预编辑和候选，不自动选词提交；已经提交的文本保持有效。相同设置不重复 reset。
@@ -162,6 +162,12 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 `patches/chinese-addons-windows-table.patch` 在 Windows 中启用已带数据的仓颉条目，并将内置码表路径优先解析到部署树 `share/libime`；码表不存在时配置接口返回不可用。兼容补丁由 `apply-pinyin-patches.ps1` 按固定版本幂等应用。
 
 输入引擎设置即时生效，不要求重启 Core、重新注册 DLL 或重启应用。UI 语言是独立的全局设置，Core / Settings 在重启服务后生效；菜单在后台刷新后下次打开生效，已有关于窗口在再次点击时刷新。语言设置不触发预编辑重置，也不要求重新注册。
+
+拼音/双拼页的“标点符号”选项提供“中文标点”和“英文标点”，默认中文，两页共享。Core 显式发布 `WindowsPunctuation` 枚举，通过现有配置协议和通用下拉框读写，不开放任意 addon 配置接口。该值保存在 `windows.conf` 的 `Options/pinyin` 中，适配器将其与拼音引擎配置分离，映射到 `punctuation` 模块的 `Enabled`；保存失败不改变运行时，应用失败回滚，重启时以 Windows 权威记录恢复。上游模块状态为全局共享，因而也影响使用该模块的码表输入法。保留上游“字母或者数字之后输入半角标点”的规则（默认仅对逗号和句号生效），选择中文标点不覆盖该规则。
+
+TSF 在非键盘输入法空闲时也将 OEM 标点键及 Shift+数字送到 Core，由 Core 决定转换和消费；普通数字、空格仍按原有规则透传。英文标点模式下，Core 不转换的按键由应用正常处理。测试按键回调只判断路由，不执行 IPC、配置修改或文档编辑。带 Control/Alt/Windows 修饰键仍按快捷键及既有透传规则处理；此修改不补齐上游 Ctrl+句号快捷键。
+
+`scripts/test-punctuation.ps1 -Prefix <test prefix> -TsfBuild <test TSF tree>` 使用 `FCITX5_UI_TEST` Core/TSF 的隔离端点及 `SKIP_FCITX_USER_PATH=1`，验证空闲标点输出、共享配置、非法值、只读存储失败、重启恢复和免注册 TSF 连续提交；不读取或写入个人引擎配置。`scripts/test-settings-punctuation.ps1 -Prefix <test prefix> -Language zh-Hans` 使用真实 Core 和 WinUI Settings 验证下拉框、默认值、翻译、应用及拼音/双拼页面同步，也支持 `en` 和 `zh-Hant`。这些测试不代表已注册的真实应用系统派发验收。
 
 ## 开发日志与 Settings 退出诊断
 

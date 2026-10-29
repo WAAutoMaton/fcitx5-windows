@@ -193,8 +193,13 @@ class TextStore : public ITextStoreACP, public ITfInputScope {
             *end = selection_.acpEnd;
         if (flags & TS_IAS_QUERYONLY)
             return S_OK;
-        return SetText(0, selection_.acpStart, selection_.acpEnd, value, length,
-                       change);
+        const auto result = SetText(0, selection_.acpStart, selection_.acpEnd,
+                                    value, length, change);
+        // Return the inserted range, so TSF can collapse it to the new caret.
+        // The old empty range left consecutive direct commits in reverse order.
+        if (SUCCEEDED(result) && end)
+            *end = change->acpNewEnd;
+        return result;
     }
     STDMETHODIMP GetFormattedText(LONG, LONG, IDataObject **result) override {
         if (result)

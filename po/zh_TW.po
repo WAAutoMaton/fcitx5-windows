@@ -777,3 +777,15 @@ msgstr "快速切換依輸入法清單的順序。不存在或無法使用的項
 msgctxt "settings"
 msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
 msgstr "快捷鍵無效或重複，請使用錄製功能選擇其他快捷鍵。"
+
+msgctxt "input-method"
+msgid "Punctuation"
+msgstr "標點符號"
+
+msgctxt "input-method"
+msgid "Chinese punctuation"
+msgstr "中文標點"
+
+msgctxt "input-method"
+msgid "English punctuation"
+msgstr "英文標點"

@@ -47,6 +47,9 @@ class WindowsSettings {
     const ipc::InputMethodInfo *method(const std::string &id) const;
     bool selected(const std::string &id) const;
     std::string configKey(const std::string &id) const;
+    RawConfig methodValues(const InputMethodEntry &entry) const;
+    void setMethodValues(const InputMethodEntry &entry,
+                         const RawConfig &values);
     bool applyProfile(ipc::ShuangpinProfile profile);
     bool save(const ipc::PinyinSettings &settings) const;
 };

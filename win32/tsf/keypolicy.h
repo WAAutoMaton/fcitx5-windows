@@ -19,10 +19,13 @@ inline bool routesKey(uint32_t key, uint32_t modifiers, bool enabled,
     if (key >= 'A' && key <= 'Z') {
         return true;
     }
-    if ((composing || codeInput) &&
-        (key >= '0' && key <= '9' || key == VK_SPACE ||
-         (key >= VK_OEM_1 && key <= VK_OEM_3) ||
-         (key >= VK_OEM_4 && key <= VK_OEM_8) || key == VK_OEM_102)) {
+    // Idle Pinyin still needs punctuation conversion. Shifted digits also
+    // produce punctuation (e.g. ! and parentheses); Core decides consumption.
+    if (((composing || codeInput || (modifiers & kModifierShift)) &&
+         key >= '0' && key <= '9') ||
+        ((composing || codeInput) && key == VK_SPACE) ||
+        (key >= VK_OEM_1 && key <= VK_OEM_3) ||
+        (key >= VK_OEM_4 && key <= VK_OEM_8) || key == VK_OEM_102) {
         return true;
     }
     if (!composing) {

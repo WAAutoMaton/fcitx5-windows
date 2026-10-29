@@ -523,10 +523,16 @@ int wmain(int count, wchar_t **arguments) {
         require(adapter->preserveCalls == 6 &&
                     adapter->preservedGuid != GUID_NULL,
                 "exact Ctrl+Space preserved key was not requested");
-        const uint32_t directKeys[] = {VK_SPACE, VK_OEM_PLUS, VK_OEM_MINUS, '0',
-                                       '9'};
+        const uint32_t directKeys[] = {VK_SPACE, '0', '9'};
         for (const auto key : directKeys)
             requirePassedThrough(keys, context, key);
+        for (const auto key : {VK_OEM_PLUS, VK_OEM_MINUS}) {
+            require(SUCCEEDED(keys->OnTestKeyDown(context, key, 0, &handled)) &&
+                        handled &&
+                        SUCCEEDED(keys->OnKeyDown(context, key, 0, &handled)) &&
+                        !handled,
+                    "unmapped punctuation was not passed through by Core");
+        }
         require(store->text.empty(), "pass-through key mutated the text store");
         require(SUCCEEDED(keyboard->SetValue(client, &closed)),
                 "system keyboard close failed");
@@ -775,6 +781,69 @@ int wmain(int count, wchar_t **arguments) {
                     SUCCEEDED(events->OnSetFocus(document, otherDocument)),
                 "restore focus after multi-method test failed");
         pump(200);
+        {
+            fcitx::ipc::MethodConfigReply config;
+            require(configuration.getMethodConfig("pinyin", config),
+                    "punctuation config unavailable");
+            const auto option =
+                std::find_if(config.options.begin(), config.options.end(),
+                             [](const auto &item) {
+                                 return item.path == "WindowsPunctuation";
+                             });
+            require(option != config.options.end(),
+                    "punctuation option missing");
+            const auto original = option->value;
+            KeyboardState keyboardState;
+            keyboardState.clear();
+            for (const auto mode : {"Chinese", "English"}) {
+                require(configuration.setMethodConfig(
+                            {"pinyin",
+                             config.revision,
+                             {{"WindowsPunctuation", mode}}},
+                            config) &&
+                            config.error == fcitx::ipc::SettingsError::None,
+                        "TSF punctuation mode apply failed");
+                pump(200);
+                for (const auto key : {VK_OEM_COMMA, VK_OEM_PERIOD, int('1')}) {
+                    keyboardState.shortcut(key, key == '1' ? 1 : 0);
+                    const auto before = store->text;
+                    const auto writes = store->writes;
+                    require(SUCCEEDED(keys->OnTestKeyDown(context, key, 0,
+                                                          &handled)) &&
+                                handled && store->writes == writes,
+                            "idle punctuation test callback failed");
+                    require(
+                        SUCCEEDED(keys->OnKeyDown(context, key, 0, &handled)) &&
+                            !!handled == (std::string(mode) == "Chinese"),
+                        "idle punctuation consumption did not follow Core");
+                    pump();
+                    const std::wstring expected =
+                        std::string(mode) == "English" ? L""
+                        : key == VK_OEM_COMMA          ? L"\uFF0C"
+                        : key == VK_OEM_PERIOD         ? L"\u3002"
+                                                       : L"\uFF01";
+                    require(store->text == before + expected,
+                            ("idle punctuation commit failed: mode=" +
+                             std::string(mode) + " key=" + std::to_string(key) +
+                             " before=" + std::to_string(before.size()) +
+                             " after=" + std::to_string(store->text.size()) +
+                             " last=" +
+                             std::to_string(
+                                 store->text.empty() ? 0 : store->text.back()))
+                                .c_str());
+                    require(SUCCEEDED(keys->OnKeyUp(context, key, 0, &handled)),
+                            "punctuation release failed");
+                }
+            }
+            keyboardState.clear();
+            require(configuration.setMethodConfig(
+                        {"pinyin",
+                         config.revision,
+                         {{"WindowsPunctuation", original}}},
+                        config) &&
+                        config.error == fcitx::ipc::SettingsError::None,
+                    "restore punctuation mode failed");
+        }
         require(SUCCEEDED(service->Deactivate()), "TIP deactivation failed");
         require(adapter->removeItemCalls == 1 && !adapter->langBarItem,
                 "input mode item was not removed on deactivation");

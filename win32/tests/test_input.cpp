@@ -51,8 +51,22 @@ int main() {
     assert(routesKey('1', 0, true, true));
     assert(!routesKey(VK_SPACE, 0, true, false));
     assert(routesKey(VK_SPACE, 0, true, true));
-    assert(!routesKey(VK_OEM_PLUS, 0, true, false));
-    assert(!routesKey(VK_OEM_MINUS, 0, true, false));
+    for (const auto key :
+         {VK_OEM_1, VK_OEM_PLUS, VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PERIOD,
+          VK_OEM_2, VK_OEM_3, VK_OEM_4, VK_OEM_5, VK_OEM_6, VK_OEM_7, VK_OEM_8,
+          VK_OEM_102}) {
+        assert(routesKey(key, 0, true, false));
+        assert(routesKey(key, kModifierShift, true, false));
+        assert(!routesKey(key, 0, false, false));
+        assert(!routesKey(key, kModifierControl, true, false));
+        assert(!routesKey(key, kModifierAlt, true, false));
+        assert(!routesKey(key, kModifierSuper, true, false));
+    }
+    for (uint32_t key = '0'; key <= '9'; ++key) {
+        assert(routesKey(key, kModifierShift, true, false));
+        assert(!routesKey(key, 0, true, false));
+        assert(!routesKey(key, kModifierShift, false, false));
+    }
     assert(routesKey(VK_OEM_PLUS, 0, true, true));
     assert(routesKey(VK_OEM_MINUS, 0, true, true));
     assert(!routesKey(VK_BACK, 0, true, false));

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: fcitx5-windows\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-19 22:17+0800\n"
+"POT-Creation-Date: 2026-10-29 20:14+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -698,58 +698,73 @@ msgctxt "about"
 msgid "Close"
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:167
+#: win32/tsf/servicecontrol.cpp:171
 msgctxt "settings"
 msgid "Cannot reach the host Core named pipe. Start Core outside Sandboxie, add the Fcitx5 OpenPipePath rule to this sandbox, and reopen the application."
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:174
+#: win32/tsf/servicecontrol.cpp:178
 msgctxt "settings"
 msgid "Cannot open the user data folder."
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:176
+#: win32/tsf/servicecontrol.cpp:180
 msgctxt "settings"
 msgid "Service operation failed."
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:180
+#: win32/tsf/servicecontrol.cpp:184
 msgctxt "settings"
 msgid "If services are stopped, restart services. Check that the DLL, Core and Settings are in the same installation directory."
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:186
+#: win32/tsf/servicecontrol.cpp:190
 msgctxt "settings"
 msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
 msgstr ""
 
-#: win32/tsf/servicecontrol.cpp:196
+#: win32/tsf/servicecontrol.cpp:200
 #, c++-format
 msgctxt "settings"
 msgid "Windows error: {0}"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:149
+#: src/windowsinputmethods.cpp:154
 msgctxt "input-method"
 msgid "English Keyboard"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:152
+#: src/windowsinputmethods.cpp:157
 msgctxt "input-method"
 msgid "Pinyin"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:156
+#: src/windowsinputmethods.cpp:161
 msgctxt "input-method"
 msgid "Shuangpin"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:160
+#: src/windowsinputmethods.cpp:165
 msgctxt "input-method"
 msgid "Wubi"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:163
+#: src/windowsinputmethods.cpp:168
 msgctxt "input-method"
 msgid "Wubi Pinyin"
+msgstr ""
+
+#: src/windowsinputmethods.cpp:396
+msgctxt "input-method"
+msgid "Punctuation"
+msgstr ""
+
+#: src/windowsinputmethods.cpp:402
+msgctxt "input-method"
+msgid "Chinese punctuation"
+msgstr ""
+
+#: src/windowsinputmethods.cpp:404
+msgctxt "input-method"
+msgid "English punctuation"
 msgstr ""
