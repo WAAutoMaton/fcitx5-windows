@@ -213,7 +213,8 @@ int main(int argc, char **argv) {
                     client.focusIn(context),
                 "context setup failed");
         auto next = catalog.selection;
-        next.enabled = {"keyboard-us", "pinyin", "shuangpin", "wbx", "wbpy"};
+        next.enabled = {"keyboard-us", "pinyin", "shuangpin",
+                        "wbx",         "wbpy",   "cangjie"};
         require(client.setInputMethods(next, catalog) &&
                     catalog.error == SettingsError::None,
                 "add failed");
@@ -222,7 +223,7 @@ int main(int argc, char **argv) {
                     !reply.enabled,
                 "keyboard select failed");
         for (const auto &id :
-             {"pinyin", "shuangpin", "wbx", "wbpy", "keyboard-us"}) {
+             {"pinyin", "shuangpin", "wbx", "wbpy", "cangjie", "keyboard-us"}) {
             require(client.key(context, false, VK_SPACE, 0, 2, 0, reply) &&
                         reply.consumed && reply.inputMethod == id,
                     "Ctrl+Space order failed");
@@ -359,6 +360,16 @@ int main(int argc, char **argv) {
                                 !reply.consumed && reply.commit.empty(),
                             "punctuation shortcut was committed as text");
                 }
+            }
+            const auto expectedPunctuation = chinese ? "\uFF0C" : ",";
+            for (const auto method : {"wbx", "cangjie"}) {
+                require(client.selectInputMethod(context, method, reply),
+                        "table punctuation method selection failed");
+                require(client.key(context, false, VK_OEM_COMMA, 0, 0, 0, reply,
+                                   ',') &&
+                            reply.consumed &&
+                            reply.commit == expectedPunctuation,
+                        "table punctuation conversion or pass-through failed");
             }
         }
         require(

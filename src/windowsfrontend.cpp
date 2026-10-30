@@ -138,6 +138,12 @@ fcitx::Key keyFromWindows(uint32_t virtualKey, uint32_t scanCode,
     return fcitx::Key(symbol, states, static_cast<int>(scanCode));
 }
 
+bool isChineseLanguage(const std::string &language) {
+    return language == "wuu" || language == "yue" ||
+           language.starts_with("zh_") || language.starts_with("zh-") ||
+           language == "zh";
+}
+
 #ifdef FCITX5_WINDOWS_ASCII_FALLBACK
 std::string asciiTextForKey(uint32_t virtualKey, uint32_t modifiers) {
     if (modifiers & (kModifierControl | kModifierAlt | kModifierSuper)) {
@@ -906,18 +912,18 @@ void WindowsPipeServer::process(const ipc::Frame &request,
         KeyEvent event(&context, key, request.type == MessageType::KeyUp,
                        static_cast<int>(time));
         bool consumed = context.keyEvent(event);
-        // OnTestKeyDown claims idle punctuation before Core can decide whether
-        // Pinyin converts it. Commit the engine's half-width/pass-through
-        // result here so hosts need not recover a key already claimed by TSF.
-        // Keep shortcuts, releases and other engines on their existing paths.
+        // TSF has already claimed idle punctuation. Pass through an unhandled
+        // character for Chinese engines instead of losing it in the host.
         const bool punctuation = (unicode >= '!' && unicode <= '/') ||
                                  (unicode >= ':' && unicode <= '@') ||
                                  (unicode >= '[' && unicode <= '`') ||
                                  (unicode >= '{' && unicode <= '~');
         const auto *entry = instance_.inputMethodEntry(&context);
+        const bool chineseInputMethod =
+            entry && isChineseLanguage(entry->languageCode());
         if (!consumed && !release && punctuation &&
             !(modifiers & (kModifierControl | kModifierAlt | kModifierSuper)) &&
-            entry && entry->addon() == "pinyin" && context.preedit().empty()) {
+            chineseInputMethod && context.preedit().empty()) {
             context.commitString(std::string(1, static_cast<char>(unicode)));
             consumed = true;
         }
