@@ -43,7 +43,7 @@ function Assert-Failure([scriptblock]$Action, [string]$Message) {
 }
 
 try {
-    New-Item -ItemType Directory -Force "$temporary/scripts", "$temporary/plugins/chinese-addons" | Out-Null
+    New-Item -ItemType Directory -Force "$temporary/scripts", "$temporary/plugins/fcitx5-chinese-addons" | Out-Null
     Copy-Item -LiteralPath "$PSScriptRoot/build-plugins.ps1" -Destination $entry
     foreach ($name in @('Fcitx5Core', 'LibIMECore')) {
         New-Item -ItemType Directory -Force "$sdk/lib/cmake/$name" | Out-Null
@@ -65,8 +65,8 @@ try {
             if (!(Test-Path -LiteralPath "$prefix/$relative")) { throw "Missing automatically discovered plugin output: $relative" }
         }
     }
-    if ($testState.Builds.Values.Name -contains 'chinese-addons' -or (Test-Path "$prefix/plugins/chinese-addons")) {
-        throw 'chinese-addons was rebuilt as an external plugin.'
+    if ($testState.Builds.Values.Name -contains 'fcitx5-chinese-addons' -or (Test-Path "$prefix/plugins/fcitx5-chinese-addons")) {
+        throw 'fcitx5-chinese-addons was rebuilt as an external plugin.'
     }
     $lfsCalls = @($testState.GitCalls | ForEach-Object { $_ -join ' ' } | Where-Object { $_ -match ' lfs pull$' })
     if ($testState.GitCalls.Count -ne 3 -or $lfsCalls.Count -ne 3) {

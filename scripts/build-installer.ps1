@@ -73,7 +73,7 @@ Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $license -Force
 foreach ($source in @(
         @{ Path = 'fcitx5/COPYING'; Name = 'fcitx5-COPYING' },
         @{ Path = 'libime/LICENSE'; Name = 'libime-LICENSE' },
-        @{ Path = 'plugins/chinese-addons/LICENSE'; Name = 'chinese-addons-LICENSE' },
+        @{ Path = 'plugins/fcitx5-chinese-addons/LICENSE'; Name = 'fcitx5-chinese-addons-LICENSE' },
         @{ Path = 'windows-cross/LICENSE'; Name = 'windows-cross-LICENSE' })) {
     $sourcePath = Join-Path $root $source.Path
     if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {

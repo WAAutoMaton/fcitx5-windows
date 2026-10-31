@@ -59,7 +59,7 @@
   cmake --build build/x86_64
   ```
 
-  根工程默认不包含 libime、chinese-addons、拼音数据或上游测试；不要把它描述为完整拼音验证。
+  根工程默认不包含 libime、fcitx5-chinese-addons、拼音数据或上游测试；不要把它描述为完整拼音验证。
 - ARM64 Core 使用 `-DARCH=ARM64` 和对应 `clangarm64` sysroot。编译器必须匹配目标工具链，先检查 PATH 和 CMake cache，不要改源码掩盖环境错误。
 - TSF 工程在已初始化 VS/Windows SDK/ATL 环境中构建，并使用 `llvm-rc`：
 

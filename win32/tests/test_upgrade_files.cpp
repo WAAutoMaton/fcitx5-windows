@@ -159,7 +159,7 @@ int wmain(int argc, wchar_t **argv) try {
     }
     assert(upgrade::runtimePath(upgrade::relativePath("bin/Fcitx5.exe")));
     assert(upgrade::runtimePath(
-        upgrade::relativePath("plugins/wenzhounese/lib/fcitx5/libwenzhounese.dll")));
+        upgrade::relativePath("plugins/fcitx5-wenzhounese/lib/fcitx5/libwenzhounese.dll")));
     assert(upgrade::runtimePath(
         upgrade::relativePath("plugins/future-plugin/share/libime/example.dict")));
     assert(!upgrade::runtimePath(

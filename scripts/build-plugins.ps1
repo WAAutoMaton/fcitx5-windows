@@ -2,7 +2,7 @@
 .SYNOPSIS
 Build every additional plugin in plugins/ against an installed Core/libime SDK.
 .DESCRIPTION
-chinese-addons is already built by build-pinyin.ps1. Other plugins use the
+fcitx5-chinese-addons is already built by build-pinyin.ps1. Other plugins use the
 generic Windows addon toolchain and are deployed in independent directories.
 #>
 [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low')]
@@ -54,7 +54,7 @@ try {
     $runtimeDirectories = @("$CorePrefix/bin", "$sysroot/bin")
     if ($DependencyPrefix) { $runtimeDirectories = @("$DependencyPrefix/bin") + $runtimeDirectories }
     foreach ($plugin in Get-ChildItem -LiteralPath "$root/plugins" -Directory | Sort-Object Name) {
-        if ($plugin.Name -eq 'chinese-addons') { continue }
+        if ($plugin.Name -eq 'fcitx5-chinese-addons') { continue }
         if (!(Test-Path -LiteralPath "$($plugin.FullName)/CMakeLists.txt")) {
             throw "Plugin is not initialized or has no CMakeLists.txt: $($plugin.Name)"
         }

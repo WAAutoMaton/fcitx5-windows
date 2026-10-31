@@ -8,8 +8,8 @@ custom build paths, installer packaging, validation and input-method registratio
 
 The CI/Nightly workflow packages four Windows 11 x64 installers: `base`/`full`
 crossed with bundled/no bundled Visual C++/Windows App Runtime installers.
-`base` contains chinese-addons; `full` contains every plugin under `plugins/`,
-currently chinese-addons and Wenzhounese. See
+`base` contains fcitx5-chinese-addons; `full` contains every plugin under `plugins/`,
+currently fcitx5-chinese-addons and fcitx5-wenzhounese. See
 [Install in the README](../README.md#install) for package selection and removal,
 and [installer implementation](windows-installer-design.md) for current behavior
 and unverified system-installation scenarios. The build/deploy and registration
@@ -22,7 +22,7 @@ Install the following before running the build scripts:
 | Component | Requirements |
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
-| Core/input methods | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; the pinned libime/chinese-addons data supplies Pinyin, Shuangpin and table methods |
+| Core/input methods | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; the pinned libime/fcitx5-chinese-addons data supplies Pinyin, Shuangpin and table methods |
 | TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
@@ -61,15 +61,15 @@ Run from the repository root:
 ```
 
 The script initializes pinned submodules, applies compatibility patches and
-builds Core/libime/chinese-addons, TSF and WinUI Settings. The resulting runtime
-contains Pinyin, Shuangpin and the available chinese-addons table entries
+builds Core/libime/fcitx5-chinese-addons, TSF and WinUI Settings. The resulting runtime
+contains Pinyin, Shuangpin and the available fcitx5-chinese-addons table entries
 (Wubi, Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan, Wanfeng and Ziranma).
 It stages the complete
 runtime under `build/all/prefix`, runs the default TSF CTest suite, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
 After migrating an existing checkout to the `plugins/` source layout, use a new
-`-BuildRoot` for chinese-addons because CMake caches retain the old source path.
+`-BuildRoot` for fcitx5-chinese-addons because CMake caches retain the old source path.
 
 | Option | Default / Behavior |
 | --- | --- |
@@ -140,13 +140,13 @@ version. Source-data generation has not been validated end to end locally.
 
 For individual Core, TSF and Settings builds, see the
 [input-method integration guide](pinyin.md#build-and-deploy-core). A plain root
-CMake build does not build/deploy libime, chinese-addons, TSF, Settings or input
+CMake build does not build/deploy libime, fcitx5-chinese-addons, TSF, Settings or input
 method data.
 
 ## Independent Input-Method Plugins
 
-Plugin source submodules live in `plugins/chinese-addons`, `plugins/wenzhounese`,
-and future `plugins/<name>` directories. chinese-addons is built by
+Plugin source submodules live in `plugins/fcitx5-chinese-addons`, `plugins/fcitx5-wenzhounese`,
+and `plugins/fcitx5-rime`. fcitx5-chinese-addons is built by
 `build-pinyin.ps1` as part of the base runtime. To extend an existing base runtime
 with every additional plugin using the same build's SDK:
 

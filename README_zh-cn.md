@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-这是一个正在开发中的 Fcitx5 Windows 移植版本。在 AMD64 上通过 TSF 集成提供拼音、双拼以及多种 `chinese-addons` 码表输入法。
+这是一个正在开发中的 Fcitx5 Windows 移植版本。在 AMD64 上通过 TSF 集成提供拼音、双拼以及多种 `fcitx5-chinese-addons` 码表输入法。
 Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设置程序管理有序输入法列表和引擎配置。统一 x64 安装包已接入 CI 打包和 Nightly 发布流程。
 
 ## 功能与状态
@@ -25,7 +25,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 ## 安装
 
-[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)流程提供四种 Windows 11 x64 安装包及其 SHA256 文件。`base` 仅包含 chinese-addons；`full` 包含全部插件（目前为 chinese-addons 和温州话）。每种版本均提供两种运行库组合：
+[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)流程提供四种 Windows 11 x64 安装包及其 SHA256 文件。`base` 仅包含 fcitx5-chinese-addons；`full` 包含全部插件（目前为 fcitx5-chinese-addons 和温州话）。每种版本均提供两种运行库组合：
 
 - `Fcitx5-<run>-<base|full>-x64-setup.exe`：附带 Visual C++ 和 Windows App Runtime 安装程序。
 - `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`：需要预先安装上述运行库，包括当前用户的 x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
@@ -51,7 +51,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 ## 输入法插件
 
-输入法可作为独立 DLL 插件安装，无需加入 Core 工程重新编译。现有 `chinese-addons` 继续随 Core 统一构建部署。
+输入法可作为独立 DLL 插件安装，无需加入 Core 工程重新编译。现有 `fcitx5-chinese-addons` 继续随 Core 统一构建部署。
 
 ### 安装与启用
 

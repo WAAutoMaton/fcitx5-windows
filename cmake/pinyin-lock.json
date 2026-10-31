@@ -2,7 +2,7 @@
   "repositories": {
     "fcitx5": "c7ecdb931d8b378ccdcd87382a3ef7ff0bd10def",
     "libime": "171edcf137001e8eb8274f53ec010058cda70b09",
-    "chinese-addons": "61474bd3aa9fca26d1c31df93343035697e9f265"
+    "fcitx5-chinese-addons": "61474bd3aa9fca26d1c31df93343035697e9f265"
   },
   "sourceData": [
     {"file": "lm_sc.arpa-20260629.tar.zst", "sha256": "06808333b9173e5374cf2cb5afc12d08f5625bf9abb536489cac376fc05f2e7f"},

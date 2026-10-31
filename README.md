@@ -3,7 +3,7 @@
 [中文文档](README_zh-cn.md)
 
 An in-progress Windows port of Fcitx5. On AMD64 it provides Pinyin, Shuangpin
-and multiple `chinese-addons` table input methods through a TSF integration.
+and multiple `fcitx5-chinese-addons` table input methods through a TSF integration.
 Core runs in a separate process; a TSF DLL integrates with applications, and a
 WinUI settings app manages the ordered input-method list and engine
 configuration. Unified x64 installers are available through the CI packaging
@@ -52,8 +52,8 @@ outside the validated scope.
 
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
 workflow publishes four Windows 11 x64 installers and their SHA256 files.
-Choose `base` for chinese-addons only, or `full` for all bundled plugins
-(currently chinese-addons and Wenzhounese). Each edition has two runtime variants:
+Choose `base` for fcitx5-chinese-addons only, or `full` for all bundled plugins
+(currently fcitx5-chinese-addons and fcitx5-wenzhounese). Each edition has two runtime variants:
 
 - `Fcitx5-<run>-<base|full>-x64-setup.exe`: bundles Visual C++ and Windows App Runtime installers.
 - `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`: requires those runtimes to be installed
@@ -101,7 +101,7 @@ paths, individual builds and integration checks.
 ## Input-Method Plugins
 
 Input methods can be built and installed as independent DLL plugins without
-adding them to the Core project. Existing `chinese-addons` continue to be built
+adding them to the Core project. Existing `fcitx5-chinese-addons` continue to be built
 and deployed alongside Core.
 
 ### Install and Enable
