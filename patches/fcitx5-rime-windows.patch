@@ -34,15 +34,55 @@ index bd5cbde..04f1eb1 100644
 -install(FILES fcitx5.yaml DESTINATION "${RIME_DATA_DIR}")
 +install(FILES fcitx5.yaml DESTINATION "${RIME_DATA_INSTALL_DIR}")
 diff --git a/src/rimeengine.cpp b/src/rimeengine.cpp
-index c762aa1..f9ddd9a 100644
+index c762aa1..dcc0757 100644
 --- a/src/rimeengine.cpp
 +++ b/src/rimeengine.cpp
-@@ -184,7 +184,7 @@ RimeEngine::RimeEngine(Instance *instance)
+@@ -62,6 +62,11 @@ namespace {
+ // Allow notification for 60secs.
+ constexpr uint64_t NotificationTimeout = 60000000;
+ 
++std::string pathToUtf8(const std::filesystem::path &path) {
++    const auto value = path.generic_u8string();
++    return {reinterpret_cast<const char *>(value.data()), value.size()};
++}
++
+ std::unordered_map<std::string, std::unordered_map<std::string, bool>>
+ parseAppOptions(rime_api_t *api, RimeConfig *config) {
+     std::unordered_map<std::string, std::unordered_map<std::string, bool>>
+@@ -184,14 +189,14 @@ RimeEngine::RimeEngine(Instance *instance)
      : instance_(instance), api_(EnsureRimeApi()),
        factory_([this](InputContext &ic) { return new RimeState(this, ic); }),
        sessionPool_(this, getSharedStatePolicy()) {
 -    if constexpr (isAndroid() || isApple()) {
 +    if constexpr (isWindows() || isAndroid() || isApple()) {
          const auto &sp = StandardPaths::global();
-         std::string defaultYaml =
+-        std::string defaultYaml =
++        const auto defaultYaml =
              sp.locate(StandardPathsType::Data, "rime-data/default.yaml");
+         if (defaultYaml.empty()) {
+             throw std::runtime_error("Fail to locate shared data directory");
+         }
+-        sharedDataDir_ = fcitx::fs::dirName(defaultYaml);
++        sharedDataDir_ = pathToUtf8(defaultYaml.parent_path());
+     } else {
+         sharedDataDir_ = RIME_DATA_DIR;
+     }
+@@ -292,15 +297,16 @@ void RimeEngine::rimeStart(bool fullcheck) {
+         "rime";
+     RIME_DEBUG() << "Rime data directory: " << userDir;
+     if (!fs::makePath(userDir)) {
+-        if (!fs::isdir(userDir)) {
++        if (!std::filesystem::is_directory(userDir)) {
+             RIME_ERROR() << "Failed to create user directory: " << userDir;
+         }
+     }
++    const auto userDirString = pathToUtf8(userDir);
+ 
+     RIME_STRUCT(RimeTraits, fcitx_rime_traits);
+     fcitx_rime_traits.shared_data_dir = sharedDataDir_.c_str();
+     fcitx_rime_traits.app_name = "rime.fcitx-rime";
+-    fcitx_rime_traits.user_data_dir = userDir.c_str();
++    fcitx_rime_traits.user_data_dir = userDirString.c_str();
+     fcitx_rime_traits.distribution_name = "Rime";
+     fcitx_rime_traits.distribution_code_name = "fcitx-rime";
+     fcitx_rime_traits.distribution_version = FCITX_RIME_VERSION;
