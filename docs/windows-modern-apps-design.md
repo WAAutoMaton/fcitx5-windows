@@ -2,9 +2,9 @@
 
 ## 当前状态与边界
 
-AppContainer 输入传输、TSF 候选 UIElement/Behavior、敏感 context 透传和可选登录启动已接入，当前 IPC 为 v10。真实 AppContainer token 与免注册 TSF probe 不能代替 Windows 向已注册 TIP 的真实派发、签名安装和完整 UWP 验收。
+AppContainer 输入传输、TSF 候选 UIElement/Behavior、敏感 context 透传和可选登录启动已接入，当前 IPC 为 v12。自动化覆盖真实 AppContainer token 和免注册 TSF context；已注册 TIP 的真实派发、签名部署与 UWP 应用矩阵列入后文验收范围。
 
-目标为 Windows 11 x64 的普通文本输入。Terminal、Full Trust WinUI/XAML 和真正的 AppContainer 分别验收；package identity 或从 Store 安装不能单独证明 AppContainer 身份。安全桌面、完整密码支持、触摸键盘专用布局、搜索集成、完整无障碍、ARM64/x86 不在当前支持声明内。
+目标为 Windows 11 x64 的普通文本输入。Terminal、Full Trust WinUI/XAML 和真正的 AppContainer 按实际 token 分别验收。已有 x86 TSF 构建与桌面 probe，现代应用的真实 x86 派发仍待验证；安全桌面、完整密码支持、触摸键盘专用布局、搜索集成、完整无障碍和 ARM64 TSF 尚待实现或验证。
 
 引擎、配置、学习数据和 Settings 由宿主 Core 管理。AppContainer TSF 直接连接同一 Core 的专用 Named Pipe，无桥接进程或 RPC。Sandboxie 保留原有宿主共享行为，详见 [Sandboxie 配置](windows-sandboxie-design.md)。
 
@@ -37,7 +37,7 @@ flowchart LR
 
 ### Endpoint 与身份
 
-普通桌面管理入口的 UAC linked-token 兼容另见 [UAC 提权应用输入修复方案](windows-uac-ipc-design.md)，当前为待实现设计；AppContainer 输入入口不采用该兼容分支。
+普通桌面管理入口已接入 UAC linked-token 身份兼容和提权 TSF 的宿主服务操作，详见 [UAC 提权应用输入方案](windows-uac-ipc-design.md)；AppContainer 输入入口继续严格匹配登录身份。
 
 桌面和 Sandboxie 保留 `\\.\pipe\fcitx5-windows-v2-<SID>-<session>`。`v2` 是历史名称，不是 framing 版本；AppContainer 使用相同基名加 `-input`。两入口使用 message mode、拒绝远程客户端、首实例保护、overlapped I/O 和有限等待/取消。客户端使用 `SECURITY_IDENTIFICATION` SQOS。
 
@@ -45,7 +45,7 @@ flowchart LR
 
 Sandboxie 安全模式可能让宿主看到匿名 token。仅既有用户 DACL 已授权打开、token 查询成功、非 AppContainer 的管理连接可使用匿名 SID 例外，并继续核对内核 peer session；受限输入入口仍要求同一登录身份。详见 [Sandboxie 进程策略](windows-sandboxie-design.md#进程策略)。
 
-AppContainer 无法直接打开宿主 token，因此使用 `AuthenticateServer` 握手：已认证的服务端复制仅 `PROCESS_QUERY_LIMITED_INFORMATION | READ_CONTROL` 的进程句柄到客户端。客户端核对内核 Pipe PID/session、句柄 PID、进程对象 owner 和安装树固定 `bin/Fcitx5.exe` 路径，再发送输入。句柄不授予内存、token 或进程控制权限。该保证依赖受保护的安装树，不隔离同用户任意代码执行，也不等同于签名验收。
+AppContainer 无法直接打开宿主 token，因此使用 `AuthenticateServer` 握手：已认证的服务端复制仅 `PROCESS_QUERY_LIMITED_INFORMATION | READ_CONTROL` 的进程句柄到客户端。客户端核对内核 Pipe PID/session、句柄 PID、进程对象 owner 和安装树固定 `bin/Fcitx5.exe` 路径，再发送输入。句柄不授予内存、token 或进程控制权限；服务端身份依赖安装树的写保护。
 
 全局命名已由真实 AppContainer token probe 覆盖，`LOCAL\` 名称单独诊断；生产不会自动切换或替换桌面名称。LPAC、hardened token 和其他沙箱组合尚未全面验证，不通过 Everyone ACL 扩大兼容范围。
 
@@ -58,7 +58,7 @@ Hello 和受限认证帧的读取各有 2 秒等待上限，受限请求投递�
 | Hello、创建/销毁 context、focus、key、poll、reset | 允许，仅限本连接拥有的 context |
 | 当前输入法选择/轮换、键盘开关 | 允许，不修改用户有序列表 |
 | 候选选择/确认/取消 | 允许，校验焦点、稳定候选代次和索引 |
-| GetGlobalSettings | 只读 UI 语言/日志状态 |
+| GetGlobalSettings | 只读 UI 语言、日志状态和全局快捷键 |
 | OpenSettings | 固定宿主命令，全局限流；客户端“用户点击”字段不作为授权 |
 | 配置写入、词库路径查询、打开用户目录、重启/停止服务 | 拒绝；由宿主 Settings/桌面菜单管理 |
 | 未知消息、任意路径/命令、跨连接 context 操作 | 拒绝 |
@@ -79,7 +79,7 @@ AppContainer 和 Sandboxie TSF 要求宿主 Core 已运行。安装器提供默�
 
 新焦点仅恢复当前输入法条目，不迁移旧预编辑。失焦、context pop、deactivate、断线等路径结束候选 UIElement 并拒绝迟到编辑。密码/numeric-password scope、只读、keyboard-disabled 和 empty context 不向引擎发送输入；敏感状态变化清理旧 composition。
 
-scope getter 的空 `E_FAIL` 作为 TSF 缺失属性兼容状态，其他查询失败透传；不据此声称已识别所有密码控件。完整安全桌面/密码输入仍未实现，不注册 `SECUREMODE` 或 `COMLESS`。
+scope getter 的空 `E_FAIL` 作为 TSF 缺失属性兼容状态，其他查询失败透传。完整安全桌面/密码输入仍未实现，不注册 `SECUREMODE` 或 `COMLESS`。
 
 ## 候选 UIElement 与自绘窗口
 
@@ -99,7 +99,7 @@ scope getter 的空 `E_FAIL` 作为 TSF 缺失属性兼容状态，其他查询�
 
 ### 批次、分页与动作
 
-`GetCount` 为当前有界批次数量，`GetString` 返回正文，索引从 0 开始，标签/注释不混入提交。无选择时 GetSelection 初始化输出并返回 S_FALSE。默认是当前批次的一页；SetPageIndex 验证有序起点和边界，在同一批次内保存宿主分页。`hasPrev/hasNext` 不代表引擎总页数，getter 不枚举完整或无限候选集合。
+`GetCount` 为当前有界批次数量，`GetString` 返回正文，索引从 0 开始，标签/注释不混入提交。无选择时 GetSelection 初始化输出并返回 S_FALSE。默认是当前批次的一页；SetPageIndex 验证有序起点和边界，在同一批次内保存宿主分页。`hasPrev/hasNext` 表示引擎能否翻页，getter 只访问当前批次。
 
 SetSelection、Finalize、Abort 捕获候选身份进入 owning-thread 队列，通过 `CandidateAction` 请求 Core，不能重入编辑或合成选词按键。Core 在主线程检查 owner、焦点、`candidateGeneration`、索引及引擎能力，再调用真实 CandidateWord/游标抽象。内容、引擎页和输入法改变使身份失效，普通 poll 不改变身份；游标动作维护已验证的身份过渡。TSF 最终提交仍来自 Core 回复，不直接写入 getter 文本。
 
@@ -117,7 +117,7 @@ SetSelection、Finalize、Abort 捕获候选身份进入 owning-thread 队列，
 
 更改构建选项或替换 DLL 不更新既有注册，必须显式安装或重新注册。安装 smoke 检查实际 COM DLL 路径/threading model、启用的 profile 和现代 category 的双向索引；缺少声明阻止 Nightly 发布。此检查仅证明注册，CI 当前没有发行签名或真实现代应用派发测试。
 
-正式兼容验收仍需签名 TSF、受保护安装树、可读资源和交互系统测试。未签名开发目录上的可加载结果不代表全部现代宿主允许加载。普通 build/deploy/probe 不签名、注册或安装包；安装 smoke 是专门的系统测试。
+正式兼容验收使用签名 TSF、受保护安装树、可读资源和交互系统测试。普通 build/deploy/probe 与专门执行系统安装的 smoke 测试分别运行。
 
 ## 实现与自动化入口
 
@@ -141,14 +141,14 @@ SetSelection、Finalize、Abort 捕获候选身份进入 owning-thread 队列，
 
 ## 剩余验收矩阵
 
-| 验证层 | 待确认 | 现有自动化不能证明 |
+| 验证层 | 待确认 | 验收重点 |
 | --- | --- | --- |
 | 注册后的现代桌面 | Terminal、Full Trust WinUI，选择/预编辑/提交、菜单、焦点/模式切换 | Windows 实际派发及窗口层级 |
 | 注册后的 AppContainer | UWP fixture、系统设置普通文本框，候选动作、挂起/恢复、Core 缺失/停止/重连 | 所有 UWP/自定义控件或完整密码行为 |
-| 正式安装 | 签名/保护资源、登录启动、干净登录首次输入、升级/卸载 | 打包、注册 smoke 或用户可写开发目录不能替代交互验收 |
-| 回归 | 普通 Win32、Sandboxie、多用户/session、物理 DPI/主题/触摸键盘 | 单一 token 或模拟 context 不能代替宿主矩阵 |
+| 正式安装 | 签名/保护资源、登录启动、干净登录首次输入、升级/卸载 | 从正式安装路径完成交互输入 |
+| 回归 | 普通 Win32、Sandboxie、多用户/session、物理 DPI/主题/触摸键盘 | 覆盖各类真实宿主 |
 
-真实验收记录 OS build、应用版本、架构、token/active flags、注册 DLL 路径/签名、Pipe 名、Core 启动前提以及候选由谁绘制。分别报告派发、IPC、编辑和渲染失败；成功注册、Hello 或固定字符提交不能替代真实引擎输入。
+真实验收记录 OS build、应用版本、架构、token/active flags、注册 DLL 路径/签名、Pipe 名、Core 启动前提以及候选由谁绘制。使用真实引擎输入，分别记录派发、IPC、编辑和渲染结果。
 
 ## 参考
 

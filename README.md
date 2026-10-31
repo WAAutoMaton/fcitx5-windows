@@ -13,8 +13,8 @@ and Nightly release workflow.
 
 - Pinyin preedit, candidate selection and Chinese commits, with full Pinyin and
   Xiaohe/Ziranma Shuangpin.
-- Keyboard candidate selection with number keys or Space, and `Ctrl+Space`
-  cycling through the enabled input methods in the order set in Settings.
+- Keyboard candidate selection with number keys or Space, configurable cycling
+  (`Ctrl+Space` by default), and direct selection of entries 1–5 (`Ctrl+Alt+1…5`).
 - A nonactivating candidate popup with DirectWrite layout, Direct2D color-font
   rendering and Per-Monitor V2 positioning.
 - A Windows input-method indicator showing the current method's icon or compact
@@ -26,25 +26,28 @@ and Nightly release workflow.
   Erbi, Bingchan, Wanfeng and Ziranma; an entry is available when its engine and
   table data are installed.
 - Third-party Pinyin dictionary loading status and automatic dictionary reload.
-- Independently built and installed input-method DLL plugins.
+- Independently built and installed input-method DLL plugins, with a read-only
+  addon status page in Global Settings.
 - Simplified Chinese, Traditional Chinese and English UI, with a system-language
   option in Global Settings. Engine/UI language changes take effect after a
   service restart; native menus and About refresh in the background.
-- Shortcut recording for engine key-list options, alongside manual text editing.
+- Shortcut recording for global and engine key-list options, alongside manual
+  text editing, plus shared Chinese/English punctuation options for Pinyin/Shuangpin.
 - Optional structured developer logs for Core, TSF and Settings, including
   Settings exit/exception diagnostics, without recording input text.
 - Sandboxie clients share the host Core through an explicit pipe rule.
 - AppContainer input transport and TSF candidate UIElement/Behavior.
 - Automatic background Core startup, with settings and service controls in the
   input indicator's right-click menu. AppContainer and Sandboxie clients require
-  an already-running host Core; the installer offers optional login startup.
+  an already-running host Core; elevated desktop clients also use the host for
+  service operations. The installer offers optional login startup.
 
 ## Install
 
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
 workflow publishes four Windows 11 x64 installers and their SHA256 files.
 Choose `base` for fcitx5-chinese-addons only, or `full` for all bundled plugins
-(currently fcitx5-chinese-addons and fcitx5-wenzhounese). Each edition has two runtime variants:
+(currently fcitx5-chinese-addons, fcitx5-rime and fcitx5-wenzhounese). Each edition has two runtime variants:
 
 - `Fcitx5-<run>-<base|full>-x64-setup.exe`: bundles Visual C++ and Windows App Runtime installers.
 - `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`: requires those runtimes to be installed
@@ -56,6 +59,11 @@ user's input method and starts Core. Optional login startup is unchecked by
 default and respects a manual service stop. The build includes separate x64 and
 x86 TSF DLLs sharing the x64 Core; native ARM64 TSF is not provided. See
 [installer details](docs/windows-installer-design.md).
+
+Managed upgrades stage the complete new version and finish after a Windows
+restart. The current version remains usable until then; successful staging
+returns `3010`. See [reboot upgrades](docs/windows-reboot-upgrade-design.md)
+for status queries, cancellation and recovery.
 
 For an installer-managed copy, use **Uninstall Fcitx5** in the Start menu or
 Windows' installed-apps list. User data and shared runtimes are retained;
@@ -77,9 +85,9 @@ From the repository root in a normal Windows PowerShell terminal, run:
 ```
 
 This initializes pinned submodules, applies Windows patches, builds AMD64 Release
-Core, TSF, the setup helper and Settings, runs the default TSF CTest suite,
-and deploys to `dist/pinyin`. It uses checksum-verified precompiled dictionary/model data and
-reuses the build cache on subsequent runs.
+Core/Settings, separate x64/x86 TSF DLLs and setup/upgrade helpers, runs the default
+TSF CTest suites, and deploys to `dist/pinyin`. It uses checksum-verified
+precompiled dictionary/model data and reuses the build cache on subsequent runs.
 
 Before updating an existing deployment, choose `Stop Services` and close
 applications loading its DLL. See [build options and deployment details](docs/build.md) for custom
@@ -97,16 +105,18 @@ Choose either plugin location:
 
 | Location | Purpose |
 | --- | --- |
-| `%LOCALAPPDATA%/Fcitx5/plugins` | Current-user installation without administrator privileges, separate from the Core installation |
-| `<Core installation>/plugins` | Portable deployment within the installation tree; the Core installation is the directory containing `bin/Fcitx5.exe` |
+| `%LOCALAPPDATA%/Fcitx5/plugins/<package>` | Current-user installation without administrator privileges, separate from the Core installation |
+| `<Core installation>/plugins/<package>` | Portable deployment within the installation tree; the Core installation is the directory containing `bin/Fcitx5.exe` |
 
 1. Choose `Stop Services` from the input-method indicator's context menu.
-2. Merge the plugin package's `bin`, `lib` and `share` directories into the chosen location, preserving their structure. Engine DLLs belong in `plugins/lib/fcitx5`, private dependency DLLs in `plugins/bin`, and resources in their corresponding `lib` or `share` subdirectories. Plugins share this tree; do not add an intermediate directory named after the plugin.
+2. Put each package's `bin`, `lib` and `share` directories inside its own `<package>` directory. Engine DLLs belong in `<package>/lib/fcitx5`, private dependency DLLs in `<package>/bin`, and resources in the corresponding `lib` or `share` subdirectories. Core scans direct package subdirectories; the older shared `plugins/bin`, `plugins/lib` and `plugins/share` layout remains compatible.
 3. Choose `Restart Services`, open `Input Method Settings`, and add the new input method to the enabled list. Adjust its order, then switch with `Ctrl+Space` or by left-clicking the indicator.
 
 Stop services before updating or removing a plugin, then restart afterward.
-When removing a plugin, delete only its own files and retain directories shared
-with other plugins. Loading and unloading plugins require a Core restart.
+Remove an independent package by deleting its directory. For older shared
+layouts, delete only the package's own files. Loading and unloading plugins
+require a Core restart. Global Settings > Plugins shows discovered addons and
+their loaded, not-loaded or disabled state; it also opens the personal plugin directory.
 
 ### Compatibility
 
@@ -132,13 +142,19 @@ The script requests administrator privileges when needed. Keep the complete
 Select Fcitx5 with `Win+Space`; if absent, add its keyboard in Windows' Chinese
 language options. Activation starts Core automatically.
 
-Use `Ctrl+Space` or left-click the input-method indicator to cycle through the
-enabled list. The default list is English keyboard and Pinyin; Settings lets
+Use the configured cycle shortcut (default `Ctrl+Space`) or left-click the
+input-method indicator to cycle through the enabled list. The default list is
+English keyboard and Pinyin; Settings lets
 you add Shuangpin or any available table method and change their order.
 Unavailable entries are skipped. With Pinyin selected, type `nihao` in a text
 application and select a candidate with Space or a number key. With Wubi
 selected, enter a Wubi code and select its candidate in the same way. Changing
 input methods or losing focus cancels unfinished preedit without committing it.
+
+**Global Settings > Shortcuts** changes the cycle shortcut and direct-selection
+shortcuts for entries 1–5. Direct selection uses the list's original positions;
+an absent or unavailable target passes the key through. Clear a shortcut to disable it.
+Pinyin and Shuangpin share the Chinese/English punctuation setting.
 
 Right-click the input-method indicator for:
 
@@ -180,6 +196,9 @@ for previews, alternate paths and troubleshooting.
 
 - [Build, deployment and validation](docs/build.md)
 - [Windows installer](docs/windows-installer-design.md)
+- [Deferred reboot upgrades and recovery](docs/windows-reboot-upgrade-design.md)
+- [x86 TSF builds, deployment and validation](docs/windows-x86-tsf-design.md)
+- [UAC elevated clients and host service control](docs/windows-uac-ipc-design.md)
 - [Input-method architecture and individual builds](docs/pinyin.md)
 - [Independent Windows input-method plugins and SDK builds](docs/windows-plugins.md)
 - [Windows settings design](docs/windows-settings-design.md)

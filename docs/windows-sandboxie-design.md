@@ -19,7 +19,7 @@ Weasel 的客户端通过 Named Pipe 连接 WeaselServer，Sandboxie 的 Weasel 
 
 ## 进程策略
 
-普通桌面 UAC 提权应用的登录身份修复另见 [UAC 提权应用输入修复方案](windows-uac-ipc-design.md)。该方案尚待实现，不改变本文的 Sandboxie 匿名 token 例外或受限输入入口规则。
+普通桌面管理入口已接入 UAC linked-token 身份兼容和提权 TSF 的宿主服务操作，详见 [UAC 提权应用输入方案](windows-uac-ipc-design.md)。Sandboxie 匿名 token 例外和受限输入入口规则各自保持独立。
 
 共享辅助模块动态查询已加载的 SbieDll API。区分宿主、沙箱和未知状态；模块存在但查询异常时禁止本地服务启动，不把宿主注入模式误判成已确认的沙箱。
 
@@ -45,7 +45,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-<当前用户SID>-*
 
 ### 1. 准备宿主输入法与目标沙箱
 
-1. 先在沙箱外确认 Fcitx5 已安装、已注册，并能在普通 x64 应用中输入中文。Core、TSF DLL 和 Settings 应来自同一套构建，使用一致的协议 v10；仅添加 Sandboxie 规则不能代替输入法安装或注册。
+1. 先在沙箱外确认 Fcitx5 已安装、已注册，并能在普通 x64 应用中输入中文。Core、TSF DLL 和 Settings 应来自同一套构建，使用一致的协议 v12。
 2. 在 Sandboxie 管理器中确认要配置的沙箱已启用，并记下它在 `Sandboxie.ini` 中的节名，例如 `[DefaultBox]` 对应 `DefaultBox`。下文命令中的 `DefaultBox` 都要替换为实际节名，而非自定义显示名称。多个沙箱需要分别配置。
 3. 在沙箱外，以平时使用输入法的 Windows 用户启动已部署的 `bin/Fcitx5.exe`。例如安装目录为 `C:\Fcitx5` 时，在沙箱外 PowerShell 中运行：
 
@@ -131,7 +131,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 | 沙箱外正常，沙箱内无法输入 | 确认应用实际位于配置的沙箱，规则在正确节内，SID 属于当前用户，并已彻底退出、重新打开应用。若使用 `-SessionOnly`，重新生成当前 session 的规则。 |
 | 脚本提示沙箱不存在或未启用 | 检查 `-BoxName` 是否为配置节名，以及目标节的 `Enabled=y`；脚本不会新建或启用沙箱。 |
 | 规则无法保存或脚本写入失败 | 检查 Sandboxie 配置锁定、管理权限及 `SbieIni.exe` 路径，处理具体报错后重新确认规则已保存。 |
-| 连接后提示协议不匹配 | 使用同一套构建的 Core、TSF DLL 和 Settings，并重新打开加载旧 DLL 的应用。Pipe 名中的 `v2` 不是 IPC 协议版本，不要改成当前 framing 版本 `v10`。 |
+| 连接后提示协议不匹配 | 使用同一套构建的 Core、TSF DLL 和 Settings，并重新打开加载旧 DLL 的应用。Pipe 名保留历史 `v2` 前缀，framing 当前为 `v12`，无需改名。 |
 | Settings 在沙箱内启动或出现另一份 Core | 检查是否仍在使用旧构建、残留沙箱进程或强制沙箱规则；当前实现要求 Core 和 Settings 在沙箱外运行。 |
 
 若已有构建产物，可在沙箱外和目标沙箱内分别运行 `ipc_probe.exe --diagnose`（使用实际文件路径），比较 Pipe 名称、连接阶段、Windows 错误码和服务端 PID。该命令不启动服务或修改配置。错误 `2/3` 只说明当前 Pipe 不可见，可能是宿主未启动、规则未生效或应用未重启；不能仅凭错误码判断原因。诊断成功只证明 IPC 连接，真实输入和候选窗仍需按上面的应用步骤验证。
@@ -159,7 +159,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 
 ## 验证与交付
 
-代码已接入 HostOnly 策略、服务端归属检查、UI 语言 IPC 和宿主操作。现代应用支持将协议统一升级至 v10，Sandboxie endpoint 名和管理行为保持不变。生成规则：
+代码已接入 HostOnly 策略、服务端归属检查、UI 语言 IPC 和宿主操作。当前统一协议为 v12，Sandboxie endpoint 名保持历史 `v2` 前缀。生成规则：
 
 ```powershell
 ./scripts/sandboxie-template.ps1 -BoxName DefaultBox -SessionOnly
@@ -167,7 +167,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 ./scripts/sandboxie-template.ps1 -BoxName DefaultBox -Apply
 ```
 
-前两个命令只向标准输出写入片段；最后一个命令通过 Sandboxie 的 `SbieIni.exe append` 将规则写入指定沙箱。`-Apply` 是显式配置操作，必须提供 `-BoxName`。应用规则后重新打开应用。首次使用需先在沙箱外启动 Core；手动关闭后同样需在沙箱外重启。Core、TSF、Settings 必须使用一致的协议 v10 构建。
+前两个命令只向标准输出写入片段；最后一个命令通过 Sandboxie 的 `SbieIni.exe append` 将规则写入指定沙箱。`-Apply` 是显式配置操作，必须提供 `-BoxName`。应用规则后重新打开应用。首次使用需先在沙箱外启动 Core；手动关闭后同样需在沙箱外重启。
 
 `-Apply -WhatIf` 不执行 Sandboxie 命令；应用前检查目标沙箱已启用，写入后确认规则存在，已有相同规则时不重复追加。脚本不会关闭应用或终止进程。
 
@@ -175,8 +175,8 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 
 `ipc_probe.exe --check-candidates` 创建临时输入 context，以当前可用中文条目输入 `NI`，检查预编辑和候选后取消并销毁 context，不提交文字或保存配置。它用于验证候选数据链路，不验证真实应用中的候选窗显示；码表等条目对 `NI` 不一定产生候选，需结合当前引擎判断失败。
 
-自动化回归包括 `test_sandbox`、`test_sandboxie_template`、`test_hostcommands`、`test_isolationpolicy` 和 `test_pipeidentity`，覆盖查询状态、启动禁止、服务端归属、控制请求/回复后执行、模板及语言来源。`test_pipeidentity` 使用真实 Pipe 检查 peer session/login 及管理入口匿名例外；模拟身份通过不代表真实 Sandboxie 安全模式已经验收。
+自动化回归包括 `test_sandbox`、`test_sandboxie_template`、`test_hostcommands`、`test_isolationpolicy` 和 `test_pipeidentity`，覆盖查询状态、启动禁止、服务端归属、控制请求/回复后执行、模板及语言来源。`test_pipeidentity` 使用真实 Pipe 和模拟身份检查 peer session/login 及管理入口匿名例外。
 
 详细日志开关由宿主 Core 回复同步。诊断文件位于 TSF 进程的 LocalAppData 视图，Sandboxie 可能重定向该目录；比较沙箱内外日志时确认实际位置，不能假定全部文件都在宿主目录。日志不包含输入文本，详见 [开发日志设计](windows-developer-logging-design.md)。
 
-完整构建使用隔离 Prefix/BuildRoot，重建 Core、TSF、Settings。真实验收包括普通/隐私沙箱、多个沙箱、宿主缺失/停止/重启、协议不匹配和 Pipe 未放行。确认只运行一份宿主 Core、Settings 未加载沙箱 DLL、配置写入宿主目录、预编辑不跨输入框/沙箱保存。自动化模拟和免注册 probe 不代替真实 Sandboxie/应用验证。
+完整构建使用隔离 Prefix/BuildRoot，重建 Core、TSF、Settings。真实验收包括普通/隐私沙箱、安全模式、多个沙箱、宿主缺失/停止/重启、协议不匹配和 Pipe 未放行。确认只运行一份宿主 Core、Settings 未加载沙箱 DLL、配置写入宿主目录、预编辑不跨输入框/沙箱保存。

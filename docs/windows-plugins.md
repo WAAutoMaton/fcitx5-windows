@@ -53,7 +53,13 @@ Core 使用 `AddDllDirectory` 加入存在的插件 `bin` 目录，并启用相�
 
 ## 设置中的插件状态
 
-Settings 的“全局设置 → 插件”页通过只读 IPC 展示 Core 已发现的 addon 名称、标识、版本、库、说明及当前状态（已加载、未加载、已禁用），包含内置组件和外部插件。查询不会触发按需加载；未加载不等同于加载失败。页面在可见时定期更新状态，提供打开 `%LOCALAPPDATA%/Fcitx5/plugins` 的按钮，目录不存在时创建。该页面不提供加载、卸载或启停操作，安装或移除插件后仍需重启 Core。新增消息使用 IPC v11，Core、TSF 和 Settings 必须配套构建部署。
+Settings 的“全局设置 → 插件”页通过只读 IPC 展示 Core 已发现的 addon 名称、标识、版本、库、说明及当前状态（已加载、未加载、已禁用），包含内置组件和外部插件。查询不会触发按需加载；“未加载”表示尚无 addon 实例，可能仍等待按需加载。页面在可见时定期更新状态，提供打开 `%LOCALAPPDATA%/Fcitx5/plugins` 的按钮，目录不存在时创建。安装或移除插件后需重启 Core。插件查询始于 IPC v11，当前统一协议为 v12，Core、TSF 和 Settings 必须配套构建部署。
+
+## 仓库插件与 full 包
+
+`build-pinyin.ps1` 构建 base 中的 fcitx5-chinese-addons；`build-plugins.ps1` 自动发现其余直接插件目录，使用同一次构建的 SDK，安装到 `Prefix/plugins/<name>`。当前 full 包包含 chinese-addons、fcitx5-rime 和 fcitx5-wenzhounese。脚本对额外插件执行 `git lfs pull`，需要 Git LFS。
+
+Rime 的 Windows 补丁记录在 `patches/fcitx5-rime-windows.patch`，由 `apply-pinyin-patches.ps1` 按锁定版本应用。构建需匹配的 clang64 librime 和 librime-data 包；脚本将共享方案数据复制到 `plugins/fcitx5-rime/share/rime-data`，运行时通过 StandardPaths 查找 `default.yaml`。CI 当前用 addon probe 验证温州话 `nyi` 候选提交，Rime 的真实输入及首次方案部署仍需单独验证。
 
 ## ABI 与发布边界
 
@@ -100,4 +106,6 @@ probe 禁用用户配置与词库读写，不创建 Pipe 服务或注册 TSF。�
 
 目录发现回归测试与 probe 一起构建，可用 `ctest --test-dir build/addon-probe --output-on-failure` 运行；测试仅在临时目录创建数据，不修改已安装插件。
 
-通过 probe 代表资源发现、DLL 加载、配置读取和引擎候选提交通过，不能替代真实 Windows 应用中的 TSF 输入验收。安装器对用户插件的保留策略、完整插件包管理、ARM64 和跨版本二进制兼容性需要后续实现或验证。
+`scripts/test-build-plugins.ps1` 使用 fixture 项目验证自动发现、独立目录和依赖复制；`scripts/test-settings-plugins.ps1 -SettingsExe <UiTest Settings> -FixtureExe <ui_fixture.exe>` 使用模拟 Core 验证插件状态页、翻译和布局。
+
+addon probe 覆盖资源发现、DLL 加载、配置读取和引擎候选提交。剩余验证包括真实 Windows 应用输入、安装器升级/卸载对用户插件的保留，以及 ARM64；完整包管理和跨版本 ABI 校验仍需实现。

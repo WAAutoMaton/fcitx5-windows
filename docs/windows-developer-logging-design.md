@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Core、TSF 和 Settings 已接入共享异步结构化日志，Settings 的全局页提供默认关闭的详细日志开关。当前 IPC 为 v10，`windows-ui.conf` 为 v2；另已加入 Settings 窗口/进程退出、操作阶段和异常诊断。本文说明当前实现和剩余验证，不以日志功能代替真实系统输入验收。
+Core、TSF 和 Settings 已接入共享异步结构化日志，Settings 的全局页提供默认关闭的详细日志开关。当前 IPC 为 v12，`windows-ui.conf` 为 v3；日志包括 Settings 窗口/进程退出、操作阶段、异常，以及 Pipe 握手身份和 UAC 关系诊断。
 
 启用方式及构建/测试入口见 [build.md](build.md#developer-logging)。日志主要用于 TSF/IPC、候选位置与渲染、焦点、Core 状态及 Settings 故障；不录制输入内容。
 
@@ -12,13 +12,21 @@ Core 是全局配置的唯一写入者，Settings 通过 IPC 读取/提交，普
 
 ```ini
 [General]
-Version=2
+Version=3
 Language=system
 Revision=2
 DetailedLogging=false
+
+[Shortcuts]
+0=Control+space
+1=Control+Alt+1
+2=Control+Alt+2
+3=Control+Alt+3
+4=Control+Alt+4
+5=Control+Alt+5
 ```
 
-`windows-ui.conf` 位于 `%APPDATA%/Fcitx5/config/fcitx5/conf`。v1 加载时 DetailedLogging=false，下次成功保存写 v2。语言和日志共享全局 revision，与输入法/引擎设置独立；任一字段变化增加 revision，旧草稿不能覆盖新设置，保存超时不重放。
+`windows-ui.conf` 位于 `%APPDATA%/Fcitx5/config/fcitx5/conf`。兼容读取 v1/v2 并补齐默认快捷键，v1 加载时 DetailedLogging=false，下次成功保存写 v3。语言、日志和快捷键共享全局 revision，与输入法/引擎设置独立；任一字段变化增加 revision，旧草稿不能覆盖新设置，保存超时不重放。
 
 | 设置 | 生效 |
 | --- | --- |
@@ -27,7 +35,7 @@ DetailedLogging=false
 | 断线 | TSF 保留已知日志状态，重连后以 Core 回复覆盖 |
 | 关闭日志 | 停止接收新详细事件，后台排空已有队列；保留历史文件 |
 
-Settings 全局页的“常规”tab 包含语言，“开发者选项”包含日志开关、状态、目录、文件数/大小和打开目录按钮。草稿、应用、重置、冲突和重试均包括日志字段；全局重置恢复跟随系统并关闭日志，应用后才保存。状态是当前 Settings logger 的本地状态，不是全部 TSF 宿主的汇总。
+Settings 全局页的“常规”tab 包含语言，“开发者选项”包含日志开关、状态、目录、文件数/大小和打开目录按钮。草稿、应用、重置、冲突和重试均包括日志字段；全局重置恢复跟随系统、关闭日志和默认快捷键，应用后才保存。状态反映当前 Settings logger。
 
 “打开日志目录”异步创建/打开目录，不启用日志；即使开关关闭也可检查已有文件。默认关闭时不会因普通输入创建详细日志文件。目录不可用不阻止其他设置保存。
 
@@ -69,6 +77,7 @@ Sandboxie/AppContainer 中的目录属于该进程的 LocalAppData 视图，可�
 | TSF 生命周期/context | 激活 flags、token 状态、sink HRESULT、focus/context 变化和 generation |
 | 编辑 | 同步/异步请求、原 context 有效性、队列/代次、耗时、失败/取消/迟到结果 |
 | IPC/Core | 连接阶段、服务端 PID、消息类型/长度、耗时、超时/断线、owner 校验、设置 revision |
+| Pipe 身份 | `pipe_identity` 的连接序号、peer PID、入口、登录匹配/拒绝原因、elevation 和查询错误码 |
 | 候选/UIElement | 数量、索引、candidateGeneration、布局 HRESULT、clipped/caret fallback、文档边界、显示协商与隐藏原因 |
 | Popup/绘制 | owner/popup DPI、矩形/工作区、坐标转换、窗口/target 生命周期、device loss 和有限 repaint 重试 |
 | Settings | 连接/保存错误、草稿操作阶段、窗口关闭、dispatcher/runtime 退出和异常元数据 |
@@ -76,7 +85,9 @@ Sandboxie/AppContainer 中的目录属于该进程的 LocalAppData 视图，可�
 
 允许的字段是固定事件/操作名、错误码、计数、长度和几何等。TSF 的 `key_result` 还包含按下/释放、扫描码、修饰键和消费状态，不包含转换后的字符或 Unicode；扫描码仍会暴露键位活动。其他事件不记录 preedit、commit、候选正文/标签/注释、周边文本、密码、原始 payload、窗口标题、异常消息、配置值或用户路径。输入法 ID 等固定技术标识不作为用户文本输出。
 
-Core 的上游日志由 `src/windowslogging.cpp` 的自定义 streambuf 接入，只转换为严重度和 `message_bytes`，不复制原消息。规则固定为 `*=3,key_trace=0,notimedate`，不启用未审计 addon Debug 或 key_trace。详细开关关闭时原有低等级 stderr 路径与结构化详细日志分开处理；关闭不意味着屏蔽所有既有错误输出。
+Core 的上游日志由 `src/windowslogging.cpp` 的自定义 streambuf 接入，只转换为严重度和 `message_bytes`，不复制原消息。规则固定为 `*=3,key_trace=0,notimedate`，不启用未审计 addon Debug 或 key_trace。详细开关关闭后，原有低等级 stderr 错误输出仍沿用既有路径。
+
+握手失败时 TSF 可能还未获得日志开关；此时通过限频的 `OutputDebugStringW` 输出固定阶段和错误码。`ipc_probe --diagnose` 可显式显示 SID/session、登录 LUID、elevation 与 linked 关系，这些身份值不写入持久日志。普通桌面与提权客户端的对照方法见 [UAC 诊断](windows-uac-ipc-design.md#诊断设计)。
 
 ## Settings 退出与异常
 
@@ -93,7 +104,7 @@ Core 的上游日志由 `src/windowslogging.cpp` 的自定义 streambuf 接入�
 
 | 层级 | 入口与覆盖 |
 | --- | --- |
-| 单元/模拟 | test_diagnostic_log：轮转/期限/容量/丢弃/失败；test_i18n：v1 迁移、日志字段和共享 revision；test_protocol：v10 编码和非法字段 |
+| 单元/模拟 | test_diagnostic_log：轮转/期限/容量/丢弃/失败；test_i18n：v1/v2 迁移、日志字段和共享 revision；test_protocol：v12 编码和非法字段 |
 | TSF 免注册 | test_candidate、test_candidate_tsf：生产绘制/几何、UIElement、无 owner/layout、迟到 session 与日志元数据 |
 | 真实引擎/IPC | scripts/test-developer-logging.ps1：Core/TSF 开关同步、真实输入、断线与隐私检查 |
 | WinUI | scripts/test-ui-localization.ps1 -TestLogging：开发者页、应用/重置/冲突、目录与关闭行为 |
@@ -101,7 +112,7 @@ Core 的上游日志由 `src/windowslogging.cpp` 的自定义 streambuf 接入�
 
 集成测试使用 `FCITX5_UI_TEST` Core/TSF/probes，Settings 通过 `build-settings.ps1 -UiTest` 构建。测试 runner 设置独立的 `FCITX5_DIAGNOSTIC_TEST_DIRECTORY`；生产构建忽略该环境变量。退出测试只创建专用子进程/日志目录，不连接生产 Core 或停止已有 Settings，致命案例有意终止测试子进程。
 
-命令参数和构建前提见 [开发日志验证](build.md#developer-logging)。这些测试不注册 TIP、不验证安装升级、物理 DPI 或真实应用系统派发。
+命令参数和构建前提见 [开发日志验证](build.md#developer-logging)。
 
 ## 现场收集与剩余风险
 

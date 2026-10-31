@@ -25,10 +25,10 @@ Windows 自有 UI 统一使用 gettext 消息目录和 Boost.Locale，覆盖 Set
 
 - 入口采用可呈现选中状态的原生导航项，包含系统设置图标和“全局设置”文字，AutomationId 为 `GlobalSettings`。它不属于输入法列表，不参与添加、删除、排序或 Ctrl+Space 轮换。
 - 点击入口后，右侧标题变为“全局设置”，显示独立的全局设置面板，隐藏引擎设置和词库 TabView。左侧取消输入法的可见选中状态，但记住上一次输入法页面，方便恢复导航。
-- 全局页的“常规”tab 包含“语言设置”，使用 ComboBox，AutomationId 为 `UiLanguage`。四个选项按下表顺序显示；“开发者选项”tab 提供详细日志开关和目录状态，见 [日志设计](windows-developer-logging-design.md)。
+- 全局页有“常规”“开发者选项”“插件”“快捷键”四个 tab。“常规”使用 ComboBox 选择语言，AutomationId 为 `UiLanguage`，四个选项按下表顺序显示；日志开关和目录状态见 [日志设计](windows-developer-logging-design.md)，插件状态见 [插件指南](windows-plugins.md)，快捷键见 [设置设计](windows-settings-design.md#快捷键录制)。
 - “跟随系统语言”和字段标签随当前 Settings 窗口语言翻译。明确语言选项采用固定自称：`简体中文`、`繁體中文`、`English`，便于用户在误选语言后恢复。
 - 全局页禁用删除、上移、下移；添加仍可用，添加成功保存列表后切到新输入法页。添加前同样处理当前全局草稿。
-- “重置为默认值”只重置当前页面的草稿；全局页恢复 `System` 并关闭详细日志，点击“应用”后才保存。它不清空输入法列表或引擎选项。
+- “重置为默认值”只重置当前页面的草稿；全局页恢复 `System`、关闭详细日志并恢复默认快捷键，点击“应用”后才保存。它不清空输入法列表或引擎选项。
 - “应用”保存当前页面。跨页面导航沿用现有保存/放弃/取消对话框；取消或保存失败时恢复原导航选中项。关闭窗口放弃未应用草稿。
 - 加载和保存时禁用相关操作，失败保留草稿，冲突提示重新加载。断线重试保留当前页面类型，不意外跳回拼音页。词库定时刷新只在输入法的词库页可见时执行。
 
@@ -174,7 +174,7 @@ Settings 的运行时 XAML 保留结构和 `x:Name`，字符串通过加载后�
 
 Core 先读取全局配置并接入诊断日志，在 `setupEnv()` 确立安装树资源路径后解析 `coreActiveLanguage`；这些步骤均在创建 `Instance` 和加载 addon 前完成。配置路径解析不依赖 `WindowsSettings` 或引擎。Core 自己的进程中初始化可用的非 C locale，并设置 gettext 的语言选择及 `FCITX_LOCALE` 为一致的 `zh_CN`、`zh_TW` 或 `en_US`。英文也显式设置，避免继承外部中文覆盖。
 
-上游 `I18NString::match("system")` 在 Windows 明确读取 `FCITX_LOCALE`；引擎配置使用 `_()` 构造标签，`OptionBase` 缓存已翻译的 description。启动顺序因此是功能要求，不能只在现有 `WindowsSettings` 构造完成后改 locale。libintl 与 CRT locale 的具体组合需在当前 MSYS2 工具链中验证，不把设置环境变量成功等同于翻译加载成功。
+上游 `I18NString::match("system")` 在 Windows 明确读取 `FCITX_LOCALE`；引擎配置使用 `_()` 构造标签，`OptionBase` 缓存已翻译的 description，因此必须在构造 `WindowsSettings` 之前设置 locale。`test-engine-localization.ps1` 验证当前工具链的真实引擎标签及迁移后的资源路径。
 
 Core 目录内的英文键盘、拼音、双拼及五笔硬编码中文名称改为翻译词条；优先复用上游已本地化的其他名称和配置描述。Settings 的路径标签、双拼选项和分组覆盖表改为 Windows domain 词条，其他引擎标签直接使用 Core 的结果。简体、繁体上游资源随安装树部署，英文回退源文。
 
@@ -200,7 +200,7 @@ Core 目录内的英文键盘、拼音、双拼及五笔硬编码中文名称改
 | 语言映射 | 中文 script/地区、英文地区、未知语言、有序偏好列表、API 失败 |
 | 翻译资源 | 上下文、缺词回退、UTF-8/UTF-16、可重排占位符、格式错误与资源缺失 |
 | 配置 | 首次默认、原子替换、非法/超大/损坏文件、只读失败、并发 session revision 冲突、隔离路径 |
-| IPC | v10 语言/日志字段往返、非法枚举/布尔值/长度/contextId、锁忙/保存失败、超时后只查询不重放 |
+| IPC | v12 语言/日志/快捷键字段往返、非法枚举/布尔值/长度/contextId、锁忙/保存失败、超时后只查询不重放 |
 | WinUI 自动化 | 入口位置、选中状态、四个选项、跨页草稿、添加导航、当前页重置、最小尺寸与长译文 |
 | 服务集成 | 应用语言后 Settings 保持旧语言，重启后新语言，单实例激活不重建，Core 标签一致 |
 | TSF 回归 | HMENU 与 `InitMenu` 同一快照、后台刷新与停用竞态、Core 停止后菜单/关于可用、窗口复用刷新 |
@@ -208,9 +208,9 @@ Core 目录内的英文键盘、拼音、双拼及五笔硬编码中文名称改
 
 优先运行受影响的 `test_protocol`、`test_langbar`、`test_about` 和 `test_i18n`，再运行 `ctest --test-dir <隔离的 TSF build> --output-on-failure`。`test_i18n` 覆盖真实目录加载、后台快照刷新、配置校验、写锁和保存失败。
 
-`build-settings.ps1 -UiTest -BuildRoot <隔离目录>` 生成编译时隔离的测试版 Settings，配合 `scripts/test-ui-localization.ps1 -SettingsBuild <目录> -TsfBuild <目录>` 和 `ui_fixture.exe` 验证真实 WinUI 控件。测试版使用不同的 Pipe、服务互斥和激活对象；模拟 Core 只读写测试目录，不修改已运行的安装版服务或用户语言配置。该测试模拟 Core 再启动，不代表真实服务控制链验证。常规构建不定义 `FCITX5_UI_TEST`。
+`build-settings.ps1 -UiTest -BuildRoot <隔离目录>` 生成编译时隔离的测试版 Settings，配合 `scripts/test-ui-localization.ps1 -SettingsBuild <目录> -TsfBuild <目录>` 和 `ui_fixture.exe` 验证真实 WinUI 控件。测试版使用不同的 Pipe、服务互斥和激活对象；模拟 Core 只读写测试目录，重建 fixture 模拟服务重启。常规构建不定义 `FCITX5_UI_TEST`。
 
-实际 Windows 菜单重新请求时机、多个真实宿主中的刷新、系统首选语言变化、DPI/文本缩放和漫游目录行为需要真实系统验证。免注册测试可以证明函数和窗口逻辑，但不能代替这些验证。构建与自动化不执行注册、安装或停止用户服务。
+实际 Windows 菜单重新请求时机、多个真实宿主中的刷新、安装版服务重启、系统首选语言变化、DPI/文本缩放和漫游目录行为仍需真实系统验证。
 
 ## 参考
 

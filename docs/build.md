@@ -23,6 +23,7 @@ Install the following before running the build scripts:
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
 | Core/input methods | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; the pinned libime/fcitx5-chinese-addons data supplies Pinyin, Shuangpin and table methods |
+| Full plugin edition | Git LFS; matching clang64 `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` packages for Rime |
 | TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
@@ -118,7 +119,8 @@ registration commands accept `-DllPath` and select `System32`/`SysWOW64`
 `test-pinyin.ps1 -Architecture x86` runs the x86 probes against an isolated
 x64 Core when no user Core is running. `-PeerTsfBuild <x64 tree>` also runs
 concurrent x86/x64 Pipe clients and verifies peer disconnect isolation. These
-are automated/registration-free checks, not real registered application input.
+are automated checks using unregistered TSF contexts. Real x86 application
+acceptance is described in [x86 TSF support](windows-x86-tsf-design.md).
 
 The unified build places Settings' independent MSVC translation-library build,
 MSBuild output and object files under `BuildRoot/settings`, then stages them.
@@ -135,8 +137,8 @@ Precompiled data is shared in `build/pinyin-data`. Before downloading, the scrip
 also checks local `libime*.pkg.tar.zst` archives in `build/deps` and
 `build/pinyin-data`, including `build/deps/libime-data.pkg.tar.zst`. Only an
 archive matching the locked SHA256 is reused. A valid `-DataArchive` fills the
-same standard cache; extracted or deployed data alone does not establish its
-version. Source-data generation has not been validated end to end locally.
+same standard cache; archive reuse requires the locked SHA256. Source-data
+generation has not been validated end to end locally.
 
 For individual Core, TSF and Settings builds, see the
 [input-method integration guide](pinyin.md#build-and-deploy-core). A plain root
@@ -163,6 +165,13 @@ audited and additional shared runtime DLLs are copied from the matching SDK or
 dependency prefix. `-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-Jobs` and
 `-WhatIf` are also supported. CI copies the base tree before extending it, keeps
 the SDK at its original location and packages both editions independently.
+
+The script runs `git lfs pull` for each additional plugin. Rime also requires
+the matching MSYS2 librime and schema data packages; it copies shared schemas
+from `clang64/share/rime-data` (or `clang64/share/rime/data`) into the plugin's
+`share/rime-data`. Apply the pinned Windows patches before standalone plugin
+builds. `scripts/test-build-plugins.ps1` covers discovery, package layout and
+dependency-copy behavior using fixture projects.
 
 Additional input methods can use the existing shared-library addon loader and
 the SDK from the installed Core/libime staging prefix. See
@@ -224,8 +233,9 @@ Use `scripts/test-developer-logging.ps1 -Prefix <isolated-prefix> -TsfBuild <bui
 for real engine/IPC and unregistered TSF checks, and
 `scripts/test-ui-localization.ps1 -SettingsBuild <build> -TsfBuild <build> -TestLogging`
 for the developer page. These runners set `FCITX5_DIAGNOSTIC_TEST_DIRECTORY` to
-an isolated directory; production builds ignore that variable. They do not
-register TSF or validate real application dispatch, physical DPI or installers.
+an isolated directory; production builds ignore that variable. These runners
+exercise real engine IPC and unregistered TSF contexts; WinUI coverage uses
+the isolated Settings build.
 
 See [developer logging design and event scope](windows-developer-logging-design.md)
 for the shared logger, privacy boundaries and Settings exit diagnostics.
@@ -326,7 +336,7 @@ run in separate jobs:
 | Job | Responsibility |
 | --- | --- |
 | `build-x64` | Build base with `-ModernApps -SkipTests`, copy it and build all additional plugins using the same SDK; verify Wenzhounese commits and upload base/full runtime trees, portable TSF tests/probes and standalone Settings |
-| `test-x64` | Download the x64 runtime and tests; run build-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, relocated engine translations, default CTest and dictionary integration checks |
+| `test-x64` | Download the x64 runtime and tests; run build/deploy/plugin-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, relocated engine translations, default CTest and dictionary integration checks |
 | `test-x86` | Build/test x86 in an independent VS/LLVM tree; run x86 Pinyin/TSF probes and concurrent x86/x64 Pipe clients against the shared x64 Core |
 | `package-installer-x64` | Use a 2×2 matrix of base/full and runtime/no-runtime; download the matching runtime tree, run packaging regressions and build one installer per job |
 | `installer-smoke-x64` | Test each edition's no-runtime installer with a silent machine-only install, modern TSF registration checks, uninstall and registration cleanup |
@@ -451,8 +461,9 @@ opening a target file during copying can still interrupt deployment.
 
 If Settings cannot open, choose `重启服务` if services were manually stopped,
 then check the executable path and Windows App SDK/Visual C++ runtime. A
-successful `ipc_probe --ready` confirms the Core connection but does not prove
-Settings can start. See [settings diagnostics](pinyin.md#windows-settings).
+successful `ipc_probe --ready` confirms the Core connection; use
+`settings_probe --open-settings` to check the Settings launch request. See
+[settings diagnostics](pinyin.md#windows-settings).
 
 ## Validation
 

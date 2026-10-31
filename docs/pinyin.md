@@ -63,16 +63,18 @@ list is `keyboard-us` and `pinyin`.
 Settings can add, remove and reorder entries, including removing English
 keyboard, while retaining at least one available method.
 
-Ctrl+Space and indicator left-clicks use `CycleInputMethod` to advance through
-that ordered list, skipping unavailable entries. Changing methods cancels old
+Indicator left-clicks use `CycleInputMethod` to advance through the ordered list,
+skipping unavailable entries. Keyboard cycling defaults to Ctrl+Space; Global
+Settings > Shortcuts also provides direct selection of entries 1–5, defaulting
+to Ctrl+Alt+1…5. Direct selection uses the original list position and passes
+through if the target is absent or unavailable. Changing methods cancels old
 preedit without committing it. TSF restores the current entry on focus changes
 and reconnection. Its thread-manager `GUID_COMPARTMENT_KEYBOARD_OPENCLOSE`
 reflects whether the actual entry is a non-keyboard method; explicit system
 open/close changes use `SetMode` to select an enabled non-keyboard/keyboard entry.
 If no matching entry exists, the current method is retained. Ordinary,
-preserved-key and Ctrl+Space compartment callbacks share the cycle operation,
-with duplicate/repeat suppression until Space is released. Ordinary Space is
-never registered as a preserved key. Existing user groups are not saved or
+preserved-key and compartment callbacks use the configured shortcuts, with
+duplicate/repeat suppression until the shortcut key is released. Existing user groups are not saved or
 overwritten. Both upstream keyboard support and ASCII fallback are disabled by
 default and by the Windows build script.
 Core prewarms Pinyin before accepting pipe clients so initial model paging does
@@ -102,8 +104,8 @@ does not start services.
 The desktop TIP registers `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT` for its input indicator.
 `ENABLE_MODERN_TSF_CATEGORIES` (the unified script's `-ModernApps`) additionally
 declares `UIELEMENTENABLED` and `IMMERSIVESUPPORT`. CI/Nightly enables this option;
-local builds default to off. These declarations do not establish real modern-app
-compatibility; see [modern app acceptance](build.md#modern-app-acceptance).
+local builds default to off. See [modern app acceptance](build.md#modern-app-acceptance)
+for registration and interactive validation.
 The branding icon is embedded in the TSF DLL as `IDI_FCITX5`, the
 only group icon, and the profile refers to the DLL path with icon index 0.
 `RegisterProfile` receives character counts for the description and DLL path.
@@ -138,6 +140,10 @@ conflicting changes. It does not reset submodules or create commits.
   exposes extra dictionary loading states through a read-only subconfiguration.
 - `chinese-addons-windows-table.patch`: enables the bundled Cangjie entry on
   Windows and resolves built-in table data from the deployed `share/libime` tree.
+- `fcitx5-rime-windows.patch`: resolves Rime shared data through the installed
+  `share/rime-data` search path and converts native filesystem paths to UTF-8.
+  The full plugin build supplies librime and its schema data; see
+  [Windows plugins](windows-plugins.md).
 
 The submodule working trees are intentionally patched. Record Windows changes
 in the main-repository patch files; do not create local submodule commits or
@@ -241,7 +247,7 @@ For CTest alone, without starting Core:
 ctest --test-dir win32/build/pinyin-tsf --output-on-failure
 ```
 
-The default suite currently contains 27 tests, declared in
+The default tests are declared in
 [`win32/tests/CMakeLists.txt`](../win32/tests/CMakeLists.txt):
 
 | Scope | Tests |
@@ -250,9 +256,11 @@ The default suite currently contains 27 tests, declared in
 | Persistence, UI language and diagnostics | `test_settingsfile`, `test_i18n`, `test_diagnostic_log`, `test_keycapture` |
 | Candidate rendering and host UI | `test_candidate`, `test_candidate_tsf`, `test_candidateuielement` |
 | Transport and isolation | `test_transport`, `test_pipeidentity`, `test_isolationpolicy`, `test_sandbox`, `test_sandboxie_template`, `test_hostcommands` |
+| UAC and service routing | `test_uacidentity`, `test_uactoken`, `test_serviceclient`, `uac_pipe_probe` |
 | Services and setup | `test_service`, `test_startup`, `test_setup`, `test_uninstall` |
-| Language bar, About and registration | `test_langbar`, `test_about`, `test_register`, `test_register_other` |
-| Host runtime compatibility | `test_tsf_runtime_imports`, `test_tsf_runtime_host`, `test_tsf_runtime_audit` |
+| Upgrade state and file protection | `test_upgrade`, `test_upgrade_files`, `test_upgrade_registration` |
+| Language bar, About and registration | `test_langbar`, `test_about`, `test_register`, `test_register_other`, `test_registration_views` |
+| Host runtime compatibility | `test_tsf_runtime_imports`, `test_Fcitx5SetupHelper_runtime_imports`, `test_Fcitx5Upgrade_runtime_imports`, `test_tsf_runtime_host`, `test_tsf_runtime_audit` |
 
 Use `ctest --test-dir <build> -N` for the actual configured list. Root/upstream
 tests are disabled by default; this is not the full upstream test suite.
@@ -284,7 +292,7 @@ tests are disabled by default; this is not the full upstream test suite.
   Mode regressions use a real thread-manager keyboard compartment, including
   open/close notifications, cancellation, focus changes and a simulated failure
   to register the exact Ctrl+Space preserved key. Preserved-key callbacks are
-  explicitly invoked; the adapter does not prove real OS hotkey dispatch.
+  explicitly invoked by the adapter.
 - Default CTest: helper functions, protocol framing/snapshots, UTF-8/UTF-16/key policy,
   real pipe timeout/cancellation followed by a successful read, and language-bar
   COM identity, sink cookies, state notifications and nonblank/distinct fallback
@@ -338,14 +346,18 @@ these helpers stops Core/Settings as services; use the input indicator menu firs
 
 ## Protocol and Behavior
 
-Protocol v10 uses a desktop pipe name scoped to the user's SID and Windows session.
+Protocol v12 uses a desktop pipe name scoped to the user's SID and Windows session.
 Its ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
 overlapped I/O with a 500 ms wait limit per read/write operation; this is not a
 single 500 ms deadline for the entire request. Disconnected clients' contexts
 are destroyed. The pipe name retains the historical `fcitx5-windows-v2-` prefix;
-compatibility is checked using the framing/handshake version, which is v10.
-Core verifies actual peer identity after Hello. Sandboxie security-mode anonymous
+compatibility is checked using the framing/handshake version, which is v12.
+Core verifies actual peer identity after Hello. Desktop management connections
+accept a verified UAC linked-token login from the same user/session; elevated
+TSF clients route service operations through the host Core. If Core is absent,
+start it from the ordinary desktop session. See [UAC identity and service
+control](windows-uac-ipc-design.md). Sandboxie security-mode anonymous
 tokens have a narrowly scoped management-pipe exception described in the
 [host-sharing guide](windows-sandboxie-design.md#进程策略).
 
@@ -357,13 +369,13 @@ service state; the host Core must already be running. See
 [modern transport and UI policy](windows-modern-apps-design.md).
 
 `SetMode` chooses a selected keyboard/non-keyboard entry for the Windows
-open/close compartment. Ctrl+Space and indicator clicks use `CycleInputMethod`
-to cycle through the user's ordered list. Repeated mode requests are idempotent;
-changing input methods cancels preedit. Windows can deliver Ctrl+Space as a
-keyboard open/close compartment notification instead of a key-sink callback.
-TSF routes that notification through the same cycle operation and coalesces
-duplicate callbacks until Space is released. Explicit compartment changes
-without Ctrl+Space still use `SetMode`.
+open/close compartment. Indicator clicks cycle through the user's ordered list;
+Core matches configured keyboard shortcuts before routing keys to the engine.
+Repeated mode requests are idempotent; changing input methods cancels preedit.
+Windows can deliver a configured cycle shortcut as a keyboard open/close
+compartment notification instead of a key-sink callback. TSF checks its cached
+shortcut state and coalesces duplicate callbacks until the key is released.
+Other explicit compartment changes use `SetMode`.
 
 `tsf_probe <DLL> --cycles` checks the currently enabled list without changing
 configuration. It simulates ordinary/preserved key callbacks, system-hotkey
@@ -373,7 +385,7 @@ a running Core; it does not verify real OS keyboard dispatch. The input-method
 regression script runs it with the persisted three-method list.
 
 Core, TSF and Settings must be rebuilt
-and deployed together; older protocol versions do not connect to v10.
+and deployed together; older protocol versions do not connect to v12.
 
 Each key response contains consumption, mode, the actual input-method ID/name,
 icon label/path and settings-panel ID, commit, preedit, UTF-8 byte cursor,
@@ -421,7 +433,7 @@ Immersive/UIElement-only hosts use the system TSF menu; AppContainer clients
 expose only Settings. Desktop menus and About also negotiate UIElement display
 permission. Unsupported secure/COM-less activation and explicit password scopes,
 read-only or disabled contexts pass through without sending engine input. This
-policy does not establish support for every password or custom text control.
+policy covers these explicit states; other password/custom controls need validation.
 
 Build and deploy the x64 settings application separately:
 
@@ -487,8 +499,8 @@ thread. A manual stop is recorded in a logon-specific `.state` file under
 `%LOCALAPPDATA%/fcitx5`, surviving unloading all TSF DLLs without applying to the
 next login. A shared 10-second retry interval prevents launch storms on failure.
 There is no forced termination by process name. A hung process yields a timeout
-instead of being killed. The current IPC protocol is v10;
-deploy updated Core, TSF and Settings together for the new control behavior.
+instead of being killed. Elevated desktop TSF uses the host Core for these
+commands, preserving the ordinary desktop's service identity and stop state.
 
 Run only one Core process per user/session. A second Core process detects the
 owned instance mutex and exits without initializing an engine. To distinguish connection and deployment
@@ -514,10 +526,12 @@ eight built-in Shuangpin profiles and fuzzy Pinyin; an existing custom profile
 is preserved but cannot be created/imported here. The app supports
 single-instance activation, system theme resources and PerMonitorV2 DPI.
 Key-list options support [shortcut recording](windows-settings-design.md#快捷键录制).
-Global Settings has General and Developer options tabs: UI language applies to
-Core/Settings after restarting services, while detailed logging applies immediately.
-These settings share a revision in `conf/windows-ui.conf` v2, separate from
-input-method settings; v1 loads with logging disabled. Native menus/About refresh
+Global Settings has General, Developer options, Plugins and Shortcuts tabs.
+UI language applies to Core/Settings after restarting services, while detailed
+logging and Core shortcuts apply immediately. Plugins lists discovered addon
+metadata and status without triggering loads. Language, logging and shortcuts
+share a revision in `conf/windows-ui.conf` v3, separate from input-method
+settings; v1/v2 gain default shortcuts and v1 loads with logging disabled. Native menus/About refresh
 their language in the background. See [UI localization](windows-ui-localization-design.md)
 and [developer diagnostics](windows-developer-logging-design.md).
 
@@ -557,7 +571,7 @@ from loading. A file modified again is retried after it becomes stable.
 
 The small addon status-query extension is recorded in
 `patches/chinese-addons-windows.patch`; submodule revisions are unchanged. Core,
-TSF and Settings must be rebuilt and deployed together for protocol v10.
+TSF and Settings must be rebuilt and deployed together for protocol v12.
 
 With Core and Settings stopped, run:
 
@@ -590,6 +604,12 @@ TSF restores the current entry in new/reconnected contexts. Legacy Pinyin scheme
 updates keep English contexts in direct mode.
 Save errors and stale-revision conflicts are reported. Timed-out writes are
 queried before retrying. Core/TSF/settings must be deployed together.
+
+Pinyin and Shuangpin share a `WindowsPunctuation` option for Chinese/English
+punctuation. Core persists it in `Options/pinyin` and applies it to the upstream
+punctuation module, which is also used by table methods. TSF routes idle OEM
+punctuation and Shift+number keys to Core for conversion; unconsumed keys pass
+through. See [settings behavior and punctuation tests](windows-settings-design.md#扩展约定).
 
 For isolated settings persistence tests, Core accepts
 `--windows-settings-file ABSOLUTE_PATH`. This overrides the Windows settings
@@ -639,25 +659,27 @@ dispatch remains unverified.
 - The popup has keyboard-only selection; host candidate actions are implemented
   through UIElement/Behavior. Popup mouse interaction and an ordinary
   notification-area tray are not implemented.
-- Unified Windows 11 x64 installers package Core/TSF/Settings in two variants,
-  with and without bundled runtimes. Packaging and mocked setup/uninstall paths
-  have been validated; real installation, upgrades and reboot cleanup still
-  need system testing. See [installer status](windows-installer-design.md).
+- Unified Windows 11 x64 installers provide base/full editions, each with or
+  without bundled runtimes. CI runs machine-only install/registration/uninstall
+  smoke tests for both no-runtime editions. Full user initialization, deferred
+  upgrades and reboot cleanup still need system testing. See
+  [installer status](windows-installer-design.md).
 - Xiaohe and Ziranma Shuangpin commits are validated by probes; input-method
   probes also cover real Wubi commits. Other profiles, Wubi and other table
-  methods in real applications, Rime and registered modern-app compatibility need
-  broader validation. CI/Nightly declares modern categories, but does not sign
-  the DLL or validate real UWP dispatch.
+  methods in real applications and registered modern-app compatibility need
+  broader validation. Rime is built with its shared data in the full edition;
+  its real application input still needs coverage. CI/Nightly declares modern
+  categories; signing and real UWP dispatch remain pending.
 - Password scopes and disabled contexts have pass-through checks, but complete
   password/secure input, dead keys, AltGr/non-US layouts, forwarded keys and
-  surrounding-text editing are not claimed as supported. `SECUREMODE` and
+  surrounding-text editing remain incomplete or unverified. `SECUREMODE` and
   `COMLESS` are not declared.
 - Polling is a minimal deferred-output mechanism, not an asynchronous push queue
   or transactional exactly-once delivery across process failures. An IPC timeout
   can lose the pending input; it does not guarantee recovery of a consumed key.
-- Local validation covers AMD64 Core/TSF, Pinyin, Shuangpin and Wubi probes.
-  The current CI does not build ARM64; no Pinyin, table-engine or TSF ARM64
-  compatibility is implied.
+- CI covers x64 Core, x64/x86 TSF probes, Pinyin/Shuangpin/Wubi input and
+  Wenzhounese plugin commits. Real x86 application input remains pending.
+  ARM64 is outside the current CI build matrix.
 
 The first-run Pinyin history load may log a missing/empty-history error; the
 system dictionary/model and actual Chinese conversion are verified separately.

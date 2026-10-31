@@ -1,8 +1,8 @@
 # Windows 输入法占用时的延迟升级设计
 
-状态：延迟升级实现已接入，默认发行包启用，CI/Nightly 使用相同默认值。本文规定“完整暂存新版，重启前继续使用旧版”的实现方案；打包时可使用 `scripts/build-installer.ps1 -RebootUpgrade:$false` 关闭受管理升级的暂存分支。文件/映像保护、状态机、恢复、卸载清单和真实 Inno 编译有自动化覆盖；SYSTEM 开机时序、完整安装与系统重启仍需 VM 验收，不能据此声明已经通过产品验收。现有支持范围见 [Windows 安装包实现与设计](windows-installer-design.md)。
+状态：延迟升级已接入，默认发行包和 CI/Nightly 均启用。受管理升级完整暂存新版，重启前继续使用旧版；打包时可用 `scripts/build-installer.ps1 -RebootUpgrade:$false` 关闭此分支。自动化覆盖文件/映像保护、状态机、恢复、卸载清单和真实 Inno 编译；SYSTEM 开机时序、完整安装与系统重启仍需 VM 验收。安装流程见 [Windows 安装包实现与设计](windows-installer-design.md)。
 
-## 实现入口与试验包
+## 实现入口与打包
 
 维护程序为 `setup/maintenance-host/Fcitx5Upgrade.exe`，运行时文件所有权位于 `setup/runtime-manifest.json`。一次只允许一个 `setup/upgrades/current` 事务，其随机 ID 同时绑定开机任务。输入协议不变，旧运行清单允许记录历史协议版本，目标清单必须与新维护程序的协议版本相符。
 
@@ -19,7 +19,7 @@ ctest --test-dir ./build/installer/tsf --output-on-failure
 & 'C:/Program Files/Fcitx5/setup/maintenance-host/Fcitx5Upgrade.exe' query-upgrade --prefix 'C:/Program Files/Fcitx5'
 ```
 
-`cancel-upgrade`、`recover-upgrade` 和 `cleanup-upgrade` 为提权维护操作。恢复不绕过文件保护，手动调用也不能跳过等待完整重启的限制。试验包不会在静默暂存成功后主动重启 Windows。
+`cancel-upgrade`、`recover-upgrade` 和 `cleanup-upgrade` 为提权维护操作。恢复仍检查文件保护和重启条件；静默暂存成功后返回待重启，不主动重启 Windows。
 
 ## 1. 目标与范围
 
@@ -38,17 +38,18 @@ ctest --test-dir ./build/installer/tsf --output-on-failure
 
 “准备完成”与“新版已生效”是两个独立结果。正常目标是一次 Windows 重启后完成；若开机时仍被占用或出现其他错误，必须报告未完成，不能仅凭已经发生重启宣称成功。
 
-## 2. 当前实现与需要调整的边界
+## 2. 当前调用链
 
-| 入口 | 当前行为 | 本方案要求 |
-| --- | --- | --- |
-| `installer/fcitx5.iss` / `PrepareToInstall` | `pause-user`、写维护状态、检查占用，占用时退出 | 在任何暂停或维护动作之前决定升级路径；延迟路径只暂存 |
-| `installer/fcitx5.iss` / `[Files]` | 直接写 `{app}` | 延迟路径不能执行活动文件复制，也不能提前更新旧卸载记录 |
-| `CurStepChanged(ssPostInstall)` | 注册 DLL、恢复安装状态、配置用户并启动 Core | 延迟路径不执行这些步骤；机器提交移至重启阶段 |
-| `win32/setup/main.cpp` | helper 命令、Restart Manager 检查、注册及卸载 | 增加升级协调入口和安装级互斥；检查错误与确实占用分开处理 |
-| `win32/ipc/installation.h` | `install-state` 为 `installed` 才允许受管理安装启动 | 保留旧状态格式；新增升级事务状态，等待重启时不改变启动许可 |
-| `win32/setup/userprofile.cpp` | 用户初始化会启用输入项并重启 Core；暂停还会调整输入项 | 升级不复用 `pause-user` / `configure-user` 来表达文件更新 |
-| `scripts/build-installer.ps1` | 包级 manifest、SHA256 与完整树打包 | 另生成运行文件清单、升级控制程序和可恢复的卸载所有权清单 |
+| 入口 | 当前行为 |
+| --- | --- |
+| `installer/fcitx5.iss` / `DetectMode` | 在暂停用户服务和维护动作前区分首次安装与受管理升级 |
+| `PrepareToInstall` / `[Files]` | 升级调用 `begin-stage`，将文件复制到 `setup/upgrades/current/payload`；重复暂存跳过复制 |
+| `CurStepChanged(ssPostInstall)` | 升级调用 `seal-stage` 并返回 `3010`；首次安装继续注册和用户配置 |
+| `win32/setup/upgrade.*` | 单一事务、状态/恢复、活动文件摘要及所有权 |
+| `win32/setup/upgrade_files.*` | 安装文件锁、句柄保护、备份、文件发布和安全检查 |
+| `win32/setup/upgrade_system.cpp` | 临时 SYSTEM 任务、重启标识、注册快照/恢复、运行库与卸载入口协调 |
+| `win32/ipc/installation.h` | `installed` 允许受管理运行；升级事务独立保存，等待阶段保留旧版启动许可 |
+| `scripts/build-installer.ps1` | 生成逐文件运行清单和 Inno 文件列表，单独部署维护程序 |
 
 Core、TSF 和 Settings 仍通过现有 Named Pipe 协议通信。本方案不修改输入协议，不引入新旧版本的协议兼容承诺，也不改变三个工程的工具链和运行库边界。
 
@@ -66,7 +67,7 @@ Core、TSF 和 Settings 仍通过现有 Named Pipe 协议通信。本方案不�
 
 任一条件不成立且尚未修改运行文件时，恢复旧版 `installed`，保留暂存并返回“本次未完成，仍需重启”。不强行取得进程控制权。
 
-这个选择优先保证旧版完整和失败可恢复。能否在典型登录顺序下稳定地一次重启完成，是第 13 节原型阶段的发布门槛；未通过时不能仅靠增加固定 `Sleep` 交付。
+Task Scheduler 与登录程序的先后顺序仍是系统验收重点。旧映像抢先加载时，提交程序保留完整旧版并报告待重启；第 13 节列出剩余验证。
 
 ## 4. 目录与文件所有权
 
@@ -82,20 +83,22 @@ Core、TSF 和 Settings 仍通过现有 Named Pipe 协议通信。本方案不�
     runtime-manifest.json                    # 当前活动文件所有权与摘要
     maintenance-host/
       Fcitx5Upgrade.exe                      # 独立升级/恢复入口
-    upgrades/<transaction-id>/
+    upgrades/current/                        # plan.json 中保存随机事务 ID
       plan.json                             # 不可变计划
+      target-manifest.json                  # 目标包与逐文件摘要
       journal.json                          # 可恢复进度
+      inventory.json                        # 旧文件存在状态及备份摘要
       payload/                              # 完整新版运行树
       backup/                               # 提交前完成的旧版备份
       retired/                              # 替换时保留的旧文件对象与准备文件
       dependencies/                         # 可选官方运行库安装程序
-      result.json
+    upgrade-result.json                     # 清理后仍保留的结果
   unins*.exe + 对应 Inno 卸载数据             # 不作为运行 payload 替换
 ```
 
-`Fcitx5Upgrade.exe` 从现有 `win32` 原生工具链构建，静态链接 MSVC CRT，只依赖系统 DLL。它运行于活动 payload 之外，提交时不覆盖自身。首版可复用 helper 的日志、注册和权限检查代码，但独立入口用于避免替换正在运行的 helper。
+`Fcitx5Upgrade.exe` 从现有 `win32` 原生工具链构建，静态链接 MSVC CRT，只依赖系统 DLL。它复用 helper 的日志、注册和权限检查代码，运行于活动 payload 之外，提交时不覆盖自身。
 
-维护入口有独立版本与 schema 兼容范围。尚有未完成事务时不能覆盖它；更新维护入口必须在事务结束后或使用新的受保护路径，不能从命令行指定任意可执行文件作为 SYSTEM 任务动作。
+维护元数据使用 schema v1；目标清单的协议版本须匹配维护程序。已有未完成事务时保留当前维护入口，任务动作固定为受保护路径中的程序。
 
 文件所有权分为三类：运行 manifest 管理的活动文件、Inno 管理的安装基础文件、升级器管理的事务文件。三者清单分别保存。`%APPDATA%`、用户备份和共享运行库不属于这些删除清单。
 
@@ -105,20 +108,15 @@ Core、TSF 和 Settings 仍通过现有 Named Pipe 协议通信。本方案不�
 
 使用带 `schemaVersion` 的 UTF-8 JSON，通过结构化解析器读取，不用字符串切分解析路径和数据。原生解析器优先复用工程已有依赖，分别在原生目标内构建。
 
-运行清单至少包含包标识、四段版本、架构、输入协议版本、支持的维护 schema，以及每个文件的相对路径、大小、SHA256 和组件类别。输入协议版本用于校验整套产物，不用于允许旧端点连接新版 Core。
+运行清单包含 `schemaVersion=1`、包标识、四段版本、`architecture=x64`、输入协议版本，以及运行文件和可选运行库安装程序的相对路径、大小、SHA256。文件归属按路径记录，目标输入协议版本用于校验整套产物。
 
 包级 `.manifest.txt` 和安装包 `.sha256` 保持现有发布用途，不把它们误作逐文件运行清单。构建阶段排除 `install-state`、事务目录、动态日志、Inno 卸载程序及临时文件。
 
-旧包没有运行清单时，实验实现面向标准、未手工改动的受管理安装：备份并替换新版清单对应的既有产品文件，不自动删除清单之外的旧文件。无法仅凭旧 Inno 安装识别与新版产品路径重名的手工文件；此类安装树不在初版迁移支持范围，正式发布前需核对历史包与显式迁移规则。有运行清单时，新版新增路径若已存在且不属于旧所有权清单，报冲突并保留旧版。
+旧包没有运行清单时，迁移面向标准、未手工改动的受管理安装：备份并替换新版清单对应的既有产品文件，保留清单之外的旧文件。与新版产品路径重名的手工文件需先处理；历史包首次迁移仍需 VM 验证。有运行清单时，新版新增路径若已存在且不属于旧所有权清单，报冲突并保留旧版。
 
 ### 5.2 事务计划与日志
 
-`plan.json` 至少记录：
-
-- 随机事务 ID、schema、安装根标识、来源包与目标包标识、清单摘要。
-- 源/目标架构与版本、支持的旧版范围、固定的替换和移除相对路径。
-- 依赖策略、维护入口版本、发起用户 SID、是否 machine-only。
-- 原安装注册归属、安装基础信息和卸载入口的必要快照。
+`plan.json` 记录 schema、随机事务 ID、目标清单摘要、安装器父进程 PID/创建时间，以及来源 Core、TSF、Settings 和 helper 的摘要。目标包、版本、协议和文件列表保存在 `target-manifest.json`；注册、版本和卸载控制信息另作快照。SYSTEM 阶段只处理机器状态，用户选择由既有用户配置保留。
 
 `journal.json` 记录阶段和错误码，`inventory.json` 固定整批文件的旧存在状态与备份摘要。完整备份、注册快照和 inventory 持久化后，才写入 `applying` 并修改第一个活动文件；未到提交点的中断统一恢复整批，不依赖逐文件完成计数。元数据写入使用同目录临时文件加替换并刷盘，恢复同时验证实际摘要，不能仅凭阶段名称推断操作已经落盘。
 
@@ -132,7 +130,7 @@ Core、TSF 和 Settings 仍通过现有 Named Pipe 协议通信。本方案不�
 - 相对路径拒绝绝对路径、`..`、ADS、设备名、大小写碰撞和重复项。操作通过已验证的目录/文件句柄执行，不能在检查后重新跟随可变链接。
 - 计划中不保存任意 shell 命令。SYSTEM 阶段不执行用户提供的 PowerShell、不访问用户配置、不启动 Core 或 Settings。
 - 设置磁盘空间、文件数量、单文件及累计大小上限；同时为完整旧版备份和提交临时文件预留空间。
-- 安装、升级、恢复和卸载共用带受保护 ACL 的机器级安装互斥。状态与文件句柄仍是正确性依据，不能只依赖命名互斥避免竞争。
+- 安装、升级、恢复和卸载通过 `InstallationLock` 的受保护安装文件锁协调，并结合事务状态和目标文件句柄检查。
 
 ## 6. 状态模型
 
@@ -175,7 +173,7 @@ Core、TSF 和 Settings 仍通过现有 Named Pipe 协议通信。本方案不�
 - `Uninstallable` 和 `CreateUninstallRegKey` 使用 scripted boolean expression，仅首次安装返回 True，避免生成或合并卸载日志以及自动更新产品版本号。不是通过伪造另一个 AppId 隔离。
 - 从安装包临时提取原生维护程序，调用内部 `begin-stage` 预检并创建受保护事务目录。`[Files]` 的目标由脚本函数返回，升级时只指向该事务的 `payload`，首次安装才指向 `{app}`；两种目标不可混用。
 - 普通 `[Icons]`、`[Registry]`、运行库安装及用户 post-install 步骤增加首次安装条件。待升级卸载入口的必要改动由维护程序按日志单独管理。
-- 文件复制完成后调用内部 `seal-stage` 再次全量校验，发布维护入口、任务和 `staged`。`begin-stage` 成功不代表升级准备成功；复制失败、取消或缺少 seal 时按 `preparing` 残留恢复。
+- 文件复制完成后调用内部 `seal-stage` 再次全量校验，发布任务、卸载控制入口和 `staged`；此时才返回准备成功。复制失败、取消或缺少 seal 时按 `preparing` 残留恢复。
 - `DeinitializeSetup` 不能在延迟路径调用旧 `ResumeInstallation`，也不能清理已经 seal 的事务。Inno 对未完成安装的自动清理与维护程序显式清理必须幂等，且只影响本事务。
 
 Inno 支持上述两个设置使用脚本布尔表达式，见 [Uninstallable](https://jrsoftware.org/ishelp/topic_setup_uninstallable.htm) 和 [CreateUninstallRegKey](https://jrsoftware.org/ishelp/topic_setup_createuninstallregkey.htm)。仍需真实包验证：不会生成第二个产品卸载项、不会提前合并旧 `unins*.dat`、不会把事务目录当作活动安装目录。不能用 `PrepareToInstall` 返回错误字符串来表示暂存成功。
@@ -204,14 +202,14 @@ volatile 标识不使用墙上时间或 uptime 猜测重启。休眠、睡眠、
 4. 有界等待后仍有旧映像或阻止替换的引用，且未修改运行文件时，恢复旧版 `installed`，重新建立本次开机标识，回到 `staged`。本次开机内不继续反复中断旧服务。
 5. 对变更/移除的活动文件取得并持续持有提交保护，再复核映像与文件身份；保护取得不完整时释放全部保护并按上一步处理。
 
-Restart Manager 结果只提供占用信息，不提供锁。提交保护需要通过 Windows 文件句柄验证实际的写入/重命名能力，并阻止新的冲突打开；应使用现有系统 API，而不是“先查询，再关闭句柄，再按路径覆盖”。`CreateFileW` 的独占共享模式及 `SetFileInformationByHandle` 可用于原型，但“获得句柄”不能自动推导为不存在已有 image section。映像占用、句柄内重命名、目录身份与后续发布的组合必须单独 probe。
+Restart Manager 提供占用信息；实际提交保护由 `FileGuard` 持有独占写句柄，并通过 `SetFileInformationByHandle` 处理旧对象。`test_upgrade_files` 分别覆盖已加载映像、并发加载、数据映射、句柄内重命名和最终路径发布。
 
 ### 8.3 文件、注册与提交点
 
 1. 在维护门控关闭且替换条件成立后，完成旧版受管文件备份和注册元数据快照。运行资源可能在准备到重启之间变化，因此旧版备份在此时生成；不备份或回滚用户数据。
 2. 使用同卷 `payload` 中已校验的文件作为源，inventory 记录整批替换/新增/移除意图。持有全部既有目标的独占写句柄，在 `retired` 准备并刷盘完整新文件，通过句柄将旧文件移入该目录，再把新文件发布到最终路径。新增目标使用 `CREATE_NEW`。保存/恢复文件 DACL，避免从暂存目录带入缺少 AppContainer 读取权限的 ACL。
 3. 替换 Core、TSF、Settings、引擎、翻译、资源和活动 helper。废弃文件按旧所有权清单或显式迁移清单移除，未知文件保留。
-4. 新版文件发布时必须保持完整的“尚未允许运行”条件。若原有 `InstallationGate` 只在部分入口检查，需补齐新版进程入口、TSF COM 激活和服务启动入口；不能指望轮询延迟阻止加载期间的全部副作用。
+4. 发布期间保持 `maintenance` 门控。Core 启动、TSF COM 创建及按键/轮询路径通过 `InstallationGate` 检查许可，文件层同时持有整批发布保护。
 5. 全量验证活动文件大小和摘要，确认没有剩余旧运行映像。维护程序不再依赖旧 helper，使用已校验新版 DLL 的最终路径更新 COM/profile/category，并验证双向注册、图标路径与 threading model。
 6. 更新活动 manifest、卸载所有权及机器版本元数据，写入可恢复的提交记录。`installed` 是最后发布的运行许可；中途出错继续保持维护状态。
 7. 发布 `installed`，标记 `committed`，写结果并清理任务及暂存。清理失败不回滚已成功升级的版本，记录为可重试的清理工作。
@@ -222,7 +220,7 @@ Restart Manager 结果只提供占用信息，不提供锁。提交保护需要�
 
 若在发布 `installed` 后、写入 `committed` 前中断，恢复先核对已持久化的提交记录、活动 manifest 和注册。确认完整新版已被放行时，补记提交并清理，不能因 journal 尚停在 `verifying` 就回滚可能已经运行的新版。提交前的失败恢复则必须同时恢复文件、注册、manifest、版本元数据和卸载所有权。
 
-SYSTEM 阶段只做机器安装，不启动 SYSTEM Core，不调用用户 `configure-user`。机器提交成功表示文件和注册就绪，不等同于真实应用输入验收。
+SYSTEM 阶段只做机器安装，不启动 Core 或调用用户 `configure-user`；正常登录后沿用用户输入法配置。
 
 ## 9. 用户状态与运行库
 
@@ -257,7 +255,7 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 
 待升级期间必须让正常卸载先经过支持事务的维护入口。旧 helper 不认识新事务，不能原样作为唯一协调者。准备阶段安装维护入口并切换产品卸载命令及开始菜单卸载入口；保留旧值用于取消/回滚，显示版本仍保持旧版。此改动属于安装控制信息，不改变旧版输入运行文件。
 
-`staged` 时卸载先在互斥内取消事务，再按现有“普通用户阶段 + 提权机器阶段 + Inno 原生卸载器”流程执行。SYSTEM 入口不能替代当前用户阶段。直接手工运行旧 `unins*.exe` 绕过协调器不作为支持入口；实施前必须核对现有 UI 和脚本没有留下绕过路径。
+`staged` 时卸载先在安装锁内取消事务，再按现有“普通用户阶段 + 提权机器阶段 + Inno 原生卸载器”流程执行。开始菜单和 Windows 卸载项均使用维护协调入口，用户阶段在原用户身份下执行。
 
 自定义文件提交不会自动更新旧 `unins*.dat`。因此需要独立、持久的运行文件所有权清单：原生 Inno 卸载器负责其已有清单，维护入口补充删除升级新增的受管文件、事务文件和临时任务。清单应在调用原生卸载器前复制到受保护的独立执行位置，避免 helper/清单被先删除后无法继续。
 
@@ -265,7 +263,7 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 
 卸载与同目录重装仍检查系统待重启队列。未知/其他事务对安装根的待删除操作必须阻止重装；本方案不清空或重写其他软件的 `PendingFileRenameOperations`。
 
-## 11. 拟新增接口与代码归属
+## 11. 维护接口与代码归属
 
 以下接口已接入原生维护程序。所有变更命令检查身份、安装归属及事务状态，并支持无系统副作用的 `--what-if`；只读查询支持普通权限。
 
@@ -285,9 +283,9 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 | `win32/ipc/installation.h` 与必要入口 | 保持等待阶段旧版可用；补齐提交期门控 |
 | `win32/setup/main.cpp`、卸载协调器 | 共用互斥、预检、所有权与新增文件卸载 |
 
-升级诊断使用受保护事务元数据与 `setup/upgrade-result.json`，只包含事务 ID、版本、阶段、受管文件相对路径和错误码，不包含输入文本、候选、配置内容或用户路径。SYSTEM 升级命令不复用用户 profile 下的 helper 日志；普通用户只读状态查询，不需要读取 SYSTEM profile。
+升级状态与结果保存在受保护事务元数据及 `setup/upgrade-result.json`，普通用户可通过只读查询查看。维护程序还使用 `setup/log.h` 记录执行阶段和错误码到执行身份的 LocalAppData helper 日志；SYSTEM 执行时与交互用户的日志位置不同。排查时先查询安装树中的持久结果。
 
-安装器失败文案指向维护入口的 `query-upgrade`，该命令显示阶段、目标版本和错误码。Settings 的状态展示留作后续 UI 接入，不增加 Core IPC 协议；旧版 Settings 不会自动获得这项 UI。查询成功不等于升级成功，结果不随暂存清理丢失，下一次明确操作才更新。
+安装器失败文案指向维护入口的 `query-upgrade`，该命令显示阶段、目标版本和错误码。结果不随暂存清理丢失，下一次明确操作才更新；Settings 状态页尚待接入。
 
 ## 12. 验证与验收
 
@@ -301,8 +299,6 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 - 打包回归：暂存不写活动运行文件、不改用户偏好、不启动服务、不新增产品卸载项；含/不含运行库包、真实 Inno 退出码与 `-WhatIf` 行为。
 - 模拟系统调用：任务身份/ACL/动作固定、任务注册失败、同次开机误运行、查询错误与占用不同、维护写入失败，以及清理重试。
 - 卸载回归：升级新增文件能清理；旧 Inno 清单与新所有权清单共存；待升级卸载不会在下次开机重新安装产品。
-
-这些测试不等于真实系统派发、系统重启或应用中文输入验证。
 
 ### 12.2 Windows VM 系统验收
 
@@ -321,17 +317,11 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 | 标准用户由其他管理员代输 UAC、machine-only | 不修改错误账户的输入偏好；SYSTEM 不启动输入服务 |
 | 完成升级及回滚后真实应用输入 | Core/TSF/Settings 版本一致；中文提交、候选、设置和现代 category 注册实际核验 |
 
-## 13. 实施顺序与发布门槛
+## 13. 自动化覆盖与剩余验证
 
-1. 先做隔离文件/映像 probe 和 VM 开机时序原型。确认保护机制能覆盖已有映像及并发加载，并验证典型一次重启完成率。若任务时序持续被旧 DLL 抢先、或不能证明提交期间无旧映像复活，停止产品接入，重新评审启动协调方式；不能删除占用检查或依赖固定等待绕过。
-2. 实现清单、计划、互斥、日志、独立维护入口及模拟状态机。先验证准备和取消不会影响旧版输入。
-3. 实现门控下的文件提交、注册、全断点恢复及卸载所有权；在隔离目录与模拟注册环境验证。
-4. 接入 Inno 分支、任务、运行库策略、结果查询及升级/卸载入口迁移；保持既有首次安装 smoke。
-5. 使用可重启 Windows VM 完成系统矩阵。CI 增加无系统副作用的计划/打包回归；真实重启验收使用独立 VM/self-hosted runner。
+`test_upgrade` 覆盖状态机、可注入断点恢复和模拟机器操作；`test_upgrade_files` 使用真实临时文件、DLL/EXE 映像和数据映射验证保护与发布；`test_upgrade_registration` 覆盖注册快照和恢复。`scripts/test-reboot-upgrade-package.ps1` 编译两种默认运行库组合及显式关闭升级的包，检查 Inno 分支和清单。
 
-发布前必须完成：占用准备时旧版持续可用、正常一次重启升级、抢先加载时安全保留旧版、断电恢复、待升级卸载，以及旧包首次迁移。Task Scheduler 不保证任务先于登录程序运行是本方案的主要剩余风险，原型结果决定方案能否进入产品。
-
-目前代码和隔离测试已接入，默认包已启用延迟升级，尚未执行本机真实安装、任务注册或系统重启验收。默认启用不代表 VM 矩阵已通过，不能把免注册测试描述成真实应用升级验收。
+第 12.2 节的可重启 VM 矩阵仍待执行，重点是占用准备期间旧版持续可用、正常一次重启升级、抢先加载时保留旧版、断电恢复、待升级卸载和旧包首次迁移。Task Scheduler 与登录程序的排序是主要剩余风险；需记录实际任务与 DLL 加载时序。
 
 ## 参考
 

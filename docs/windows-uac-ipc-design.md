@@ -2,11 +2,11 @@
 
 ## 状态与目标
 
-身份校验、提权 TSF 服务控制和握手诊断已按本文接入代码；这不代表修复已部署或真实提权应用输入已通过验收。目标是让同一交互登录的普通权限 Core 服务 UAC 提权后的 x86/x64 桌面 TSF 客户端，同时保留不同用户、session、独立登录和受限输入入口的边界。
+身份校验、提权 TSF 服务控制和握手诊断已接入代码。管理 Pipe 允许同一交互登录的普通权限 Core 接受经过验证的 UAC linked-token x86/x64 桌面客户端；真实提权应用输入按后文矩阵验收。不同用户、session、独立登录和受限输入入口继续隔离。
 
-问题位于管理 Pipe 的登录身份校验，与宿主是否使用 Electron/CEF、DLL 位数、是否存在标准编辑框无关。CPU-Z Validation 中的普通文本框应作为真实原生 Win32 验收对象；微软输入法或 Rime 能工作，不能代替 Fcitx 自身的 TSF/IPC 验证。
+原连接问题位于管理 Pipe 的登录身份校验。CPU-Z Validation 等普通文本框用于验证真实原生 Win32 提权输入，测试时核对实际接收键盘的进程身份和 DLL 架构。
 
-## 已确认问题
+## 问题来源与当前调用链
 
 当前调用链为：
 
@@ -16,12 +16,13 @@ TSF ActivateEx
   -> WindowsPipeServer::runClient
   -> authorizedPipeClient
   -> pipeClientIdentity / tokenEnvironment
-  -> sameLogin(host, caller)
+  -> pipeLoginDecision(hostUacIdentity, caller, peerSession, inputOnly)
+     -> ExactLogin / SandboxAnonymous / UacLinkedLogin / Denied
 ```
 
-`win32/ipc/clientenvironment.h` 的 `sameLogin()` 要求 token 查询成功、用户 SID、Windows sessionId 和 `TOKEN_STATISTICS::AuthenticationId` 全部相同。`win32/ipc/pipeidentity.h` 的 `authorizedPipeClient()` 先读取 Pipe 实际对端 token，并核对内核返回的客户端 session，再调用此比较。
+`win32/ipc/clientenvironment.h` 的 `sameLogin()` 要求 token 查询成功、用户 SID、Windows sessionId 和 `TOKEN_STATISTICS::AuthenticationId` 全部相同。`win32/ipc/pipeidentity.h` 的 `authorizedPipeClient()` 读取 Pipe 实际对端 token 及内核返回的客户端 session，再交给 `pipeLoginDecision()` 分类判定。
 
-已在同一用户/session 上观察到：普通权限 Core 与提权 CPU-Z、Leigod、Steam 窗口进程的 `AuthenticationId` 不同，但它们的 UAC token 互为 linked token。同一个 `ipc_probe.exe --diagnose` 在管理员权限下于 `Hello read` 失败，错误为 `ERROR_PIPE_NOT_CONNECTED`（233）；通过 Explorer 以普通权限运行时成功连接同一 Core。该对照确认了连接阻塞，尚不证明解除阻塞后预编辑、提交和候选显示均正常。SamsungMagician 仍需独立补验实际窗口进程的 token 和输入行为。
+原实现已在同一用户/session 上观察到：普通权限 Core 与提权 CPU-Z、Leigod、Steam 窗口进程的 `AuthenticationId` 不同，但它们的 UAC token 互为 linked token。旧版 `ipc_probe.exe --diagnose` 在管理员权限下于 `Hello read` 失败，错误为 `ERROR_PIPE_NOT_CONNECTED`（233）；通过 Explorer 以普通权限运行时成功连接同一 Core。当前实现增加 linked-token 判定处理此类身份关系；各应用的预编辑、提交和候选显示仍需逐项验证。
 
 服务端拒绝 Hello 时不会进入 `process()`，因此没有对应的 `core_request`。TSF 详细日志开关来自 Core 回复，首次握手失败时可能尚未启用 logger。没有 `tsf-<PID>` 日志不能推导出 DLL 未加载、TIP 未激活或宿主没有 `ITfContext`。Core 日志的 `client` 是连接序号，不是客户端 PID，不能仅按时间关联请求。
 
@@ -32,7 +33,7 @@ TSF ActivateEx
 - 不在 Hello 或其他 payload 中接收客户端声称的 SID、登录 LUID、提权状态或 linked token 句柄。本方案不改变协议线格式或版本；版本以 `win32/ipc/protocol.h` 为准。
 - `-input` 入口和 AppContainer 继续使用严格登录匹配及既有 `AuthenticateServer`，不适用 UAC 例外。`verifiedServerHandle()` 的 PID/session、进程对象 owner 和固定安装路径校验保留。
 - Sandboxie 匿名 token 的既有管理入口例外独立保留，不因 UAC 扩大到其他 SID 或受限输入入口。Sandboxie 的 HostOnly 和服务端归属检查继续执行。
-- 不通过提权 Core、开启 `uiAccess`、修改 TSF category、注入宿主或绕过 UIPI 修复连接。跨权限传输不等于已经验证所有 TSF 编辑/UI 行为。
+- Core 保持普通权限，通过 token 身份比较处理跨权限连接，沿用现有 TSF category 和编辑/UI 路径。
 
 ## 可信 UAC 关系
 
@@ -60,9 +61,9 @@ linked token 查询失败只禁用新增兼容分支，不把原来可严格匹�
 
 1. 保留基础检查：Core/对端 token 可查询、`GetNamedPipeClientSessionId()` 成功、内核 peer session 等于 Core session；非匿名对端的 token session 也必须匹配。
 2. `sameLogin(host, caller)` 成功时沿用当前规则，返回 `ExactLogin`。
-3. 严格比较失败时，仅对非 `inputOnly`、非 AppContainer 的管理连接尝试 `UacLinkedLogin`。本机 Core 必须是已确认的普通桌面环境；本机与对端均非低完整性，且对端 elevation type 查询成功。
-4. 要求对端 SID/session 等于本机身份，并且对端 AuthenticationId、elevation type 精确匹配本机已验证的 linked token。只接受 Windows 证明的直接关联，不接受任意“一个高权限、一个普通权限”组合。
-5. 若不匹配，再按原规则独立检查 Sandboxie 管理入口匿名兼容；其他情形拒绝。
+3. 严格比较失败时，先检查既有 Sandboxie 管理入口匿名兼容；`inputOnly` 或 AppContainer 不适用该例外。
+4. 其余连接仅在非 `inputOnly`、非 AppContainer 的管理入口尝试 `UacLinkedLogin`。本机 Core 必须是已确认的普通桌面环境；本机与对端均非低完整性，且对端 elevation type 查询成功。
+5. 对端 SID/session、AuthenticationId 和 elevation type 必须精确匹配本机已验证的 linked token，否则拒绝。
 
 同一 AuthenticationId 下的既有行为不在此次变更中重定义。新增分支不表示能够区分同用户的所有任意代码、token 派生或沙箱实现；既有 DACL、隔离策略和消息权限仍是必要边界。
 
@@ -83,7 +84,7 @@ linked token 查询失败只禁用新增兼容分支，不把原来可严格匹�
 
 生产 AppContainer 的服务端验证实际走 `verifiedServerHandle()`，保持现有流程。本次不为普通桌面 PipeClient 额外引入一个跨权限 `OpenProcessToken()` 依赖。
 
-本机关系可在 Core 启动时从其 primary token 建立，在该 token 生命周期内作为不可变数据复用；不得把某个 PID 的一次授权结果缓存给未来连接。每次连接仍重新查询实际 Pipe token。若实现支持更换进程 token，必须同步重建本机快照；断线不继承旧连接的 context 或身份结果。
+`WindowsPipeServer::runClient()` 在每个连接开始时从 Core primary token 构造本机 UAC 快照，在模拟对端之前完成。每次连接重新查询实际 Pipe token，断线后销毁旧连接的 context 和身份结果。
 
 ## 提权 TSF 的服务控制
 
@@ -94,7 +95,7 @@ linked token 查询失败只禁用新增兼容分支，不把原来可严格匹�
 - 已有 Core：`kEnsureServiceMessage` 只检查 Pipe；设置、用户数据目录、重启和停止请求通过既有 `OpenSettings` / host commands 交给已认证 Core，在 Core 自己的服务身份和权限下执行。
 - Pipe 缺失或握手失败：有界重连并给出诊断，不从管理员宿主创建 Core、Settings 或控制子进程。首期要求用户从普通权限会话启动/重启 Core，不新增自动降权启动 broker。
 - 用户手动停止后，提权应用获得焦点不得创建另一份 Core 或清除停止状态。只有明确的重启操作可按既有语义解除停止；Core 已停止且无法接收请求时，由普通权限的既有控制入口完成。
-- 默认无 split token 的管理员账户、以其他管理员凭据运行、缺少 Explorer、UAC 禁用等情况不能据此宣称自动降权启动受支持。独立登录仍严格隔离。
+- 当前没有自动降权启动 broker；无 split token、其他管理员凭据和独立登录按各自身份规则处理。
 
 复用 `servicecontrol.cpp` 的远端命令实现，但为 UAC 输出独立原因，不沿用“检查 Sandboxie OpenPipePath”的提示。连接已到 Hello 却失败，不能当作 Core 缺失、停止用户服务或按进程名清理应用。
 
@@ -110,7 +111,7 @@ linked token 查询失败只禁用新增兼容分支，不把原来可严格匹�
 
 ## 实施文件
 
-| 文件 | 计划变更 |
+| 文件 | 当前职责 |
 | --- | --- |
 | `win32/ipc/clientenvironment.h` | 提供可选 UAC 元数据查询；基础 `tokenKnown` 不依赖 linked 查询，`sameLogin` 保持严格 |
 | `win32/ipc/pipeidentity.h` | 新增本机可信 linked 关系和显式管理入口判定；保留 AppContainer/Sandboxie 分支边界 |
@@ -125,14 +126,14 @@ linked token 查询失败只禁用新增兼容分支，不把原来可严格匹�
 | `win32/tests/test_serviceclient.cpp` | 提权/未知 elevation 路由、宿主缺失/停止/握手失败、不重放超时请求及无本地回退 |
 | `win32/tests/uac_pipe_probe.cpp` | 独立用户 DACL 测试 Pipe；默认同权限自测，显式参数供独立启动的普通/提权进程对照 |
 
-若需要新增小型 token 查询辅助文件，应由三个工程分别编译/包含，保持现有 C++ ABI/运行库边界。不修改子模块或输入引擎。
+token 查询辅助代码由各工程分别编译/包含，保持现有 C++ ABI 和运行库边界。
 
 ## 测试与验收
 
 ### 自动化测试
 
 1. 纯判定测试构造可信本机 UAC 快照和对端事实，覆盖上表，包括只伪造相同 SID/session、任意第三个 LUID、非互补 elevation、linked 查询失败、token session 与内核 session 不同、未知 token、低完整性和 AppContainer。严格 `sameLogin()` 对不同 LUID 仍必须失败。
-2. 真实 token 提取测试只查询当前 token；存在 linked token 时检查 SID/session、类型和句柄关闭。没有 split token 的 CI 明确 skip UAC 特有测试，不能用模拟结果宣称真实 UAC 通过。
+2. 真实 token 提取测试只查询当前 token；存在 linked token 时检查 SID/session、类型和句柄关闭。没有 split token 的 CI 将 UAC 特有测试报告为 skip。
 3. 使用唯一测试 Pipe，启动同一交互登录的一对普通/提权 probe，验证真实 identification SQOS 的 Pipe 模拟 token，而非只比较两个进程 token。两个方向分别报告；面向用户的最低要求是普通 Core 接受提权客户端。
 4. 真实 Pipe 测试保留不同用户/session/独立登录拒绝、模拟身份与 primary token 不一致、Sandboxie 匿名例外及解除模拟失败路径。查询/授权失败后不得泄漏句柄或影响下一连接。
 5. 对 x86/x64 独立构建运行受影响 CTest，继续执行跨架构 Pipe 并发、context owner 和断线测试。测试版 Core/probe 使用隔离 Pipe、服务对象及配置目录，不抢占当前生产端点。
@@ -140,7 +141,7 @@ linked token 查询失败只禁用新增兼容分支，不把原来可严格匹�
 
 TokenLinkedToken 的 identification 句柄只用于查询。不能为了生成测试客户端而启用 SeTcbPrivilege/SeDebugPrivilege，或把仅可查询的 linked token 当成可用于 `ImpersonateLoggedOnUser` / `CreateProcessWithTokenW` 的 primary token；真实提权/普通客户端应从各自交互会话启动。
 
-`test_uactoken` 在没有 split token 的环境中以 CTest skip 报告 UAC 特有验证。默认 `uac_pipe_probe` 只验证同权限真实 Pipe 的 `ExactLogin`，不代表 UAC 跨权限已通过。普通权限终端先启动服务端，随后在同一交互登录、已经提权的终端运行客户端；两边使用相同且唯一的 suffix，例如：
+`test_uactoken` 在没有 split token 的环境中以 CTest skip 报告 UAC 特有验证。默认 `uac_pipe_probe` 验证同权限真实 Pipe 的 `ExactLogin`。跨权限对照由普通权限终端先启动服务端，再在同一交互登录的提权终端运行客户端；两边使用相同且唯一的 suffix，例如：
 
 ```powershell
 # 普通权限终端；服务端最多等待 30 秒，不启动生产 Core。
@@ -166,12 +167,9 @@ TokenLinkedToken 的 identification 句柄只用于查询。不能为了生成�
 
 验收记录 OS、应用版本、真实输入宿主架构/elevation、DLL build、Core PID 和授权分支；按握手、context、按键、编辑、候选显示逐层确认。Hello 成功、免注册测试、候选 probe 和真实应用中文提交分别报告；涉及真实注册、安装或用户服务控制的步骤须按仓库规则取得明确授权。
 
-## 交付顺序与回退
+## 构建、部署与回退
 
-1. 先验证普通权限进程能无额外特权查询本机 linked 身份，再实现纯判定及负向用例。
-2. 接入服务端授权、握手诊断和提权 TSF 服务控制；这三项共同构成修复，不能只放行身份后保留第二份 Core 的启动路径。
-3. 在隔离构建树完成 x86/x64 自动化与真实 split-token Pipe 对照，再按授权部署同一套 Core、TSF 和 Settings，重开已加载旧 DLL 的目标应用。
-4. 以真实系统/应用矩阵通过作为支持声明前提。无须因该方案本身新增 category 或重新注册 profile；若实际安装操作涉及注册，仍使用既有授权流程。
+x86/x64 独立构建及命令见 [x86 TSF](windows-x86-tsf-design.md#构建与部署)。优先运行 `test_uacidentity`、`test_uactoken`、`test_pipeidentity`、`test_serviceclient`、`test_service` 和 `uac_pipe_probe`，再完成跨权限 Pipe 对照及真实应用矩阵。部署同一套 Core、TSF 和 Settings，重开已加载旧 DLL 的目标应用；该身份修复沿用现有 category/profile。
 
 回退使用原有完整部署版本并重开受影响应用，不自动迁移/删除 `.state` 或合并历史服务身份。不要把同时运行的两份不同权限 Core 按进程名结束；确认具体 PID/安装路径后，仍按明确授权执行既有服务控制。
 

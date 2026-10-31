@@ -5,8 +5,7 @@
 The nonactivating Win32 popup uses DirectWrite layouts and a Direct2D HWND
 render target, with a software DC render target fallback. Language-bar icons
 and document composition use separate paths.
-The TSF target links Windows `d2d1` and `dwrite`; rendering alone does not require
-Core, submodule, IPC or registration metadata changes.
+The TSF target links Windows `d2d1` and `dwrite`.
 The window and graphics resources stay on the TSF owning thread. Initialization
 is lazy, outside `DllMain`. Snapshots still come from Core; rendering never
 commits text. There is no render thread or continuous animation loop.
@@ -34,7 +33,7 @@ and comments; long text uses DirectWrite ellipsis. Comments keep natural width
 when possible, but receive at most 35% of remaining space when the row does not
 fit. Preferred width is bounded to 180-640 DIP and the monitor work area.
 System colors supply text, background, selection and border. Theme/color changes
-invalidate the window. This is not an independent Windows 11 dark theme.
+invalidate the window; a dedicated Windows 11 dark theme remains pending.
 
 ## DPI and Lifecycle
 
@@ -115,9 +114,9 @@ and failure recovery.
 `candidate_render_probe <existing AppContainer profile/package family name>`
 compares default/software HWND targets, software DC targets and both production
 candidate rendering paths in desktop and real AppContainer-token children.
-It does not create a profile, register a TIP or connect to Core. Such children
-do not reproduce a packaged immersive host's complete windowing environment;
-success does not establish compatibility with SearchHost or other real apps.
+It uses an existing profile and isolated diagnostic children without Core or
+TIP registration. Packaged immersive hosts such as SearchHost still need
+interactive validation; see [modern app acceptance](windows-modern-apps-design.md#剩余验收矩阵).
 
 The production draw function runs through a software WIC target at 96/120/144/
 192/288 DPI. It compares color emoji with monochrome controls and checks VS15,
@@ -134,7 +133,7 @@ queued snapshots, clipped-composition caret fallback, clipped carets overlapping
 document bounds, invalid/empty/offscreen geometry, timeout/recovery, commit,
 cancel, hidden owners and late sessions after focus loss/deactivation.
 It also checks host UIElement show/hide and candidate publication without HWND
-or usable popup geometry. These are explicit adapter callbacks, not OS dispatch.
+or usable popup geometry, using explicit adapter callbacks.
 
 For the current default suite and real engine probes, see
 [TSF tests](pinyin.md#build-and-test-tsf). Generate synthetic-DPI PNGs and briefly
@@ -144,12 +143,10 @@ show a native preview after building:
 ./build/all/tsf/tests/test_candidate.exe build/candidate-preview
 ```
 
-The output includes five offscreen images and a native HWND capture using
-PrintWindow(PW_RENDERFULLCONTENT), independent of occlusion. Preview snapshots
-are synthetic, not live engine candidates. Call-duration measurements from this
-fixture do not establish end-to-end input latency, registered-app behavior or a
-GDI performance comparison. Interactive desktop focus and installed fonts can
-affect the native preview.
+The output includes five synthetic offscreen images and a native HWND capture
+using PrintWindow(PW_RENDERFULLCONTENT), independent of occlusion. Timing covers
+the rendering call; end-to-end input latency needs a live engine/application
+measurement. Interactive desktop focus and installed fonts can affect the preview.
 
 ## Remaining Validation
 
