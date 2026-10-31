@@ -19,6 +19,8 @@ Weasel 的客户端通过 Named Pipe 连接 WeaselServer，Sandboxie 的 Weasel 
 
 ## 进程策略
 
+普通桌面 UAC 提权应用的登录身份修复另见 [UAC 提权应用输入修复方案](windows-uac-ipc-design.md)。该方案尚待实现，不改变本文的 Sandboxie 匿名 token 例外或受限输入入口规则。
+
 共享辅助模块动态查询已加载的 SbieDll API。区分宿主、沙箱和未知状态；模块存在但查询异常时禁止本地服务启动，不把宿主注入模式误判成已确认的沙箱。
 
 沙箱 TSF 使用 HostOnly 策略：不创建 ServiceController，不读取或写入本地服务状态，不启动 Core/Settings/control 子进程。Core 和 Settings 入口在读取用户配置、创建服务对象之前拒绝沙箱或无法确认的环境。

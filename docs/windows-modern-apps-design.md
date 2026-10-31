@@ -37,6 +37,8 @@ flowchart LR
 
 ### Endpoint 与身份
 
+普通桌面管理入口的 UAC linked-token 兼容另见 [UAC 提权应用输入修复方案](windows-uac-ipc-design.md)，当前为待实现设计；AppContainer 输入入口不采用该兼容分支。
+
 桌面和 Sandboxie 保留 `\\.\pipe\fcitx5-windows-v2-<SID>-<session>`。`v2` 是历史名称，不是 framing 版本；AppContainer 使用相同基名加 `-input`。两入口使用 message mode、拒绝远程客户端、首实例保护、overlapped I/O 和有限等待/取消。客户端使用 `SECURITY_IDENTIFICATION` SQOS。
 
 输入入口 DACL 给予当前用户完整权限，`ALL APPLICATION PACKAGES` 仅 `0x100183` 客户端权限，排除 `FILE_CREATE_PIPE_INSTANCE`。仅此入口设置低完整性 `NW` label；管理入口不放宽 ACL。AAP ACE 不是用户边界：服务端读取有界 Hello 后，通过 Pipe 模拟 token 检查实际用户 SID、session、AuthenticationId 及 AppContainer 身份，然后解除模拟，再处理引擎或配置。身份查询失败关闭连接，解除模拟失败不得继续复用该线程。
