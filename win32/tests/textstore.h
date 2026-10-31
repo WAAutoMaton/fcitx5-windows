@@ -39,6 +39,8 @@ class TextStore : public ITextStoreACP, public ITfInputScope {
     bool clipComposition = false;
     bool clipCaret = false;
     bool emptyRectangle = false;
+    bool pointRectangle = false;
+    bool pointCompositionOnly = false;
     bool nullWindow = false;
     HWND windowOverride = nullptr;
     bool readOnly = false;
@@ -339,6 +341,10 @@ class TextStore : public ITextStoreACP, public ITfInputScope {
                     : RECT{anchorX + start * 10, 10,
                            anchorX + end * 10 + (start == end ? caretWidth : 0),
                            30};
+        if (pointRectangle && (!pointCompositionOnly || start != end)) {
+            rect->right = rect->left;
+            rect->bottom = rect->top;
+        }
         *clipped = start == end ? clipCaret : clipComposition;
         return geometryResult;
     }

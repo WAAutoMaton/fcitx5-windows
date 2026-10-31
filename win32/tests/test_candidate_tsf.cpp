@@ -243,6 +243,70 @@ void tests() {
     assert(!window.visible());
     store->emptyRectangle = false;
 
+    // A zero-height composition first falls back to the collapsed selection.
+    store->pointRectangle = store->pointCompositionOnly = true;
+    const auto pointGeometry = store->geometryCalls;
+    Access::refresh(*tsf);
+    assert(window.visible() && store->geometryCalls == pointGeometry + 2);
+    assert(GetWindowRect(hwnd, &after) && after.top == 30);
+
+    // Unity-style hosts can return a point for both composition and caret.
+    store->pointCompositionOnly = false;
+    Access::refresh(*tsf);
+    const auto pointX = store->anchorX + store->selection().acpEnd * 10;
+    assert(window.visible() && WindowAccess::text(window) == L"visible");
+    assert(GetWindowRect(hwnd, &after) && after.left == pointX &&
+           after.top == 10);
+    assert(GetForegroundWindow() == foreground);
+    for (const RECT screen :
+         {RECT{}, RECT{400, 0, 0, 200}, RECT{0, 200, 400, 0},
+          RECT{pointX + 1, 0, 400, 200}, RECT{0, 0, pointX, 200},
+          RECT{0, 11, 400, 200}, RECT{0, 0, 400, 10}}) {
+        store->screenRectangle = screen;
+        Access::refresh(*tsf);
+        assert(!window.visible());
+    }
+    store->screenRectangle = {pointX, 10, pointX + 100, 200};
+    Access::refresh(*tsf);
+    assert(window.visible());
+    store->screenResult = E_FAIL;
+    Access::refresh(*tsf);
+    assert(!window.visible());
+    store->screenResult = S_OK;
+    store->clipComposition = store->clipCaret = true;
+    Access::refresh(*tsf);
+    assert(!window.visible());
+    store->clipComposition = store->clipCaret = false;
+    // Unavailable layout cannot turn a host-supplied point into a new anchor.
+    store->geometryResult = TS_E_NOLAYOUT;
+    Access::refresh(*tsf);
+    assert(!window.visible());
+    store->geometryResult = S_OK;
+    const auto previousDpi = SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    assert(previousDpi);
+    const auto pointOwner = CreateWindowExW(
+        0, L"STATIC", L"Point anchor test", WS_POPUP, 0, 0, 400, 200, nullptr,
+        nullptr, GetModuleHandleW(nullptr), nullptr);
+    assert(pointOwner && SetThreadDpiAwarenessContext(previousDpi));
+    ShowWindow(pointOwner, SW_SHOWNOACTIVATE);
+    store->windowOverride = pointOwner;
+    store->screenRectangle = {-400, -200, 0, 200};
+    const auto previousAnchorX = store->anchorX;
+    store->anchorX = -300;
+    Access::refresh(*tsf);
+    assert(window.visible());
+    store->windowOverride = nullptr;
+    Access::refresh(*tsf);
+    DestroyWindow(pointOwner);
+    store->anchorX = previousAnchorX;
+    store->screenRectangle = {-100, -100, 400, 200};
+    store->emptyRectangle = true;
+    Access::refresh(*tsf);
+    assert(!window.visible());
+    store->emptyRectangle = store->pointRectangle = false;
+    store->screenRectangle = {0, 0, 400, 200};
+
     assert(Access::submit(*tsf, snapshot(6, "nihao", "timeout")));
     store->geometryResult = TS_E_NOLAYOUT;
     assert(Access::submit(*tsf, snapshot(7, "nihaoa", "timeout")));
@@ -522,7 +586,8 @@ int main(int argc, char **argv) {
         for (const auto event :
              {"candidate_layout_pending", "candidate_hidden",
               "ui_element_begin", "edit_execute", "popup_position",
-              "edit_stale", "popup_coordinate_conversion_failed"})
+              "edit_stale", "popup_coordinate_conversion_failed",
+              "candidate_point_anchor"})
             assert(text.find(event) != std::string::npos);
         for (const auto secret : {"\"committed\"", "\"unapplied\"", "\"nih\""})
             assert(text.find(secret) == std::string::npos);

@@ -487,9 +487,11 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
     auto result = view->GetTextExt(cookie, range, &anchor, &clipped);
     diagnosticResult(L"GetTextExt", result);
     bool fallback = false;
-    // A partially offscreen composition can still have a visible caret.
-    if ((result == TS_E_NOLAYOUT || (SUCCEEDED(result) && clipped)) && caret &&
-        SUCCEEDED(caret->Collapse(cookie, TF_ANCHOR_END))) {
+    // A clipped or empty composition can still have a usable caret.
+    if ((result == TS_E_NOLAYOUT ||
+         (SUCCEEDED(result) && (clipped || anchor.bottom <= anchor.top ||
+                                anchor.right < anchor.left))) &&
+        caret && SUCCEEDED(caret->Collapse(cookie, TF_ANCHOR_END))) {
         result = view->GetTextExt(cookie, caret, &anchor, &clipped);
         fallback = true;
     }
@@ -525,6 +527,27 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
             candidateElement_->setVisible(candidates_.visible());
         return;
     }
+    // Some game hosts provide only an insertion point, even for the caret.
+    // Preserve its coordinates when it lies inside the document display. The
+    // all-zero rectangle is TSF's sentinel for text that is not visible.
+    bool pointVisible = false;
+    if (SUCCEEDED(result) && !clipped && anchor.left == anchor.right &&
+        anchor.top == anchor.bottom && (anchor.left || anchor.top)) {
+        RECT screen{};
+        const auto screenResult = view->GetScreenExt(&screen);
+        diagnosticResult(L"GetScreenExt", screenResult);
+        pointVisible = SUCCEEDED(screenResult) && anchor.left >= screen.left &&
+                       anchor.left < screen.right && anchor.top >= screen.top &&
+                       anchor.top < screen.bottom;
+        win32::diagnostic::tsfLogger().event(
+            win32::diagnostic::Level::Debug, "candidate_point_anchor",
+            {{"hr", static_cast<uint32_t>(screenResult)},
+             {"visible", pointVisible ? "true" : "false"},
+             {"left", screen.left},
+             {"top", screen.top},
+             {"right", screen.right},
+             {"bottom", screen.bottom}});
+    }
     bool clippedCaretVisible = false;
     if (SUCCEEDED(result) && clipped && fallback &&
         anchor.bottom > anchor.top && anchor.right >= anchor.left) {
@@ -551,7 +574,8 @@ void Tsf::updateCandidates(TfEditCookie cookie, ITfContext *context,
              {"bottom", screen.bottom}});
     }
     if (FAILED(result) || (clipped && !clippedCaretVisible) ||
-        anchor.bottom <= anchor.top || anchor.right < anchor.left) {
+        (anchor.bottom <= anchor.top && !pointVisible) ||
+        anchor.right < anchor.left) {
         win32::diagnostic::tsfLogger().event(
             win32::diagnostic::Level::Debug, "candidate_hidden",
             {{"reason", FAILED(result) ? "extent_failed"

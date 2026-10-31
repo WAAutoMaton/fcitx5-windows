@@ -48,10 +48,20 @@ logging is enabled. A null owner assumes physical coordinates. A clipped
 composition falls back to the collapsed selection range. If that caret is also
 reported as clipped, valid geometry overlapping the document display returned by
 `GetScreenExt` can still anchor the popup. This accommodates hosts that report a
-visible caret as clipped. Empty or non-overlapping geometry, unavailable document
-display bounds, hidden/minimized owners, invalid UTF-8 and empty candidates hide
-the popup. Detailed logging records the display bounds and the clipped-caret
+visible caret as clipped. Clipped geometry without a visible caret,
+hidden/minimized owners, invalid UTF-8 and empty candidates hide the popup.
+Detailed logging records the display bounds and the clipped-caret
 acceptance decision as `candidate_clipped_caret`.
+
+A successful zero-height or malformed composition extent also retries the
+collapsed selection. If the host supplies only an unclipped point for that
+selection, use it as the popup anchor when it lies inside the valid document
+display bounds from `GetScreenExt`. This supports game hosts such as Unity
+that provide an insertion position without text dimensions. The all-zero
+rectangle remains [TSF's invisible-text sentinel](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontextview-gettextext);
+clipped points, failed display
+queries and points outside the document display stay hidden. Detailed logging
+records display bounds and acceptance as `candidate_point_anchor`.
 
 `TS_E_NOLAYOUT` after a preedit write is temporary: keep the visible popup at its
 last physical anchor and update it with the applied snapshot for up to 250 ms.
@@ -132,6 +142,8 @@ content at retained anchors, merged read-only layout sessions, applied versus
 queued snapshots, clipped-composition caret fallback, clipped carets overlapping
 document bounds, invalid/empty/offscreen geometry, timeout/recovery, commit,
 cancel, hidden owners and late sessions after focus loss/deactivation.
+Point-anchor cases cover composition-to-caret fallback, document boundaries,
+negative coordinates, clipped points and the all-zero invisible-text sentinel.
 It also checks host UIElement show/hide and candidate publication without HWND
 or usable popup geometry, using explicit adapter callbacks.
 
