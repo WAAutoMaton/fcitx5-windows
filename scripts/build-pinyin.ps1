@@ -119,7 +119,7 @@ try {
         Invoke-Checked 'cmake' @('-E', 'copy_directory', "$cache/usr/share/libime", "$Prefix/share/libime")
         Invoke-Checked 'cmake' @('-E', 'copy_directory', "$cache/usr/lib/libime", "$Prefix/lib/libime")
     }
-    Invoke-Checked 'cmake' (@('-S', "$root/chinese-addons", '-B', "$BuildRoot/pinyin-addons",
+    Invoke-Checked 'cmake' (@('-S', "$root/plugins/chinese-addons", '-B', "$BuildRoot/pinyin-addons",
         '-DENABLE_GUI=OFF', '-DENABLE_OPENCC=OFF', '-DENABLE_CLOUDPINYIN=OFF',
         '-DENABLE_DATA=ON', '-DENABLE_TOOLS=OFF') + $common + $dependencyOptions)
     Invoke-Checked 'cmake' @('--build', "$BuildRoot/pinyin-addons", '-j', "$Jobs")

@@ -8,5 +8,8 @@
 	path = libime
 	url = https://github.com/fcitx/libime.git
 [submodule "chinese-addons"]
-	path = chinese-addons
+	path = plugins/chinese-addons
 	url = https://github.com/fcitx/fcitx5-chinese-addons.git
+[submodule "wenzhounese"]
+	path = plugins/wenzhounese
+	url = https://github.com/WAAutoMaton/fcitx5-wenzhounese.git

@@ -34,8 +34,37 @@ jobs:
             mingw-w64-clang-x86_64-zstd
           Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
 
-      - name: Build complete Release runtime tree without tests
+      - name: Build base Release runtime tree without tests
         run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/ci-runtime -BuildRoot ./build/ci-x64 -DataMode Prebuilt -ModernApps -SkipTests
+
+      - name: Build full runtime with every plugin
+        run: |
+          Copy-Item -LiteralPath dist/ci-runtime -Destination dist/ci-runtime-full -Recurse
+          ./scripts/build-plugins.ps1 -CorePrefix ./build/ci-x64/prefix -Prefix ./dist/ci-runtime-full -BuildRoot ./build/ci-x64/plugins
+
+      - name: Verify bundled Wenzhounese discovery and commits
+        run: |
+          $sdk = (Resolve-Path build/ci-x64/prefix).Path.Replace('\', '/')
+          $env:MSYS2_ROOT = 'C:/msys64'
+          cmake -S tools/addon-probe -B build/ci-x64/addon-probe -G Ninja `
+            "-DCMAKE_TOOLCHAIN_FILE=$PWD/cmake/windows-addon-toolchain.cmake" `
+            "-DFCITX5_WINDOWS_SDK=$sdk" "-DCMAKE_INSTALL_PREFIX=$sdk" `
+            -DARCH=AMD64 -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_CXX_COMPILER=C:/msys64/clang64/bin/clang++.exe `
+            -DCMAKE_MAKE_PROGRAM=C:/msys64/clang64/bin/ninja.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Addon probe configuration failed.' }
+          cmake --build build/ci-x64/addon-probe
+          if ($LASTEXITCODE -ne 0) { throw 'Addon probe build failed.' }
+          ctest --test-dir build/ci-x64/addon-probe --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Plugin directory tests failed.' }
+          Copy-Item build/ci-x64/addon-probe/addon_probe.exe dist/ci-runtime-full/bin/
+          Copy-Item build/ci-x64/addon-probe/addon_probe.exe dist/ci-runtime/bin/
+          try {
+            & ./dist/ci-runtime-full/bin/addon_probe.exe "$PWD/dist/ci-runtime-full" --default wenzhounese nyi
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled Wenzhounese probe failed.' }
+            & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" "$PWD/dist/ci-runtime/plugins" wenzhounese --absent
+            if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains Wenzhounese.' }
+          } finally { Remove-Item -LiteralPath dist/ci-runtime-full/bin/addon_probe.exe, dist/ci-runtime/bin/addon_probe.exe }
 
       - name: Prepare portable TSF tests and probes
         run: |
@@ -75,11 +104,18 @@ jobs:
           }
           ConvertTo-Json -InputObject @($registration) -Depth 5 | Set-Content "$bundle/tests.json" -Encoding utf8
 
-      - name: Upload shared runtime tree
+      - name: Upload base runtime tree
         uses: actions/upload-artifact@v7
         with:
-          name: Fcitx5-runtime-x64
+          name: Fcitx5-runtime-base-x64
           path: dist/ci-runtime/
+          if-no-files-found: error
+
+      - name: Upload full runtime tree
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-runtime-full-x64
+          path: dist/ci-runtime-full/
           if-no-files-found: error
 
       - name: Upload portable TSF tests and probes
@@ -108,7 +144,7 @@ jobs:
       - name: Download shared runtime tree
         uses: actions/download-artifact@v8
         with:
-          name: Fcitx5-runtime-x64
+          name: Fcitx5-runtime-base-x64
           path: dist/ci-runtime
 
       - name: Download portable TSF tests and probes
@@ -141,6 +177,9 @@ jobs:
 
       - name: Test unified build script
         run: ./scripts/test-build-and-deploy.ps1
+
+      - name: Test automatic plugin builds
+        run: ./scripts/test-build-plugins.ps1
 
       - name: Test installed TSF registration checks without system changes
         run: ./scripts/test-installer-registration.ps1
@@ -189,7 +228,7 @@ jobs:
         run: ./scripts/build-tsf.ps1 -Architecture x86 -BuildRoot ./build/ci-x86 -ModernApps
       - uses: actions/download-artifact@v8
         with:
-          name: Fcitx5-runtime-x64
+          name: Fcitx5-runtime-base-x64
           path: dist/ci-runtime
       - uses: actions/download-artifact@v8
         with:
@@ -211,6 +250,11 @@ jobs:
   package-installer-x64:
     needs: build-x64
     runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [base, full]
+        runtime: [runtime, no-runtime]
     steps:
       - name: Disable CRLF
         run: git config --global core.autocrlf false
@@ -222,7 +266,7 @@ jobs:
       - name: Download shared runtime tree
         uses: actions/download-artifact@v8
         with:
-          name: Fcitx5-runtime-x64
+          name: Fcitx5-runtime-${{ matrix.edition }}-x64
           path: dist/installer-stage
 
       - name: Install Inno Setup compiler
@@ -241,6 +285,7 @@ jobs:
           "FCITX5_ISCC_PATH=$($iscc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Download locked runtime dependencies
+        if: matrix.runtime == 'runtime'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build/installer-deps | Out-Null
@@ -255,15 +300,18 @@ jobs:
       - name: Test installer wizard without system changes
         run: ./scripts/test-installer-wizard.ps1 -IsccPath $env:FCITX5_ISCC_PATH
 
-      - name: Build installers with and without runtimes
+      - name: Build installer
         run: |
-          ./scripts/build-installer.ps1 -IsccPath $env:FCITX5_ISCC_PATH -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-setup
-          ./scripts/build-installer.ps1 -IsccPath $env:FCITX5_ISCC_PATH -Prefix ./dist/installer-stage -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName Fcitx5-${{ github.run_number }}-x64-no-runtime-setup -SkipRuntimes
+          $skipRuntimes = '${{ matrix.runtime }}' -eq 'no-runtime'
+          $suffix = if ($skipRuntimes) { '-no-runtime' } else { '' }
+          $package = 'Fcitx5-${{ github.run_number }}-${{ matrix.edition }}-x64' + $suffix + '-setup'
+          ./scripts/build-installer.ps1 -IsccPath $env:FCITX5_ISCC_PATH -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName $package -SkipRuntimes:$skipRuntimes
+          "FCITX5_PACKAGE=$package" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify installer metadata
         run: |
           Get-ChildItem dist/installer
-          foreach ($package in @('Fcitx5-${{ github.run_number }}-x64-setup', 'Fcitx5-${{ github.run_number }}-x64-no-runtime-setup')) {
+          foreach ($package in @($env:FCITX5_PACKAGE)) {
             foreach ($suffix in @('.exe', '.exe.sha256', '.manifest.txt')) {
               if (!(Test-Path -LiteralPath "dist/installer/$package$suffix" -PathType Leaf)) {
                 throw "Installer output missing: $package$suffix"
@@ -274,7 +322,7 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Fcitx5-installer-x64
+          name: Fcitx5-installer-${{ matrix.edition }}-x64-${{ matrix.runtime }}
           compression-level: 0
           if-no-files-found: error
           path: |
@@ -286,6 +334,10 @@ jobs:
     needs: package-installer-x64
     runs-on: windows-2025
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [base, full]
     steps:
       - name: Disable CRLF
         run: git config --global core.autocrlf false
@@ -295,7 +347,7 @@ jobs:
       - name: Download installer artifact
         uses: actions/download-artifact@v8
         with:
-          name: Fcitx5-installer-x64
+          name: Fcitx5-installer-${{ matrix.edition }}-x64-no-runtime
           path: dist/installer
 
       - name: Run install and uninstall smoke test
@@ -309,7 +361,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: installer-smoke-logs
+          name: installer-smoke-${{ matrix.edition }}-logs
           if-no-files-found: warn
           path: build/installer-smoke
 
@@ -326,7 +378,8 @@ jobs:
       - name: Download installer artifact
         uses: actions/download-artifact@v8
         with:
-          name: Fcitx5-installer-x64
+          pattern: Fcitx5-installer-*-x64-*
+          merge-multiple: true
 
       - name: Create Nightly release
         shell: bash
@@ -337,10 +390,10 @@ jobs:
           set -euo pipefail
           shopt -s failglob
           files=(
-            Fcitx5-*-x64-setup.exe
-            Fcitx5-*-x64-setup.exe.sha256
-            Fcitx5-*-x64-no-runtime-setup.exe
-            Fcitx5-*-x64-no-runtime-setup.exe.sha256
+            Fcitx5-*-base-x64-setup.exe{,.sha256}
+            Fcitx5-*-base-x64-no-runtime-setup.exe{,.sha256}
+            Fcitx5-*-full-x64-setup.exe{,.sha256}
+            Fcitx5-*-full-x64-no-runtime-setup.exe{,.sha256}
           )
 
           release_id=$(gh api "repos/$GH_REPO/releases" --paginate \

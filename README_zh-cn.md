@@ -25,10 +25,10 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 ## 安装
 
-[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)流程提供两种 Windows 11 x64 安装包及其 SHA256 文件：
+[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)流程提供四种 Windows 11 x64 安装包及其 SHA256 文件。`base` 仅包含 chinese-addons；`full` 包含全部插件（目前为 chinese-addons 和温州话）。每种版本均提供两种运行库组合：
 
-- `Fcitx5-<run>-x64-setup.exe`：附带 Visual C++ 和 Windows App Runtime 安装程序。
-- `Fcitx5-<run>-x64-no-runtime-setup.exe`：需要预先安装上述运行库，包括当前用户的 x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
+- `Fcitx5-<run>-<base|full>-x64-setup.exe`：附带 Visual C++ 和 Windows App Runtime 安装程序。
+- `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`：需要预先安装上述运行库，包括当前用户的 x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
 
 安装器将完整运行树安装到 Program Files，注册 TSF，配置安装发起用户的输入法并启动 Core。可选登录启动默认不勾选，并遵守手动关闭服务状态。CI 提供不含运行库包的机器级安装/注册/卸载 smoke；干净机器完整用户初始化、升级、UAC 用户身份处理及重启清理仍需验证。构建包含独立的 x64/x86 TSF，共享 x64 Core；x86 真实应用输入仍待系统验收，不提供原生 ARM64 TSF。详见[安装实现与验证边界](docs/windows-installer-design.md)。
 

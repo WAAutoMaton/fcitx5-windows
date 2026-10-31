@@ -73,7 +73,7 @@ Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $license -Force
 foreach ($source in @(
         @{ Path = 'fcitx5/COPYING'; Name = 'fcitx5-COPYING' },
         @{ Path = 'libime/LICENSE'; Name = 'libime-LICENSE' },
-        @{ Path = 'chinese-addons/LICENSE'; Name = 'chinese-addons-LICENSE' },
+        @{ Path = 'plugins/chinese-addons/LICENSE'; Name = 'chinese-addons-LICENSE' },
         @{ Path = 'windows-cross/LICENSE'; Name = 'windows-cross-LICENSE' })) {
     $sourcePath = Join-Path $root $source.Path
     if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
@@ -86,7 +86,7 @@ New-Item -ItemType Directory -Force $metadata | Out-Null
 $runtimeManifest = Join-Path $metadata "$PackageName.runtime.json"
 $runtimeFiles = Join-Path $metadata "$PackageName.files.iss"
 $runtime = @()
-foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'settings', 'licenses')) {
+foreach ($directory in @('bin', 'lib', 'share', 'tsf', 'settings', 'licenses', 'plugins')) {
     $path = Join-Path $Prefix $directory
     if (Test-Path -LiteralPath $path) {
         $linked = @(Get-ChildItem -LiteralPath $path -Recurse -Force | Where-Object {

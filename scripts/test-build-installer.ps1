@@ -120,12 +120,26 @@ try {
                 throw "Incorrect runtime file digest: $($record.path)"
             }
         }
+        # Full packages must own plugin DLLs, data and licenses just like Core files.
+        foreach ($relative in @('plugins/example/lib/fcitx5/example.dll',
+                'plugins/example/share/libime/example.dict', 'plugins/example/licenses/LICENSE')) {
+            $file = Join-Path $prefix $relative
+            New-Item -ItemType Directory -Force (Split-Path $file) | Out-Null
+            [IO.File]::WriteAllText($file, 'plugin fixture')
+        }
         New-Item -ItemType Directory -Force $dependencies | Out-Null
         Set-Content -LiteralPath "$dependencies/vc_redist.x64.exe" -Value 'fixture' -Encoding ascii
         Assert-Failure { & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -WhatIf } 'Missing installer dependency: WindowsAppRuntimeInstall-x64.exe'
         Set-Content -LiteralPath "$dependencies/WindowsAppRuntimeInstall-x64.exe" -Value 'fixture' -Encoding ascii
         & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -PackageVersion '0.1.2.0' | Out-Null
         $bundled = 'Fcitx5-0.1.2.0-x64-setup'
+        $fullManifest = Get-Content -Raw -LiteralPath "$output/metadata/$bundled.runtime.json" | ConvertFrom-Json
+        foreach ($relative in @('plugins/example/lib/fcitx5/example.dll',
+                'plugins/example/share/libime/example.dict', 'plugins/example/licenses/LICENSE')) {
+            if (@($fullManifest.files | Where-Object path -eq $relative).Count -ne 1) {
+                throw "Full installer is missing plugin payload: $relative"
+            }
+        }
         if ($testState.CompilerCalls.Count -ne 2 -or $testState.CompilerCalls[1] -notcontains '/DBundleRuntimes=1') {
             throw 'Default package did not enable runtime bundling.'
         }

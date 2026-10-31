@@ -6,8 +6,10 @@ custom build paths, installer packaging, validation and input-method registratio
 
 ## Installer Packages
 
-The CI/Nightly workflow packages Windows 11 x64 installers with and without
-bundled Visual C++/Windows App Runtime installers. See
+The CI/Nightly workflow packages four Windows 11 x64 installers: `base`/`full`
+crossed with bundled/no bundled Visual C++/Windows App Runtime installers.
+`base` contains chinese-addons; `full` contains every plugin under `plugins/`,
+currently chinese-addons and Wenzhounese. See
 [Install in the README](../README.md#install) for package selection and removal,
 and [installer implementation](windows-installer-design.md) for current behavior
 and unverified system-installation scenarios. The build/deploy and registration
@@ -66,6 +68,8 @@ It stages the complete
 runtime under `build/all/prefix`, runs the default TSF CTest suite, then
 copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
 It does not register/unregister TSF, stop applications or start services.
+After migrating an existing checkout to the `plugins/` source layout, use a new
+`-BuildRoot` for chinese-addons because CMake caches retain the old source path.
 
 | Option | Default / Behavior |
 | --- | --- |
@@ -140,6 +144,25 @@ CMake build does not build/deploy libime, chinese-addons, TSF, Settings or input
 method data.
 
 ## Independent Input-Method Plugins
+
+Plugin source submodules live in `plugins/chinese-addons`, `plugins/wenzhounese`,
+and future `plugins/<name>` directories. chinese-addons is built by
+`build-pinyin.ps1` as part of the base runtime. To extend an existing base runtime
+with every additional plugin using the same build's SDK:
+
+```powershell
+./scripts/build-plugins.ps1 -CorePrefix ./build/all/prefix -Prefix ./dist/pinyin
+```
+
+The script discovers direct plugin directories automatically, builds each with
+the generic Windows addon toolchain and installs its runtime files and licenses
+under `Prefix/plugins/<name>`. New plugins must provide a CMake project compatible
+with that toolchain and install their runtime files into `bin`, `lib` and `share`.
+Missing/uninitialized projects fail the build. Private DLL dependencies are
+audited and additional shared runtime DLLs are copied from the matching SDK or
+dependency prefix. `-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-Jobs` and
+`-WhatIf` are also supported. CI copies the base tree before extending it, keeps
+the SDK at its original location and packages both editions independently.
 
 Additional input methods can use the existing shared-library addon loader and
 the SDK from the installed Core/libime staging prefix. See
@@ -302,11 +325,11 @@ run in separate jobs:
 
 | Job | Responsibility |
 | --- | --- |
-| `build-x64` | Run the unified build with `-ModernApps -SkipTests`; upload the complete runtime tree, portable TSF tests/probes and standalone Settings artifact |
+| `build-x64` | Build base with `-ModernApps -SkipTests`, copy it and build all additional plugins using the same SDK; verify Wenzhounese commits and upload base/full runtime trees, portable TSF tests/probes and standalone Settings |
 | `test-x64` | Download the x64 runtime and tests; run build-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, relocated engine translations, default CTest and dictionary integration checks |
 | `test-x86` | Build/test x86 in an independent VS/LLVM tree; run x86 Pinyin/TSF probes and concurrent x86/x64 Pipe clients against the shared x64 Core |
-| `package-installer-x64` | Download the same runtime, run packaging-script regressions and build installers with and without bundled runtimes; no component recompilation |
-| `installer-smoke-x64` | Download the no-runtime x64 installer, run a silent machine-only install, require modern TSF registration, uninstall and check registration cleanup, and upload the installer log |
+| `package-installer-x64` | Use a 2×2 matrix of base/full and runtime/no-runtime; download the matching runtime tree, run packaging regressions and build one installer per job |
+| `installer-smoke-x64` | Test each edition's no-runtime installer with a silent machine-only install, modern TSF registration checks, uninstall and registration cleanup |
 | `release` | Wait for the x64 build, tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
 
 `test-x64` and `package-installer-x64` both depend only on `build-x64`, so they
@@ -316,8 +339,8 @@ TSF build is no longer part of this workflow.
 
 Nightly publication uses GitHub CLI with job-scoped `contents: write` permission.
 Release jobs run one at a time, replace the previous `latest` prerelease and its
-assets, and move the tag to the workflow commit. Only the two x64 installers
-(with and without bundled runtimes) and their SHA256 files are published, with
+assets, and move the tag to the workflow commit. Only the four x64 installers
+(base/full, each with and without bundled runtimes) and their SHA256 files are published, with
 generated release notes. Missing asset patterns stop publication before the
 previous release is changed. Core developer archives are no longer packaged
 or uploaded by CI.
@@ -329,8 +352,8 @@ downloaded bundle's absolute commands and working directories, without
 reconfiguring CMake or depending on the original runner's checkout path.
 
 All multi-file artifacts use the artifact action's default ZIP archive mode.
-Installer artifacts use compression level zero. Release downloads only the
-named installer artifact, without merging the internal runtime and test bundles.
+Installer artifacts use compression level zero. Release merges the four
+`Fcitx5-installer-*-x64-*` artifacts; internal runtime and test bundles stay separate.
 
 ## Build Installer Packages
 

@@ -10,7 +10,7 @@ $patches = @{
     'chinese-addons' = @('chinese-addons-windows.patch', 'chinese-addons-windows-table.patch')
 }
 foreach ($repository in $patches.Keys) {
-    $source = Join-Path $root $repository
+    $source = if ($repository -eq 'chinese-addons') { "$root/plugins/chinese-addons" } else { Join-Path $root $repository }
     $revision = & git -C $source rev-parse HEAD
     if ($LASTEXITCODE -ne 0 -or $revision -ne $lock.repositories.$repository) {
         throw "Unexpected $repository revision. Initialize the pinned submodules first."

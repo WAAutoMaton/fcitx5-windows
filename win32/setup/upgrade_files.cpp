@@ -183,6 +183,7 @@ bool runtimePath(const fs::path &path) {
     const auto first = path.begin()->wstring();
     return first == L"bin" || first == L"lib" || first == L"share" ||
            first == L"tsf" || first == L"settings" || first == L"licenses" ||
+           first == L"plugins" ||
            path == L"setup/Fcitx5SetupHelper.exe" ||
            path == L"setup/managed-install";
 }

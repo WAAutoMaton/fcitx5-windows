@@ -15,7 +15,7 @@
 - `src/`、`CMakeLists.txt`：Core 宿主和根工程。
 - `win32/dll/`、`win32/tsf/`、`win32/ipc/`：COM/注册、TSF、候选窗、语言栏和 Pipe 客户端。
 - `win32/settings/`：独立 WinUI 3 Settings 工程。
-- `fcitx5/`、`libime/`、`chinese-addons/`：固定版本子模块；`windows-cross/`：Windows 工具链子模块。不要未经要求升级或提交子模块版本变化。
+- `fcitx5/`、`libime/`、`plugins/` 下各插件：固定版本子模块；`windows-cross/`：Windows 工具链子模块。不要未经要求升级或提交子模块版本变化。
 - `scripts/`、`win32/scripts/`、`win32/tests/`：构建、部署、测试和注册/释放辅助脚本。
 - 构建与部署细节见 `docs/build.md`、`docs/pinyin.md`；设置、候选窗和安装器设计分别见 `docs/windows-settings-design.md`、`docs/windows-candidate-rendering.md`、`docs/windows-installer-design.md`。UI 语言、Sandboxie、现代应用和开发日志分别见 `docs/windows-ui-localization-design.md`、`docs/windows-sandboxie-design.md`、`docs/windows-modern-apps-design.md`、`docs/windows-developer-logging-design.md`。
 

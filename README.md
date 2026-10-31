@@ -51,10 +51,12 @@ outside the validated scope.
 ## Install
 
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
-workflow publishes two Windows 11 x64 installers and their SHA256 files:
+workflow publishes four Windows 11 x64 installers and their SHA256 files.
+Choose `base` for chinese-addons only, or `full` for all bundled plugins
+(currently chinese-addons and Wenzhounese). Each edition has two runtime variants:
 
-- `Fcitx5-<run>-x64-setup.exe`: bundles Visual C++ and Windows App Runtime installers.
-- `Fcitx5-<run>-x64-no-runtime-setup.exe`: requires those runtimes to be installed
+- `Fcitx5-<run>-<base|full>-x64-setup.exe`: bundles Visual C++ and Windows App Runtime installers.
+- `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`: requires those runtimes to be installed
   beforehand, including x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`
   for the current user.
 

@@ -22,7 +22,7 @@
 - `src/windowsdictionaries.cpp`：扫描第三方词库目录，在 Core 主事件循环触发上游重载并查询实际加载状态。
 - `win32/settings/SettingsWindow.cpp`：通过 `XamlReader` 创建有序输入法列表、共享设置面板和拼音词库 tab，后台执行 IPC，支持应用选项、草稿处理和连接重试。
 - `win32/settings/keycapture.h`：快捷键录制状态与 portable key 转换；`win32/settings/diagnostics.h`、`main.cpp`、`App.cpp`：操作阶段、异常及窗口/进程退出诊断。
-- `chinese-addons/im/pinyin/`：复用上游 `setUseShuangpin()`、`ShuangpinProfile`、`setConfig()` 和已安装的 `shuangpin.conf`。
+- `plugins/chinese-addons/im/pinyin/`：复用上游 `setUseShuangpin()`、`ShuangpinProfile`、`setConfig()` 和已安装的 `shuangpin.conf`。
 
 子模块版本保持固定；词库加载状态查询扩展记录在主仓库 `patches/chinese-addons-windows.patch`，不创建本地子模块提交。
 

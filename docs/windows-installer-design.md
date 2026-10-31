@@ -1,6 +1,6 @@
 # Windows 安装包实现与设计
 
-安装实现、双版本打包、可选登录启动和 CI/Nightly 发布流程已接入。CI 提供不含运行库包的机器级安装/注册/卸载 smoke；完整用户初始化、升级和重启清理仍需验收，不能将打包或机器级 smoke 成功描述为安装后已可直接使用。
+安装实现、base/full × 运行库双版本打包、可选登录启动和 CI/Nightly 发布流程已接入。CI 对 base/full 均提供不含运行库包的机器级安装/注册/卸载 smoke；完整用户初始化、升级和重启清理仍需验收，不能将打包或机器级 smoke 成功描述为安装后已可直接使用。
 
 ## 当前交付与支持范围
 
@@ -8,10 +8,10 @@
 
 | CI 包名 | 运行库要求 |
 | --- | --- |
-| `Fcitx5-<run>-x64-setup.exe` | 附带 Microsoft x64 VC++ Redistributable 和 Windows App Runtime 安装程序 |
-| `Fcitx5-<run>-x64-no-runtime-setup.exe` | 不附带或执行上述安装程序；须预先满足运行库要求 |
+| `Fcitx5-<run>-<edition>-x64-setup.exe` | 附带 Microsoft x64 VC++ Redistributable 和 Windows App Runtime 安装程序 |
+| `Fcitx5-<run>-<edition>-x64-no-runtime-setup.exe` | 不附带或执行上述安装程序；须预先满足运行库要求 |
 
-两种包都包含完整 Core、TSF、Settings 和原生安装 helper。Settings 继续使用 framework-dependent Windows App SDK 1.8，要求当前用户有 x64 Framework/DDLM >= `8000.994.2142.0` 和 Visual C++ 运行库。不含运行库版本仍执行 Settings `--runtime-check`，缺少依赖时用户初始化不能成功完成。
+四种包都包含完整 Core、TSF、Settings 和原生安装 helper。`edition` 为 `base` 时仅包含 chinese-addons；`full` 自动包含 `plugins/` 下全部插件，目前新增温州话。额外插件部署到安装树 `plugins/<name>`，其文件进入安装/升级所有权清单。Settings 继续使用 framework-dependent Windows App SDK 1.8，要求当前用户有 x64 Framework/DDLM >= `8000.994.2142.0` 和 Visual C++ 运行库。不含运行库版本仍执行 Settings `--runtime-check`，缺少依赖时用户初始化不能成功完成。
 
 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.22000` 和 `PrivilegesRequired=admin`，使用固定 AppId。不声明 Windows 10 或 ARM64 仿真安装支持。x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册；两者使用同一 CLSID/profile 和独立 registry view，详见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)。
 
@@ -47,6 +47,7 @@
   setup/managed-install + install-state
   setup/WindowsAppRuntimeInstall-x64.exe  （仅含运行库版）
   licenses/
+  plugins/<name>/bin + lib + share + licenses  （full 的额外插件）
   unins*.exe + 卸载记录
 ```
 
@@ -109,20 +110,20 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 本地命令和打包参数见 [构建安装包](build.md#build-installer-packages)。打包使用独立完整暂存树，`build-installer.ps1` 会复制许可证并写入 `setup/managed-install`，不能对正在使用的开发运行树执行。它不注册、不启动服务、不执行运行库安装；`-WhatIf` 只验证必要输入并预览。
 
-依赖锁记录参考 Inno `7.1.0`；脚本和 CI 实际校验主版本为 7，并记录实际版本。CI 当前通过 winget 安装 Inno Setup 7，未使用锁文件的 Inno 安装程序 SHA256 来固定编译器补丁版本。CI 将检查过的完整路径传给两次 `-IsccPath`，避免 PATH 中旧版 6 被误选。
+依赖锁记录参考 Inno `7.1.0`；脚本和 CI 实际校验主版本为 7，并记录实际版本。CI 当前通过 winget 安装 Inno Setup 7，未使用锁文件的 Inno 安装程序 SHA256 来固定编译器补丁版本。各打包 job 将检查过的完整路径传给 `-IsccPath`，避免 PATH 中旧版 6 被误选。
 
 | Job | 当前流程 |
 | --- | --- |
-| `build-x64` | 统一 Release 构建一次，显式 `-ModernApps -SkipTests`，上传完整运行树、便携 TSF 测试/probes 及独立 Settings artifact |
+| `build-x64` | 统一 Release 构建 base，复用同一 SDK 构建全部额外插件生成 full，验证温州话加载与提交，上传两套运行树及共享测试/Settings artifact |
 | `test-x64` | 复用运行树和测试包，执行脚本/注册检查回归、图标校验、默认 CTest、拼音/TSF/settings、五笔/输入法列表、引擎翻译及词库验证 |
 | `test-x86` | 独立构建/测试 x86 TSF；对 x64 Core 执行 x86 拼音/TSF 和双架构 Pipe 并发/断线 probe |
-| `package-installer-x64` | 与测试并行复用运行树，下载并核对运行库 SHA256，执行模拟打包回归，构建两种安装包并核对文件存在 |
-| `installer-smoke-x64` | 不含运行库包静默 machine-only 安装，检查实际 COM/profile/现代 category 双向注册、安装状态及卸载清理 |
+| `package-installer-x64` | base/full × runtime/no-runtime 四个矩阵 job，各下载对应运行树；含运行库 job 下载并核对运行库 SHA256，执行打包回归并生成对应安装包 |
+| `installer-smoke-x64` | 对 base/full 不含运行库包分别执行静默 machine-only 安装，检查实际 COM/profile/现代 category 双向注册、安装状态及卸载清理 |
 | `release` | 等待构建、测试、打包和安装 smoke 成功，在 master 且提交消息不含 `!release` 时用 GitHub CLI 更新 `latest` 预发布 |
 
-`Fcitx5-installer-x64` artifact 包含两种 EXE、各自 SHA256 和 manifest，共六个文件。Nightly 只发布两个 EXE 和各自 SHA256，共四个附件；不发布 manifest、Core 开发包或内部运行树/测试 artifact。PR 只上传 artifact，不发布 Nightly。
+四个 `Fcitx5-installer-<edition>-x64-<runtime>` artifact 各包含一个 EXE、SHA256 和 manifest。Nightly 汇总发布四个 EXE 和各自 SHA256，共八个附件；不发布 manifest、Core 开发包或内部运行树/测试 artifact。PR 只上传 artifact，不发布 Nightly。
 
-当前 CI 没有代码签名步骤。CI/Nightly 的两种安装包均声明 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`；替换 DLL 不补齐旧注册，需安装或显式重新注册。smoke 检查 category/item 双向索引、安装 DLL 路径/threading model 和启用的 profile；缺少现代声明阻止发布，但通过不代表真实现代应用派发已验证。注册断言本身由 `scripts/test-installer-registration.ps1` 使用模拟注册表回归，不修改本机注册。
+当前 CI 没有代码签名步骤。CI/Nightly 的四种安装包均声明 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`；替换 DLL 不补齐旧注册，需安装或显式重新注册。smoke 检查 category/item 双向索引、安装 DLL 路径/threading model 和启用的 profile；缺少现代声明阻止发布，但通过不代表真实现代应用派发已验证。注册断言本身由 `scripts/test-installer-registration.ps1` 使用模拟注册表回归，不修改本机注册。
 
 `installer-smoke-x64` 不安装 VC++/Windows App Runtime，也不执行原始用户配置。含运行库包、完整用户初始化、升级及重启后的延迟删除仍需干净 Windows VM 或 self-hosted runner 验证，不能把 smoke job 作为这些场景的验收。完整产物流向见 [CI 构建与产物](build.md#ci-build-and-artifact-flow)。
 
