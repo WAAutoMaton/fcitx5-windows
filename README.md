@@ -9,10 +9,10 @@ WinUI settings app manages the ordered input-method list and engine
 configuration. Unified x64 installers are available through the CI packaging
 and Nightly release workflow.
 
-## Features and Status
+## Features
 
-- Real Pinyin preedit, candidate selection and Chinese commits. Full Pinyin and
-  Xiaohe/Ziranma Shuangpin commits are verified by IPC and TSF probes.
+- Pinyin preedit, candidate selection and Chinese commits, with full Pinyin and
+  Xiaohe/Ziranma Shuangpin.
 - Keyboard candidate selection with number keys or Space, and `Ctrl+Space`
   cycling through the enabled input methods in the order set in Settings.
 - A nonactivating candidate popup with DirectWrite layout, Direct2D color-font
@@ -34,19 +34,10 @@ and Nightly release workflow.
 - Optional structured developer logs for Core, TSF and Settings, including
   Settings exit/exception diagnostics, without recording input text.
 - Sandboxie clients share the host Core through an explicit pipe rule.
-- AppContainer input transport and TSF candidate UIElement/Behavior are
-  implemented; signed installation and real modern-app dispatch still need validation.
+- AppContainer input transport and TSF candidate UIElement/Behavior.
 - Automatic background Core startup, with settings and service controls in the
   input indicator's right-click menu. AppContainer and Sandboxie clients require
   an already-running host Core; the installer offers optional login startup.
-
-Automated probes use real Pinyin, table-engine and TSF contexts, but simulate
-key/menu callbacks rather than Windows' registered event dispatch. The input
-method probes cover real Wubi commits and list management; other table methods
-still need broader application coverage. The popup has no mouse selection;
-host candidate actions are covered by unregistered UIElement probes. Full
-accessibility, real UWP input, Rime, ARM64 Pinyin/TSF, themes and multiple-monitor DPI remain
-outside the validated scope.
 
 ## Install
 
@@ -62,12 +53,9 @@ Choose `base` for fcitx5-chinese-addons only, or `full` for all bundled plugins
 
 The installer targets Program Files, registers TSF, configures the initiating
 user's input method and starts Core. Optional login startup is unchecked by
-default and respects a manual service stop. CI has a no-runtime, machine-only
-install/registration/uninstall smoke test; complete clean-machine user setup,
-upgrades, UAC user handling and restart cleanup still need validation.
-The build includes separate x64 and x86 TSF DLLs sharing the x64 Core. x86
-registered application input still needs system acceptance; native ARM64 TSF
-is not provided. See [installer status and limits](docs/windows-installer-design.md).
+default and respects a manual service stop. The build includes separate x64 and
+x86 TSF DLLs sharing the x64 Core; native ARM64 TSF is not provided. See
+[installer details](docs/windows-installer-design.md).
 
 For an installer-managed copy, use **Uninstall Fcitx5** in the Start menu or
 Windows' installed-apps list. User data and shared runtimes are retained;
@@ -93,9 +81,8 @@ Core, TSF, the setup helper and Settings, runs the default TSF CTest suite,
 and deploys to `dist/pinyin`. It uses checksum-verified precompiled dictionary/model data and
 reuses the build cache on subsequent runs.
 
-The script does not install tools/runtimes or register the input method. Before
-updating an existing deployment, choose `Stop Services` and close applications loading
-its DLL. See [build options and deployment details](docs/build.md) for custom
+Before updating an existing deployment, choose `Stop Services` and close
+applications loading its DLL. See [build options and deployment details](docs/build.md) for custom
 paths, individual builds and integration checks.
 
 ## Input-Method Plugins
@@ -128,10 +115,9 @@ Plugins must match Core's architecture, Fcitx5/libime versions, Windows patches,
 Clang Windows GNU toolchain
 and runtime libraries. Linux/macOS plugins and DLLs built with other toolchains
 cannot be used directly. Plugins should share the host's public Core/libime
-runtime libraries and avoid overwriting them. An online plugin manager and
-automatic ABI checks are not yet available. See the
-[Windows plugin guide](docs/windows-plugins.md) for the complete layout,
-dependencies and isolated validation steps.
+runtime libraries and avoid overwriting them. See the
+[Windows plugin guide](docs/windows-plugins.md) for the complete layout and
+dependencies.
 
 ## Run
 
@@ -171,7 +157,7 @@ Logs rotate automatically; maintenance removes expired files after 7 days and
 enforces capacity limits. See [developer diagnostics](docs/windows-developer-logging-design.md).
 
 For Sandboxie, follow the [host-sharing setup guide](docs/windows-sandboxie-design.md).
-Modern-app runtime behavior and acceptance limits are documented in
+Modern-app configuration is documented in
 [modern app support](docs/windows-modern-apps-design.md). CI/Nightly installers
 declare modern TSF categories; local builds require `-ModernApps`. Re-register
 after changing category declarations. AppContainer menus expose only Settings.
@@ -193,11 +179,11 @@ for previews, alternate paths and troubleshooting.
 ## Documentation
 
 - [Build, deployment and validation](docs/build.md)
-- [Windows installer implementation and validation limits](docs/windows-installer-design.md)
-- [Input-method architecture, individual builds and validation limits](docs/pinyin.md)
+- [Windows installer](docs/windows-installer-design.md)
+- [Input-method architecture and individual builds](docs/pinyin.md)
 - [Independent Windows input-method plugins and SDK builds](docs/windows-plugins.md)
 - [Windows settings design](docs/windows-settings-design.md)
-- [Candidate rendering and DPI validation](docs/windows-candidate-rendering.md)
+- [Candidate rendering](docs/windows-candidate-rendering.md)
 - [UI language and localization](docs/windows-ui-localization-design.md)
 - [Sandboxie host sharing and configuration](docs/windows-sandboxie-design.md)
 - [Modern app transport and TSF UIElement](docs/windows-modern-apps-design.md)

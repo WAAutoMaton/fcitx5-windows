@@ -5,9 +5,9 @@
 这是一个正在开发中的 Fcitx5 Windows 移植版本。在 AMD64 上通过 TSF 集成提供拼音、双拼以及多种 `fcitx5-chinese-addons` 码表输入法。
 Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设置程序管理有序输入法列表和引擎配置。统一 x64 安装包已接入 CI 打包和 Nightly 发布流程。
 
-## 功能与状态
+## 功能
 
-- 支持真实的拼音预编辑、候选选择和中文提交。全拼以及小鹤/自然码双拼提交已通过 IPC 和 TSF probe 验证。
+- 支持拼音预编辑、候选选择和中文提交，包括全拼以及小鹤/自然码双拼。
 - 支持使用数字键或空格选择候选，并使用 `Ctrl+Space` 按设置中的顺序轮换已启用的输入法。
 - 提供不抢焦点的候选浮窗，使用 DirectWrite 排版、Direct2D 彩色字体渲染和 Per-Monitor V2 定位。
 - 提供 Windows 输入法指示器，显示当前输入法的图标或简短标签，提示文本显示具体名称；英文键盘显示 `A`。左键点击按同一输入法列表轮换。
@@ -18,10 +18,8 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 - 引擎按键列表选项支持快捷键录制，也可手动编辑文本。
 - 可选的结构化开发日志覆盖 Core、TSF、Settings 及 Settings 退出/异常诊断，不记录输入文本。
 - Sandboxie 内的客户端通过显式 Pipe 规则共享宿主 Core。
-- 已接入 AppContainer 输入传输和 TSF 候选 UIElement/Behavior；签名安装和真实现代应用派发仍需验证。
+- 支持 AppContainer 输入传输和 TSF 候选 UIElement/Behavior。
 - 普通桌面 TSF 可在后台自动启动 Core，输入指示器的右键菜单提供设置和服务控制。AppContainer/Sandboxie 客户端要求宿主 Core 已运行；安装器提供可选登录启动项。
-
-自动化 probe 使用真实的拼音、码表引擎和 TSF context，但会模拟按键及菜单回调，不能替代 Windows 注册后的事件派发验证。输入法列表 probe 覆盖真实五笔提交和列表管理；其他码表输入法仍需更广泛的真实应用覆盖。自绘候选窗尚无鼠标选择，宿主候选动作由免注册 UIElement probe 覆盖。完整无障碍支持、真实 UWP 输入、Rime、ARM64 拼音/TSF、主题和多显示器 DPI 仍不在已验证范围内。
 
 ## 安装
 
@@ -30,7 +28,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 - `Fcitx5-<run>-<base|full>-x64-setup.exe`：附带 Visual C++ 和 Windows App Runtime 安装程序。
 - `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`：需要预先安装上述运行库，包括当前用户的 x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
 
-安装器将完整运行树安装到 Program Files，注册 TSF，配置安装发起用户的输入法并启动 Core。可选登录启动默认不勾选，并遵守手动关闭服务状态。CI 提供不含运行库包的机器级安装/注册/卸载 smoke；干净机器完整用户初始化、升级、UAC 用户身份处理及重启清理仍需验证。构建包含独立的 x64/x86 TSF，共享 x64 Core；x86 真实应用输入仍待系统验收，不提供原生 ARM64 TSF。详见[安装实现与验证边界](docs/windows-installer-design.md)。
+安装器将完整运行树安装到 Program Files，注册 TSF，配置安装发起用户的输入法并启动 Core。可选登录启动默认不勾选，并遵守手动关闭服务状态。构建包含独立的 x64/x86 TSF，共享 x64 Core；不提供原生 ARM64 TSF。详见[安装说明](docs/windows-installer-design.md)。
 
 安装器管理的版本请通过开始菜单的 **Uninstall Fcitx5** 或 Windows 已安装应用列表卸载。用户数据和共享运行库会保留；文件被占用时可能需要重启 Windows 才能完成删除。下文的 PowerShell 注册脚本用于开发部署。
 
@@ -47,7 +45,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 该脚本会初始化固定版本的子模块、应用 Windows 补丁、构建 AMD64 Release 版 Core、TSF、安装 helper 和 Settings，运行默认 TSF CTest 测试集，并部署到 `dist/pinyin`。脚本使用经过校验和验证的预编译词典/模型数据，并在后续运行中复用构建缓存。
 
-脚本不会安装工具或运行库，也不会注册输入法。更新已有部署前，请选择`关闭服务`并关闭加载其 DLL 的应用程序。自定义路径、单独构建和集成检查请参阅[构建选项和部署详情](docs/build.md)。
+更新已有部署前，请选择`关闭服务`并关闭加载其 DLL 的应用程序。自定义路径、单独构建和集成检查请参阅[构建选项和部署详情](docs/build.md)。
 
 ## 输入法插件
 
@@ -70,7 +68,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 ### 兼容要求
 
-各插件的构建和打包方法见其自身仓库。插件必须匹配 Core 的架构、Fcitx5/libime 版本、Windows 补丁及 Clang Windows GNU 工具链和运行库；Linux/macOS 插件或其他工具链生成的 DLL 不能直接使用。插件应共享宿主提供的 Core/libime 公共运行库，避免覆盖它们。目前尚无在线插件管理器或自动 ABI 校验。完整文件布局、依赖要求和隔离验证见 [Windows 插件指南](docs/windows-plugins.md)。
+各插件的构建和打包方法见其自身仓库。插件必须匹配 Core 的架构、Fcitx5/libime 版本、Windows 补丁及 Clang Windows GNU 工具链和运行库；Linux/macOS 插件或其他工具链生成的 DLL 不能直接使用。插件应共享宿主提供的 Core/libime 公共运行库，避免覆盖它们。完整文件布局和依赖要求见 [Windows 插件指南](docs/windows-plugins.md)。
 
 ## 运行
 
@@ -95,7 +93,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 在**全局设置**的**常规**页选择 UI 语言并应用后，重启服务使 Core 和 Settings 使用新语言。**开发者选项**可即时启用详细日志，并打开 `%LOCALAPPDATA%/Fcitx5/logs`。日志自动轮转，最多保留 7 天、占用不超过 512 MiB，详见[开发诊断](docs/windows-developer-logging-design.md)。
 
-Sandboxie 使用前请按[宿主共享配置指南](docs/windows-sandboxie-design.md)放行 Pipe。现代应用的运行策略和验收边界见[现代应用支持](docs/windows-modern-apps-design.md)。CI/Nightly 安装包启用现代 TSF category，本地构建需显式传入 `-ModernApps`；更改 category 后需重新注册。AppContainer 菜单仅提供设置入口。
+Sandboxie 使用前请按[宿主共享配置指南](docs/windows-sandboxie-design.md)放行 Pipe。现代应用配置见[现代应用支持](docs/windows-modern-apps-design.md)。CI/Nightly 安装包启用现代 TSF category，本地构建需显式传入 `-ModernApps`；更改 category 后需重新注册。AppContainer 菜单仅提供设置入口。
 
 放置在 `%APPDATA%/Fcitx5/pinyin/dictionaries` 中的兼容 Fcitx5/libime 二进制 `.dict` 文件会自动加载。格式和转换方法请参阅[词库详情](docs/pinyin.md#third-party-dictionaries)。
 
@@ -110,11 +108,11 @@ Sandboxie 使用前请按[宿主共享配置指南](docs/windows-sandboxie-desig
 ## 文档
 
 - [构建、部署与验证](docs/build.md)
-- [Windows 安装实现与验证边界](docs/windows-installer-design.md)
-- [输入法架构、单独构建与验证限制](docs/pinyin.md)
+- [Windows 安装说明](docs/windows-installer-design.md)
+- [输入法架构与单独构建](docs/pinyin.md)
 - [Windows 输入法插件设计与独立构建](docs/windows-plugins.md)
 - [Windows 设置设计](docs/windows-settings-design.md)
-- [候选窗渲染与 DPI 验证](docs/windows-candidate-rendering.md)
+- [候选窗渲染](docs/windows-candidate-rendering.md)
 - [UI 语言与国际化](docs/windows-ui-localization-design.md)
 - [Sandboxie 宿主共享与配置](docs/windows-sandboxie-design.md)
 - [现代应用传输与 TSF UIElement](docs/windows-modern-apps-design.md)
