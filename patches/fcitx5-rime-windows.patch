@@ -1,0 +1,48 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d8fd713..93f2451 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -26,9 +26,17 @@ if ("${Rime_VERSION}" VERSION_LESS "1.10.0")
+     add_definitions(-DFCITX_RIME_NO_HIGHLIGHT_CANDIDATE)
+ endif()
+ 
+-if(NOT DEFINED RIME_DATA_DIR)
+-  find_package(RimeData REQUIRED)
+-endif(NOT DEFINED RIME_DATA_DIR)
++if (WIN32)
++  # Windows packages carry the schemas in the plugin prefix. Runtime lookup
++  # uses Fcitx5 StandardPaths so the installed tree remains relocatable.
++  set(RIME_DATA_DIR "")
++  set(RIME_DATA_INSTALL_DIR "${CMAKE_INSTALL_DATADIR}/rime-data")
++else()
++  if(NOT DEFINED RIME_DATA_DIR)
++    find_package(RimeData REQUIRED)
++  endif(NOT DEFINED RIME_DATA_DIR)
++  set(RIME_DATA_INSTALL_DIR "${RIME_DATA_DIR}")
++endif()
+ message(STATUS "Precompiler macro RIME_DATA_DIR is set to \"${RIME_DATA_DIR}\"")
+ add_definitions(-DRIME_DATA_DIR="${RIME_DATA_DIR}")
+ add_definitions(-DFCITX_GETTEXT_DOMAIN=\"fcitx5-rime\")
+diff --git a/data/CMakeLists.txt b/data/CMakeLists.txt
+index bd5cbde..04f1eb1 100644
+--- a/data/CMakeLists.txt
++++ b/data/CMakeLists.txt
+@@ -2,4 +2,4 @@ install(DIRECTORY 48x48 scalable DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hic
+         PATTERN .* EXCLUDE
+         PATTERN *~ EXCLUDE)
+ 
+-install(FILES fcitx5.yaml DESTINATION "${RIME_DATA_DIR}")
++install(FILES fcitx5.yaml DESTINATION "${RIME_DATA_INSTALL_DIR}")
+diff --git a/src/rimeengine.cpp b/src/rimeengine.cpp
+index c762aa1..f9ddd9a 100644
+--- a/src/rimeengine.cpp
++++ b/src/rimeengine.cpp
+@@ -184,7 +184,7 @@ RimeEngine::RimeEngine(Instance *instance)
+     : instance_(instance), api_(EnsureRimeApi()),
+       factory_([this](InputContext &ic) { return new RimeState(this, ic); }),
+       sessionPool_(this, getSharedStatePolicy()) {
+-    if constexpr (isAndroid() || isApple()) {
++    if constexpr (isWindows() || isAndroid() || isApple()) {
+         const auto &sp = StandardPaths::global();
+         std::string defaultYaml =
+             sp.locate(StandardPathsType::Data, "rime-data/default.yaml");

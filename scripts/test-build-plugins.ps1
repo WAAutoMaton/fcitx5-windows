@@ -8,6 +8,7 @@ $entry = "$temporary/scripts/build-plugins.ps1"
 $sdk = "$temporary/sdk"
 $prefix = "$temporary/runtime"
 $buildRoot = "$temporary/build"
+$msys2 = "$temporary/msys2"
 $testState = @{ Builds = @{}; Calls = @(); GitCalls = @(); FailBuild = $false; FailLfs = $false }
 
 # Simulate resource-only plugins, without executing a compiler or system actions.
@@ -49,18 +50,26 @@ try {
         New-Item -ItemType Directory -Force "$sdk/lib/cmake/$name" | Out-Null
         [IO.File]::WriteAllText("$sdk/lib/cmake/$name/${name}Config.cmake", 'fixture')
     }
+    New-Item -ItemType Directory -Force "$msys2/clang64/share/rime-data" | Out-Null
+    [IO.File]::WriteAllText("$msys2/clang64/share/rime-data/default.yaml", 'rime fixture')
     $environmentBefore = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
     & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -WhatIf
     if ((Test-Path $prefix) -or (Test-Path $buildRoot) -or $testState.Calls.Count) {
         throw 'WhatIf changed the deployment or invoked CMake.'
     }
     Assert-Failure { & $entry -CorePrefix "$temporary/missing-sdk" -Prefix $prefix } 'matching installed Core/libime SDK'
-    foreach ($name in @('first', 'future-plugin')) {
+    foreach ($name in @('first', 'fcitx5-rime', 'future-plugin')) {
         $source = "$temporary/plugins/$name"
         New-Item -ItemType Directory -Force $source | Out-Null
         [IO.File]::WriteAllText("$source/CMakeLists.txt", 'fixture')
         [IO.File]::WriteAllText("$source/LICENSE", 'plugin license')
-        & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot | Out-Null
+        & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 | Out-Null
+        if ($name -eq 'fcitx5-rime') {
+            if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-rime/share/rime-data/default.yaml")) {
+                throw 'Rime data was not copied into the plugin package.'
+            }
+            continue
+        }
         foreach ($relative in @("plugins/$name/share/fcitx5/inputmethod/$name.conf", "plugins/$name/licenses/LICENSE")) {
             if (!(Test-Path -LiteralPath "$prefix/$relative")) { throw "Missing automatically discovered plugin output: $relative" }
         }
@@ -69,17 +78,17 @@ try {
         throw 'fcitx5-chinese-addons was rebuilt as an external plugin.'
     }
     $lfsCalls = @($testState.GitCalls | ForEach-Object { $_ -join ' ' } | Where-Object { $_ -match ' lfs pull$' })
-    if ($testState.GitCalls.Count -ne 3 -or $lfsCalls.Count -ne 3) {
+    if ($testState.GitCalls.Count -ne 6 -or $lfsCalls.Count -ne 6) {
         throw 'Every plugin build must fetch Git LFS assets before building.'
     }
     $testState.FailLfs = $true
-    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot } 'git failed (1)'
+    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'git failed (1)'
     $testState.FailLfs = $false
     $testState.FailBuild = $true
-    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot } 'cmake failed (9)'
+    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'cmake failed (9)'
     $testState.FailBuild = $false
     New-Item -ItemType Directory -Force "$temporary/plugins/uninitialized" | Out-Null
-    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot } 'Plugin is not initialized'
+    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'Plugin is not initialized'
     $environmentAfter = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
     if (Compare-Object $environmentBefore $environmentAfter) { throw 'Plugin build changed the environment.' }
     Write-Output 'PASS: automatic discovery of future plugins, base exclusion, runtime/license deployment, missing SDK/submodules, build failure, WhatIf and environment restoration.'

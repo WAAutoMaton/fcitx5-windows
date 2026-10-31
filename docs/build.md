@@ -9,7 +9,7 @@ custom build paths, installer packaging, validation and input-method registratio
 The CI/Nightly workflow packages four Windows 11 x64 installers: `base`/`full`
 crossed with bundled/no bundled Visual C++/Windows App Runtime installers.
 `base` contains fcitx5-chinese-addons; `full` contains every plugin under `plugins/`,
-currently fcitx5-chinese-addons and fcitx5-wenzhounese. See
+currently fcitx5-chinese-addons, fcitx5-rime and fcitx5-wenzhounese. See
 [Install in the README](../README.md#install) for package selection and removal,
 and [installer implementation](windows-installer-design.md) for current behavior
 and unverified system-installation scenarios. The build/deploy and registration

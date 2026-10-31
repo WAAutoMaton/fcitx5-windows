@@ -72,6 +72,17 @@ try {
             "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe", '-DCMAKE_CXX_FLAGS=-fexperimental-library')
         Invoke-PluginCommand 'cmake' @('--build', $build, '-j', "$Jobs")
         Invoke-PluginCommand 'cmake' @('--install', $build)
+        if ($plugin.Name -eq 'fcitx5-rime') {
+            $rimeData = @("$sysroot/share/rime-data", "$sysroot/share/rime/data") |
+                Where-Object { Test-Path -LiteralPath $_ -PathType Container } |
+                Select-Object -First 1
+            if (!$rimeData) {
+                throw "fcitx5-rime requires the MSYS2 Rime data directory."
+            }
+            $rimeStage = "$stage/share/rime-data"
+            New-Item -ItemType Directory -Force $rimeStage | Out-Null
+            Copy-Item -Path "$rimeData/*" -Destination $rimeStage -Recurse -Force
+        }
         $destination = "$Prefix/plugins/$($plugin.Name)"
         New-Item -ItemType Directory -Force $destination | Out-Null
         foreach ($directory in @('bin', 'lib', 'share', 'licenses')) {
