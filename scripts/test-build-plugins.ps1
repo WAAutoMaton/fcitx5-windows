@@ -8,7 +8,7 @@ $entry = "$temporary/scripts/build-plugins.ps1"
 $sdk = "$temporary/sdk"
 $prefix = "$temporary/runtime"
 $buildRoot = "$temporary/build"
-$testState = @{ Builds = @{}; Calls = @(); FailBuild = $false }
+$testState = @{ Builds = @{}; Calls = @(); GitCalls = @(); FailBuild = $false; FailLfs = $false }
 
 # Simulate resource-only plugins, without executing a compiler or system actions.
 function cmake {
@@ -25,6 +25,12 @@ function cmake {
         [IO.File]::WriteAllText("$data/$($project.Name).conf", 'plugin fixture')
     }
     $status = if ($testState.FailBuild -and $args[0] -eq '--build') { 9 } else { 0 }
+    Set-Variable -Name LASTEXITCODE -Value $status -Scope 1
+}
+
+function git {
+    $testState.GitCalls += ,@($args)
+    $status = if ($testState.FailLfs) { 1 } else { 0 }
     Set-Variable -Name LASTEXITCODE -Value $status -Scope 1
 }
 
@@ -62,6 +68,13 @@ try {
     if ($testState.Builds.Values.Name -contains 'chinese-addons' -or (Test-Path "$prefix/plugins/chinese-addons")) {
         throw 'chinese-addons was rebuilt as an external plugin.'
     }
+    $lfsCalls = @($testState.GitCalls | ForEach-Object { $_ -join ' ' } | Where-Object { $_ -match ' lfs pull$' })
+    if ($testState.GitCalls.Count -ne 3 -or $lfsCalls.Count -ne 3) {
+        throw 'Every plugin build must fetch Git LFS assets before building.'
+    }
+    $testState.FailLfs = $true
+    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot } 'git failed (1)'
+    $testState.FailLfs = $false
     $testState.FailBuild = $true
     Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot } 'cmake failed (9)'
     $testState.FailBuild = $false

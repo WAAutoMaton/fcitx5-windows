@@ -58,6 +58,7 @@ try {
         if (!(Test-Path -LiteralPath "$($plugin.FullName)/CMakeLists.txt")) {
             throw "Plugin is not initialized or has no CMakeLists.txt: $($plugin.Name)"
         }
+        Invoke-PluginCommand 'git' @('-C', $plugin.FullName, 'lfs', 'pull')
         $build = "$BuildRoot/$($plugin.Name)"
         $stage = "$build/prefix"
         $env:PATH = "$CorePrefix/bin;$build/bin;" + ($runtimeDirectories -join ';') + ";$MSYS2Root/usr/bin;$oldPath"
