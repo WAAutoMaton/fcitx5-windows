@@ -605,9 +605,12 @@ updates keep English contexts in direct mode.
 Save errors and stale-revision conflicts are reported. Timed-out writes are
 queried before retrying. Core/TSF/settings must be deployed together.
 
-Pinyin and Shuangpin share a `WindowsPunctuation` option for Chinese/English
-punctuation. Core persists it in `Options/pinyin` and applies it to the upstream
-punctuation module, which is also used by table methods. TSF routes idle OEM
+Chinese/English punctuation is switched through the input method status menu.
+The punctuation module owns the shared state for Pinyin, Shuangpin and table
+methods, saving it to `conf/punctuation.conf` on autosave or normal Core exit.
+Settings omits the duplicate option; the obsolete `Options/pinyin/WindowsPunctuation`
+in `windows.conf` is ignored and removed on the next successful save, without migration.
+TSF routes idle OEM
 punctuation and Shift+number keys to Core for conversion; unconsumed keys pass
 through. See [settings behavior and punctuation tests](windows-settings-design.md#扩展约定).
 

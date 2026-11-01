@@ -80,6 +80,10 @@ WindowsSettings::WindowsSettings(Instance &instance, std::filesystem::path file)
             }
             if (auto overrides = raw.get("Options")) {
                 overrides_ = *overrides;
+                if (auto pinyin = overrides_.get("pinyin")) {
+                    // Punctuation is owned by the addon, not Windows settings.
+                    pinyin->remove("WindowsPunctuation");
+                }
             }
         }
         const auto revision = value(raw, "Revision");

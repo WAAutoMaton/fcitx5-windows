@@ -16,8 +16,6 @@
 
 namespace fcitx::win32 {
 namespace {
-constexpr const char *punctuationOption = "WindowsPunctuation";
-
 i18n::Translator windowsTranslator() {
     const auto language = getEnvironmentOrEmpty("FCITX_LOCALE");
     return i18n::Translator(
@@ -314,54 +312,18 @@ RawConfig WindowsSettings::methodValues(const InputMethodEntry &entry) const {
     if (const auto *config = addon->getConfigForInputMethod(entry)) {
         config->save(values);
     }
-    if (entry.addon() == "pinyin") {
-        auto *punctuation = instance_.addonManager().addon("punctuation", true);
-        if (!punctuation || !punctuation->getConfig()) {
-            throw std::runtime_error("Punctuation configuration unavailable");
-        }
-        RawConfig config;
-        punctuation->getConfig()->save(config);
-        values.setValueByPath(punctuationOption,
-                              field(config, "Enabled") == "True" ? "Chinese"
-                                                                 : "English");
-    }
     return values;
 }
 
 void WindowsSettings::setMethodValues(const InputMethodEntry &entry,
                                       const RawConfig &values) {
-    RawConfig engineValues = values;
     auto *addon = engine(instance_, entry);
-    AddonInstance *punctuation = nullptr;
-    RawConfig punctuationValues;
-    if (entry.addon() == "pinyin") {
-        engineValues.remove(punctuationOption);
-        if (values.get(punctuationOption)) {
-            const auto mode = field(values, punctuationOption);
-            if (mode != "Chinese" && mode != "English") {
-                throw std::runtime_error("Invalid punctuation mode");
-            }
-            punctuation = instance_.addonManager().addon("punctuation", true);
-            if (!punctuation || !punctuation->getConfig()) {
-                throw std::runtime_error(
-                    "Punctuation configuration unavailable");
-            }
-            punctuation->getConfig()->save(punctuationValues);
-            punctuationValues.setValueByPath(
-                "Enabled", mode == "Chinese" ? "True" : "False");
-        }
-    }
     RawConfig current;
     if (const auto *config = addon->getConfigForInputMethod(entry)) {
         config->save(current);
     }
-    if (engineValues != current) {
-        addon->setConfigForInputMethod(entry, engineValues);
-    }
-    if (punctuation) {
-        // Keep unrelated punctuation options intact. windows.conf remains the
-        // authority; the upstream file is a compatibility mirror.
-        punctuation->setConfig(punctuationValues);
+    if (values != current) {
+        addon->setConfigForInputMethod(entry, values);
     }
 }
 
@@ -389,21 +351,6 @@ WindowsSettings::methodConfig(const std::string &id,
             values = methodValues(*entry);
             describe(description, config->typeName(), values, "",
                      reply.options);
-            if (entry->addon() == "pinyin") {
-                const auto translator = windowsTranslator();
-                ipc::ConfigOption option;
-                option.path = punctuationOption;
-                option.label = translator.text("input-method", "Punctuation");
-                option.value = field(values, punctuationOption);
-                option.defaultValue = "Chinese";
-                option.kind = ipc::ConfigKind::Enum;
-                option.choices = {
-                    {"Chinese",
-                     translator.text("input-method", "Chinese punctuation")},
-                    {"English",
-                     translator.text("input-method", "English punctuation")}};
-                reply.options.insert(reply.options.begin(), std::move(option));
-            }
         }
     } catch (const std::exception &) {
         reply.error = ipc::SettingsError::Unavailable;

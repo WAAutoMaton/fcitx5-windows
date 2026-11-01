@@ -18,6 +18,8 @@ if ($LASTEXITCODE) { throw 'This test requires a Core built with FCITX5_UI_TEST.
 & "$TsfBuild/tests/ipc_probe.exe" --check-ui-test
 if ($LASTEXITCODE) { throw 'This test requires TSF/probes built with FCITX5_UI_TEST.' }
 $settingsFile = "$LogDirectory/windows.conf"
+# The obsolete Windows mode must neither override the addon nor survive a save.
+[IO.File]::WriteAllText($settingsFile, "Version=2`nScheme=Full`nProfile=Xiaohe`nRevision=1`n[InputMethods]`n0=keyboard-us`n1=pinyin`n[Options/pinyin]`nWindowsPunctuation=English`n")
 [IO.File]::WriteAllText("$LogDirectory/windows-ui.conf", "[General]`nVersion=2`nLanguage=en`nRevision=1`nDetailedLogging=false`n")
 $oldSkipUser = $env:SKIP_FCITX_USER_PATH
 $process = $null
@@ -61,10 +63,13 @@ try {
     $dllName = if ($Architecture -eq 'x86') { 'fcitx5-x86.dll' } else { 'fcitx5-x86_64.dll' }
     Invoke-Probe 'tsf_probe' @("$TsfBuild/dll/$dllName")
     Invoke-Probe 'inputmethods_probe' @('--persistence-write')
+    if ((Get-Content -Raw $settingsFile) -match '(?m)^WindowsPunctuation=') {
+        throw 'Windows settings retained the obsolete punctuation mode.'
+    }
     Stop-TestCore
     Start-TestCore
     Invoke-Probe 'inputmethods_probe' @('--persistence-read')
-    Write-Output "PASS: punctuation modes, shared Pinyin/Shuangpin settings, storage failure, TSF routing/commits and restart persistence. Logs: $LogDirectory"
+    Write-Output "PASS: menu punctuation modes, shared Pinyin/Shuangpin/table state, legacy option removal, engine storage failure/persistence and TSF menu routing/commits. Logs: $LogDirectory"
 } finally {
     Stop-TestCore
     $env:SKIP_FCITX_USER_PATH = $oldSkipUser

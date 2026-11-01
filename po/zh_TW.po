@@ -778,18 +778,6 @@ msgctxt "settings"
 msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
 msgstr "快捷鍵無效或重複，請使用錄製功能選擇其他快捷鍵。"
 
-msgctxt "input-method"
-msgid "Punctuation"
-msgstr "標點符號"
-
-msgctxt "input-method"
-msgid "Chinese punctuation"
-msgstr "中文標點"
-
-msgctxt "input-method"
-msgid "English punctuation"
-msgstr "英文標點"
-
 msgctxt "menu"
 msgid "Reading input method menu..."
 msgstr "正在讀取輸入法選單…"

@@ -753,18 +753,3 @@ msgstr ""
 msgctxt "input-method"
 msgid "Wubi Pinyin"
 msgstr ""
-
-#: src/windowsinputmethods.cpp:396
-msgctxt "input-method"
-msgid "Punctuation"
-msgstr ""
-
-#: src/windowsinputmethods.cpp:402
-msgctxt "input-method"
-msgid "Chinese punctuation"
-msgstr ""
-
-#: src/windowsinputmethods.cpp:404
-msgctxt "input-method"
-msgid "English punctuation"
-msgstr ""

@@ -31,6 +31,65 @@ void pump(DWORD duration = 50) {
     } while (GetTickCount64() < deadline);
 }
 
+class PunctuationMenu : public ITfMenu {
+  public:
+    UINT punctuationId = 0;
+    bool chinese = false;
+    STDMETHODIMP QueryInterface(REFIID id, void **result) override {
+        if (!result)
+            return E_INVALIDARG;
+        *result = nullptr;
+        if (id != IID_IUnknown && id != IID_ITfMenu)
+            return E_NOINTERFACE;
+        *result = static_cast<ITfMenu *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++references_; }
+    STDMETHODIMP_(ULONG) Release() override { return --references_; }
+    STDMETHODIMP AddMenuItem(UINT id, DWORD flags, HBITMAP, HBITMAP,
+                             const WCHAR *text, ULONG length,
+                             ITfMenu **submenu) override {
+        if (submenu) {
+            *submenu = nullptr;
+            return E_NOTIMPL; // Pinyin's punctuation action is a root command.
+        }
+        std::wstring label(text, length);
+        // Native menus append the shortcut after a tab.
+        if (const auto tab = label.find(L'\t'); tab != std::wstring::npos)
+            label.resize(tab);
+        if (!(flags & (TF_LBMENUF_GRAYED | TF_LBMENUF_SEPARATOR)) &&
+            (label == L"Full width punctuation" ||
+             label == L"Half width punctuation")) {
+            punctuationId = id;
+            chinese = label == L"Full width punctuation";
+        }
+        return S_OK;
+    }
+
+  private:
+    ULONG references_ = 1;
+};
+
+bool punctuation(ITfLangBarItemButton *button,
+                 const bool *requested = nullptr) {
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        PunctuationMenu menu;
+        require(SUCCEEDED(button->InitMenu(&menu)),
+                "TSF punctuation menu failed");
+        if (menu.punctuationId) {
+            if (requested && *requested != menu.chinese) {
+                require(SUCCEEDED(button->OnMenuSelect(menu.punctuationId)),
+                        "TSF punctuation menu action failed");
+                pump(600);
+            }
+            return menu.chinese;
+        }
+        pump(550);
+    }
+    throw std::runtime_error("TSF punctuation menu unavailable");
+}
+
 void press(ITfKeyEventSink *keys, ITfContext *context, uint32_t key,
            bool runPump = true) {
     static unsigned sequence = 0;
@@ -784,27 +843,12 @@ int wmain(int count, wchar_t **arguments) {
                 "restore focus after multi-method test failed");
         pump(200);
         {
-            fcitx::ipc::MethodConfigReply config;
-            require(configuration.getMethodConfig("pinyin", config),
-                    "punctuation config unavailable");
-            const auto option =
-                std::find_if(config.options.begin(), config.options.end(),
-                             [](const auto &item) {
-                                 return item.path == "WindowsPunctuation";
-                             });
-            require(option != config.options.end(),
-                    "punctuation option missing");
-            const auto original = option->value;
+            const auto original = punctuation(modeButton);
             KeyboardState keyboardState;
             keyboardState.clear();
             for (const auto mode : {"Chinese", "English"}) {
-                require(configuration.setMethodConfig(
-                            {"pinyin",
-                             config.revision,
-                             {{"WindowsPunctuation", mode}}},
-                            config) &&
-                            config.error == fcitx::ipc::SettingsError::None,
-                        "TSF punctuation mode apply failed");
+                const bool chinese = std::string(mode) == "Chinese";
+                punctuation(modeButton, &chinese);
                 pump(200);
                 for (const auto key : {VK_OEM_COMMA, VK_OEM_PERIOD, int('1'),
                                        VK_OEM_PLUS, VK_OEM_MINUS}) {
@@ -882,13 +926,7 @@ int wmain(int count, wchar_t **arguments) {
                 }
             }
             keyboardState.clear();
-            require(configuration.setMethodConfig(
-                        {"pinyin",
-                         config.revision,
-                         {{"WindowsPunctuation", original}}},
-                        config) &&
-                        config.error == fcitx::ipc::SettingsError::None,
-                    "restore punctuation mode failed");
+            punctuation(modeButton, &original);
         }
         require(SUCCEEDED(service->Deactivate()), "TIP deactivation failed");
         require(adapter->removeItemCalls == 1 && !adapter->langBarItem,

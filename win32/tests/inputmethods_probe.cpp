@@ -18,6 +18,35 @@ option(const fcitx::ipc::MethodConfigReply &config, const std::string &path) {
     require(found != config.options.end(), "missing engine config option");
     return *found;
 }
+bool punctuation(fcitx::PipeClient &client, uint64_t context,
+                 const bool *requested = nullptr) {
+    using namespace fcitx::ipc;
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        StatusMenuReply menu;
+        require(client.getStatusMenu(context, menu),
+                "punctuation menu transport");
+        if (menu.error == StatusMenuError::None) {
+            for (const auto &node : menu.nodes) {
+                if (node.kind != StatusMenuNodeKind::Command || !node.enabled ||
+                    (node.label != "Full width punctuation" &&
+                     node.label != "Half width punctuation")) {
+                    continue;
+                }
+                const bool chinese = node.label == "Full width punctuation";
+                if (requested && *requested != chinese) {
+                    StatusMenuActionReply action;
+                    require(client.activateStatusMenu(context, menu.generation,
+                                                      node.nodeId, action) &&
+                                action.error == StatusMenuError::None,
+                            "punctuation menu action failed");
+                }
+                return chinese;
+            }
+        }
+        Sleep(550);
+    }
+    throw std::runtime_error("punctuation menu unavailable");
+}
 void candidate(fcitx::PipeClient &client, uint64_t context, const char *keys,
                const std::string &text) {
     fcitx::PipeClient::KeyReply reply;
@@ -77,8 +106,6 @@ int main(int argc, char **argv) {
                 {"shuangpin", "CommitRawInput", "Commit Raw Input",
                  "\u63d0\u4ea4\u539f\u59cb\u5b57\u7b26\u4e32",
                  "\u63d0\u4ea4\u539f\u59cb\u5b57\u4e32"},
-                {"pinyin", "WindowsPunctuation", "Punctuation",
-                 "\u6807\u70b9\u7b26\u53f7", "\u6a19\u9ede\u7b26\u865f"},
                 {"wbx", "DefaultCandidate", "Select Current Candidate",
                  "\u9009\u62e9\u5f53\u524d\u5019\u9009\u8bcd",
                  "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e"},
@@ -122,14 +149,12 @@ int main(int argc, char **argv) {
                     "persist list failed");
             MethodConfigReply config;
             require(client.getMethodConfig("shuangpin", config) &&
-                        client.setMethodConfig(
-                            {"shuangpin",
-                             config.revision,
-                             {{"ShuangpinProfile", "Xiaohe"},
-                              {"Fuzzy/IN_ING", "True"},
-                              {"PageSize", "7"},
-                              {"WindowsPunctuation", "English"}}},
-                            config) &&
+                        client.setMethodConfig({"shuangpin",
+                                                config.revision,
+                                                {{"ShuangpinProfile", "Xiaohe"},
+                                                 {"Fuzzy/IN_ING", "True"},
+                                                 {"PageSize", "7"}}},
+                                               config) &&
                         config.error == SettingsError::None,
                     "persist pinyin failed");
             require(client.getMethodConfig("wbx", config) &&
@@ -157,12 +182,10 @@ int main(int argc, char **argv) {
             MethodConfigReply config;
             require(client.getMethodConfig("pinyin", config) &&
                         option(config, "Fuzzy/IN_ING").value == "True" &&
-                        option(config, "PageSize").value == "7" &&
-                        option(config, "WindowsPunctuation").value == "English",
+                        option(config, "PageSize").value == "7",
                     "restart lost fuzzy config");
             require(client.getMethodConfig("shuangpin", config) &&
-                        option(config, "ShuangpinProfile").value == "Xiaohe" &&
-                        option(config, "WindowsPunctuation").value == "English",
+                        option(config, "ShuangpinProfile").value == "Xiaohe",
                     "restart lost profile");
             require(client.getMethodConfig("wbx", config) &&
                         option(config, "PageSize").value == "6",
@@ -206,8 +229,13 @@ int main(int argc, char **argv) {
         const auto originalProfile =
             option(shuangpin, "ShuangpinProfile").value;
         const auto originalPageSize = option(wubi, "PageSize").value;
-        const auto originalPunctuation =
-            option(pinyin, "WindowsPunctuation").value;
+        for (const auto *config : {&pinyin, &shuangpin}) {
+            require(std::none_of(config->options.begin(), config->options.end(),
+                                 [](const auto &item) {
+                                     return item.path == "WindowsPunctuation";
+                                 }),
+                    "removed punctuation setting is still exposed");
+        }
         uint64_t context = 0;
         require(client.createContext(1ULL << 1, context) &&
                     client.focusIn(context),
@@ -282,22 +310,22 @@ int main(int argc, char **argv) {
                 "restore shortcuts failed");
         require(client.selectInputMethod(context, "pinyin", reply),
                 "pinyin select failed");
+        const auto originalPunctuation = punctuation(client, context);
+        if (argc == 3 && std::string(argv[1]) == "--read-only-file") {
+            require(
+                originalPunctuation,
+                "legacy Windows punctuation setting overrode addon default");
+        }
         for (const auto mode : {"English", "Chinese"}) {
-            require(client.getMethodConfig("pinyin", pinyin) &&
-                        client.setMethodConfig({"pinyin",
-                                                pinyin.revision,
-                                                {{"WindowsPunctuation", mode}}},
-                                               pinyin) &&
-                        pinyin.error == SettingsError::None,
-                    "punctuation setting failed");
             const bool chinese = std::string(mode) == "Chinese";
+            require(client.selectInputMethod(context, "pinyin", reply),
+                    "punctuation menu method selection failed");
+            punctuation(client, context, &chinese);
             for (const auto method : {"pinyin", "shuangpin"}) {
-                require(client.getMethodConfig(method, shuangpin) &&
-                            option(shuangpin, "WindowsPunctuation").value ==
-                                mode,
-                        "punctuation setting is not shared");
                 require(client.selectInputMethod(context, method, reply),
                         "punctuation method selection failed");
+                require(punctuation(client, context) == chinese,
+                        "punctuation menu state is not shared");
                 for (const auto c : {',', '.', ':', '!'}) {
                     const std::string expected = c == ','   ? "\uFF0C"
                                                  : c == '.' ? "\u3002"
@@ -381,10 +409,10 @@ int main(int argc, char **argv) {
             client.getMethodConfig("pinyin", pinyin) &&
                 client.setMethodConfig({"pinyin",
                                         pinyin.revision,
-                                        {{"WindowsPunctuation", "Invalid"}}},
+                                        {{"WindowsPunctuation", "English"}}},
                                        pinyin) &&
                 pinyin.error == SettingsError::Invalid,
-            "invalid punctuation mode accepted");
+            "removed punctuation setting accepted");
         require(client.selectInputMethod(context, "pinyin", reply),
                 "restore pinyin selection failed");
         if (argc == 3 && std::string(argv[1]) == "--read-only-file") {
@@ -394,22 +422,26 @@ int main(int argc, char **argv) {
             require(attributes != INVALID_FILE_ATTRIBUTES &&
                         SetFileAttributesW(
                             file.c_str(), attributes | FILE_ATTRIBUTE_READONLY),
-                    "read-only punctuation settings setup failed");
+                    "read-only settings setup failed");
             const auto revision = pinyin.revision;
+            const auto pageSize = option(pinyin, "PageSize").value;
             const bool failed =
                 client.setMethodConfig(
-                    {"pinyin", revision, {{"WindowsPunctuation", "English"}}},
+                    {"pinyin",
+                     revision,
+                     {{"PageSize", pageSize == "6" ? "7" : "6"}}},
                     pinyin) &&
                 pinyin.error == SettingsError::SaveFailed;
             SetFileAttributesW(file.c_str(), attributes);
             require(failed && pinyin.revision == revision &&
-                        option(pinyin, "WindowsPunctuation").value == "Chinese",
-                    "storage failure changed punctuation state/revision");
+                        option(pinyin, "PageSize").value == pageSize,
+                    "storage failure changed engine state/revision");
             require(
                 client.key(context, false, VK_OEM_COMMA, 0, 0, 0, reply, ',') &&
                     reply.consumed && reply.commit == "\uFF0C",
                 "storage failure changed punctuation output");
         }
+        punctuation(client, context, &originalPunctuation);
         candidate(client, context, "NIHAO", "\xe4\xbd\xa0\xe5\xa5\xbd");
         require(client.key(context, false, 'N', 0, 0, 0, reply) &&
                     !reply.preedit.empty(),
@@ -504,12 +536,10 @@ int main(int argc, char **argv) {
                     reply.inputMethod == "keyboard-us",
                 "single entry cycle failed");
         require(client.getMethodConfig("pinyin", pinyin) &&
-                    client.setMethodConfig(
-                        {"pinyin",
-                         pinyin.revision,
-                         {{"Fuzzy/IN_ING", originalFuzzy},
-                          {"WindowsPunctuation", originalPunctuation}}},
-                        pinyin) &&
+                    client.setMethodConfig({"pinyin",
+                                            pinyin.revision,
+                                            {{"Fuzzy/IN_ING", originalFuzzy}}},
+                                           pinyin) &&
                     pinyin.error == SettingsError::None,
                 "fuzzy restore failed");
         require(client.getMethodConfig("shuangpin", shuangpin) &&
