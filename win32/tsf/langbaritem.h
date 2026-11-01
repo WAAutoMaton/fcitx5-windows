@@ -2,15 +2,18 @@
 
 #include "../i18n/translator.h"
 #include "auxiliaryuielement.h"
+#include "statusmenu.h"
 #include <atlcomcli.h>
 #include <ctffunc.h>
 #include <ctfutb.h>
+#include <functional>
 #include <string>
 
 namespace fcitx {
 
 class LangBarItem : public ITfLangBarItemButton, public ITfSource {
   public:
+    static constexpr UINT kStatusMenuMessage = WM_APP + 13;
     static constexpr UINT kToggleMessage = WM_APP + 3;
     static constexpr UINT kSettingsMessage = WM_APP + 4;
     static constexpr UINT kRestartMessage = WM_APP + 5;
@@ -53,6 +56,15 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     void setInputMethod(bool enabled, std::wstring name, std::wstring label,
                         std::wstring icon = {});
     void detach();
+    void setStatusMenu(std::shared_ptr<const StatusMenuCache> cache) {
+        statusCache_ = std::move(cache);
+    }
+    void invalidateStatusMenu();
+    void setStatusMenuContext(bool available) { statusContext_ = available; }
+    void setStatusMenuHandler(
+        std::function<HRESULT(const StatusMenuSelection &)> handler) {
+        statusHandler_ = std::move(handler);
+    }
     void setTranslation(win32::i18n::Translation translation);
     void setUiPolicy(bool systemMenu, bool restricted) {
         systemMenu_ = systemMenu;
@@ -61,9 +73,18 @@ class LangBarItem : public ITfLangBarItemButton, public ITfSource {
     void setUiManager(ITfUIElementMgr *manager) { uiManager_ = manager; }
 
   private:
+    std::shared_ptr<StatusMenuView> beginStatusMenu();
     HICON createIcon() const;
     void notify(DWORD flags);
 
+    std::shared_ptr<const StatusMenuCache> statusCache_;
+    std::shared_ptr<StatusMenuView> statusView_;
+    // Allocator survives individual views so late system callbacks cannot
+    // alias.
+    StatusMenuView statusIds_;
+    bool statusContext_ = false;
+    bool ownMenuOpen_ = false;
+    std::function<HRESULT(const StatusMenuSelection &)> statusHandler_;
     LONG refCount_ = 1;
     HWND dispatchWindow_ = nullptr;
     bool chineseMode_ = true;

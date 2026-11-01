@@ -346,13 +346,13 @@ these helpers stops Core/Settings as services; use the input indicator menu firs
 
 ## Protocol and Behavior
 
-Protocol v12 uses a desktop pipe name scoped to the user's SID and Windows session.
+Protocol v13 uses a desktop pipe name scoped to the user's SID and Windows session.
 Its ACL permits only the current user, rejects remote clients, isolates context IDs
 by connection, and permits multiple connections. Clients use cancellable
 overlapped I/O with a 500 ms wait limit per read/write operation; this is not a
 single 500 ms deadline for the entire request. Disconnected clients' contexts
 are destroyed. The pipe name retains the historical `fcitx5-windows-v2-` prefix;
-compatibility is checked using the framing/handshake version, which is v12.
+compatibility is checked using the framing/handshake version, which is v13.
 Core verifies actual peer identity after Hello. Desktop management connections
 accept a verified UAC linked-token login from the same user/session; elevated
 TSF clients route service operations through the host Core. If Core is absent,
@@ -385,7 +385,7 @@ a running Core; it does not verify real OS keyboard dispatch. The input-method
 regression script runs it with the persisted three-method list.
 
 Core, TSF and Settings must be rebuilt
-and deployed together; older protocol versions do not connect to v12.
+and deployed together; older protocol versions do not connect to v13.
 
 Each key response contains consumption, mode, the actual input-method ID/name,
 icon label/path and settings-panel ID, commit, preedit, UTF-8 byte cursor,
@@ -571,7 +571,7 @@ from loading. A file modified again is retried after it becomes stable.
 
 The small addon status-query extension is recorded in
 `patches/chinese-addons-windows.patch`; submodule revisions are unchanged. Core,
-TSF and Settings must be rebuilt and deployed together for protocol v12.
+TSF and Settings must be rebuilt and deployed together for protocol v13.
 
 With Core and Settings stopped, run:
 

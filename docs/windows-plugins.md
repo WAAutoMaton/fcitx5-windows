@@ -4,6 +4,8 @@
 
 采用上游 Fcitx5 的 `SharedLibrary` addon ABI，输入法以独立 DLL、addon 描述、输入法描述及数据文件发布。Windows 侧补充目录发现、DLL 依赖搜索和独立 SDK 构建。TSF 和 Settings 继续通过 Core 的现有 IPC 工作，插件只在 Core 进程中执行。
 
+插件通过 `StatusArea`、`Action/Menu` 提供方案、模式或选项菜单的通用 Windows 桥接见 [Windows 状态菜单设计](windows-status-menu-design.md)。Core 和 TSF 已接入该桥接，Rime 与拼音动作复用相同协议与渲染路径；真实系统语言栏与应用矩阵仍需验收。
+
 当前 chinese-addons 已经是 DLL：`build-pinyin.ps1` 分别构建 Core、libime、chinese-addons，最后统一部署；Core 注册了 `SharedLibraryLoader`。本次保留这条构建及加载链路。新增输入法无需成为 Core 子模块，也无需加入 Core 的 `add_subdirectory` 或静态注册表。
 
 原先的阻碍是 Windows `StandardPaths` 不读取 `FCITX_ADDON_DIRS`、`FCITX_DATA_DIRS`、`XDG_DATA_DIRS`，以及没有为独立前缀的私有 DLL 配置搜索目录。修复保存在 `patches/fcitx5-windows-paths.patch` 中，由现有补丁脚本重现。
@@ -53,7 +55,7 @@ Core 使用 `AddDllDirectory` 加入存在的插件 `bin` 目录，并启用相�
 
 ## 设置中的插件状态
 
-Settings 的“全局设置 → 插件”页通过只读 IPC 展示 Core 已发现的 addon 名称、标识、版本、库、说明及当前状态（已加载、未加载、已禁用），包含内置组件和外部插件。查询不会触发按需加载；“未加载”表示尚无 addon 实例，可能仍等待按需加载。页面在可见时定期更新状态，提供打开 `%LOCALAPPDATA%/Fcitx5/plugins` 的按钮，目录不存在时创建。安装或移除插件后需重启 Core。插件查询始于 IPC v11，当前统一协议为 v12，Core、TSF 和 Settings 必须配套构建部署。
+Settings 的“全局设置 → 插件”页通过只读 IPC 展示 Core 已发现的 addon 名称、标识、版本、库、说明及当前状态（已加载、未加载、已禁用），包含内置组件和外部插件。查询不会触发按需加载；“未加载”表示尚无 addon 实例，可能仍等待按需加载。页面在可见时定期更新状态，提供打开 `%LOCALAPPDATA%/Fcitx5/plugins` 的按钮，目录不存在时创建。安装或移除插件后需重启 Core。插件查询始于 IPC v11，当前统一协议为 v13，Core、TSF 和 Settings 必须配套构建部署。
 
 ## 仓库插件与 full 包
 

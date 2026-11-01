@@ -5,7 +5,7 @@ index d8fd713..93f2451 100644
 @@ -26,9 +26,17 @@ if ("${Rime_VERSION}" VERSION_LESS "1.10.0")
      add_definitions(-DFCITX_RIME_NO_HIGHLIGHT_CANDIDATE)
  endif()
- 
+
 -if(NOT DEFINED RIME_DATA_DIR)
 -  find_package(RimeData REQUIRED)
 -endif(NOT DEFINED RIME_DATA_DIR)
@@ -23,6 +23,11 @@ index d8fd713..93f2451 100644
  message(STATUS "Precompiler macro RIME_DATA_DIR is set to \"${RIME_DATA_DIR}\"")
  add_definitions(-DRIME_DATA_DIR="${RIME_DATA_DIR}")
  add_definitions(-DFCITX_GETTEXT_DOMAIN=\"fcitx5-rime\")
+@@ -51,4 +59,3 @@ fcitx5_translate_desktop_file(org.fcitx.Fcitx5.Addon.Rime.metainfo.xml.in
+ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/org.fcitx.Fcitx5.Addon.Rime.metainfo.xml" DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+
+ feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
+-
 diff --git a/data/CMakeLists.txt b/data/CMakeLists.txt
 index bd5cbde..04f1eb1 100644
 --- a/data/CMakeLists.txt
@@ -30,17 +35,117 @@ index bd5cbde..04f1eb1 100644
 @@ -2,4 +2,4 @@ install(DIRECTORY 48x48 scalable DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hic
          PATTERN .* EXCLUDE
          PATTERN *~ EXCLUDE)
- 
+
 -install(FILES fcitx5.yaml DESTINATION "${RIME_DATA_DIR}")
 +install(FILES fcitx5.yaml DESTINATION "${RIME_DATA_INSTALL_DIR}")
+diff --git a/src/rimeaction.cpp b/src/rimeaction.cpp
+index be09b73..fcca5f1 100644
+--- a/src/rimeaction.cpp
++++ b/src/rimeaction.cpp
+@@ -43,19 +43,25 @@ ToggleAction::ToggleAction(RimeEngine *engine, std::string_view schema,
+                            std::string enabledText)
+     : engine_(engine), option_(option), disabledText_(std::move(disabledText)),
+       enabledText_(std::move(enabledText)) {
++    setCheckable(true);
+     engine_->instance()->userInterfaceManager().registerAction(
+         stringutils::concat("fcitx-rime-", schema, "-", option), this);
+ }
+
++bool ToggleAction::isChecked(InputContext *ic) const {
++    return optionValue(engine_, ic, false, option_).value_or(false);
++}
+ void ToggleAction::activate(InputContext *ic) {
+     auto *state = engine_->state(ic);
+     auto *api = engine_->api();
+-    if (!state) {
++    if (!state || api->is_maintenance_mode()) {
+         return;
+     }
+     auto session = state->session();
+     Bool oldValue = api->get_option(session, option_.c_str());
+     api->set_option(session, option_.c_str(), !oldValue);
++    state->updateUI(ic);
++    ic->updateUserInterface(UserInterfaceComponent::StatusArea);
+ }
+
+ std::string ToggleAction::shortText(InputContext *ic) const {
+@@ -96,17 +102,23 @@ SelectAction::SelectAction(RimeEngine *engine, std::string_view schema,
+     for (size_t i = 0; i < options.size(); ++i) {
+         actions_.emplace_back();
+         actions_.back().setShortText(texts_[i]);
++        actions_.back().setCheckable(true);
++        actions_.back().checked = [this, i](InputContext *ic) {
++            return optionValue(engine_, ic, false, options_[i]).value_or(false);
++        };
+         actions_.back().connect<SimpleAction::Activated>(
+             [this, i](InputContext *ic) {
+                 auto *state = engine_->state(ic);
+                 auto *api = engine_->api();
+-                if (!state) {
++                if (!state || api->is_maintenance_mode()) {
+                     return;
+                 }
+                 auto session = state->session();
+                 for (size_t j = 0; j < options_.size(); ++j) {
+                     api->set_option(session, options_[j].c_str(), i == j);
+                 }
++                state->updateUI(ic);
++                ic->updateUserInterface(UserInterfaceComponent::StatusArea);
+             });
+         engine_->instance()->userInterfaceManager().registerAction(
+             stringutils::concat("fcitx-rime-", schema, "-", options_[i]),
+diff --git a/src/rimeaction.h b/src/rimeaction.h
+index 50f5c33..4d0c81d 100644
+--- a/src/rimeaction.h
++++ b/src/rimeaction.h
+@@ -9,6 +9,7 @@
+ #include <fcitx/action.h>
+ #include <fcitx/inputcontext.h>
+ #include <fcitx/menu.h>
++#include <functional>
+ #include <list>
+ #include <optional>
+ #include <string>
+@@ -19,6 +20,14 @@ namespace fcitx::rime {
+
+ class RimeEngine;
+
++class RimeMenuAction : public SimpleAction {
++public:
++    std::function<bool(InputContext *)> checked;
++    bool isChecked(InputContext *ic) const override {
++        return checked && checked(ic);
++    }
++};
++
+ class RimeOptionAction : public Action {
+ public:
+     // This is used to save the option when we need to release the session.
+@@ -36,6 +45,7 @@ public:
+                  std::string enabledText);
+
+     void activate(InputContext *ic) override;
++    bool isChecked(InputContext *ic) const override;
+
+     std::string shortText(InputContext *ic) const override;
+
+@@ -78,7 +88,7 @@ private:
+     RimeEngine *engine_;
+     std::vector<std::string> options_;
+     std::vector<std::string> texts_;
+-    std::list<SimpleAction> actions_;
++    std::list<RimeMenuAction> actions_;
+     Menu menu_;
+ };
+
 diff --git a/src/rimeengine.cpp b/src/rimeengine.cpp
-index c762aa1..dcc0757 100644
+index c762aa1..9e3152b 100644
 --- a/src/rimeengine.cpp
 +++ b/src/rimeengine.cpp
 @@ -62,6 +62,11 @@ namespace {
  // Allow notification for 60secs.
  constexpr uint64_t NotificationTimeout = 60000000;
- 
+
 +std::string pathToUtf8(const std::filesystem::path &path) {
 +    const auto value = path.generic_u8string();
 +    return {reinterpret_cast<const char *>(value.data()), value.size()};
@@ -67,7 +172,17 @@ index c762aa1..dcc0757 100644
      } else {
          sharedDataDir_ = RIME_DATA_DIR;
      }
-@@ -292,15 +297,16 @@ void RimeEngine::rimeStart(bool fullcheck) {
+@@ -201,6 +206,9 @@ RimeEngine::RimeEngine(Instance *instance)
+     imAction_->setMenu(&schemaMenu_);
+     eventDispatcher_.attach(&instance_->eventLoop());
+     separatorAction_.setSeparator(true);
++    maintenanceAction_.setShortText(
++        _("Rime is under maintenance. It may take a few seconds. Please wait "
++          "until it is finished..."));
+     instance_->userInterfaceManager().registerAction("fcitx-rime-separator",
+                                                      &separatorAction_);
+     deployAction_.setIcon("fcitx_rime_deploy");
+@@ -292,15 +300,16 @@ void RimeEngine::rimeStart(bool fullcheck) {
          "rime";
      RIME_DEBUG() << "Rime data directory: " << userDir;
      if (!fs::makePath(userDir)) {
@@ -77,7 +192,7 @@ index c762aa1..dcc0757 100644
          }
      }
 +    const auto userDirString = pathToUtf8(userDir);
- 
+
      RIME_STRUCT(RimeTraits, fcitx_rime_traits);
      fcitx_rime_traits.shared_data_dir = sharedDataDir_.c_str();
      fcitx_rime_traits.app_name = "rime.fcitx-rime";
@@ -86,3 +201,164 @@ index c762aa1..dcc0757 100644
      fcitx_rime_traits.distribution_name = "Rime";
      fcitx_rime_traits.distribution_code_name = "fcitx-rime";
      fcitx_rime_traits.distribution_version = FCITX_RIME_VERSION;
+@@ -564,6 +573,12 @@ void RimeEngine::notify(RimeSessionId session, const std::string &messageType,
+         tipId = "fcitx-rime-deploy";
+         icon = "fcitx_rime_deploy";
+         if (messageValue == "start") {
++            schemaMenu_.removeAction(&deployAction_);
++            schemaMenu_.removeAction(&syncAction_);
++            schemaMenu_.addAction(&maintenanceAction_);
++            schemActions_.clear();
++            optionActions_.clear();
++            updateStatusArea(0);
+             message = _("Rime is under maintenance. It may take a few "
+                         "seconds. Please wait until it is finished...");
+         } else if (messageValue == "success") {
+@@ -579,6 +594,8 @@ void RimeEngine::notify(RimeSessionId session, const std::string &messageType,
+             refreshStatusArea(0);
+             blockMessage = true;
+         } else if (messageValue == "failure") {
++            updateSchemaMenu();
++            refreshStatusArea(0);
+             needRefreshAppOption_ = false;
+             message = _("Rime has encountered an error. "
+                         "See log for details.");
+@@ -666,14 +683,26 @@ void RimeEngine::releaseAllSession(bool snapshot) {
+ }
+
+ void RimeEngine::deploy() {
+-    RIME_DEBUG() << "Rime Deploy";
++    if (api_->is_maintenance_mode())
++        return;
++    schemaMenu_.removeAction(&deployAction_);
++    schemaMenu_.removeAction(&syncAction_);
++    schemaMenu_.addAction(&maintenanceAction_);
++    // Snapshot options while their actions still exist. The menu updates
++    // above have already revoked any previously exported executable tree.
+     releaseAllSession(true);
++    schemActions_.clear();
++    optionActions_.clear();
++    updateStatusArea(0);
++    RIME_DEBUG() << "Rime Deploy";
+     api_->finalize();
+     allowNotification();
+     rimeStart(true);
+ }
+
+ void RimeEngine::sync(bool userTriggered) {
++    if (api_->is_maintenance_mode())
++        return;
+     RIME_DEBUG() << "Rime Sync user data";
+     releaseAllSession(true);
+     if (userTriggered) {
+@@ -725,16 +754,34 @@ void RimeEngine::updateSchemaMenu() {
+     schemas_.clear();
+     schemActions_.clear();
+     optionActions_.clear();
++    if (api_->is_maintenance_mode()) {
++        schemaMenu_.removeAction(&deployAction_);
++        schemaMenu_.removeAction(&syncAction_);
++        schemaMenu_.addAction(&maintenanceAction_);
++        return;
++    }
++    schemaMenu_.removeAction(&maintenanceAction_);
++    schemaMenu_.addAction(&deployAction_);
++    schemaMenu_.addAction(&syncAction_);
+     RimeSchemaList list;
+     list.size = 0;
+     if (api_->get_schema_list(&list)) {
+         schemActions_.emplace_back();
+
+         schemActions_.back().setShortText(_("Latin Mode"));
++        schemActions_.back().setCheckable(true);
++        schemActions_.back().checked = [this](InputContext *ic) {
++            auto *state = this->state(ic);
++            const auto session = state ? state->session(false) : 0;
++            return session && !api_->is_maintenance_mode() &&
++                   api_->get_option(session, RIME_ASCII_MODE);
++        };
+         schemActions_.back().connect<SimpleAction::Activated>(
+             [this](InputContext *ic) {
+                 auto *state = this->state(ic);
+                 state->toggleLatinMode();
++                state->updateUI(ic);
++                ic->updateUserInterface(UserInterfaceComponent::StatusArea);
+                 imAction_->update(ic);
+             });
+         instance_->userInterfaceManager().registerAction(&schemActions_.back());
+@@ -744,10 +791,16 @@ void RimeEngine::updateSchemaMenu() {
+             std::string schemaId = list.list[i].schema_id;
+             auto &schemaAction = schemActions_.back();
+             schemaAction.setShortText(list.list[i].name);
++            schemaAction.setCheckable(true);
++            schemaAction.checked = [this, schemaId](InputContext *ic) {
++                auto *state = this->state(ic);
++                return state && state->currentSchema() == schemaId;
++            };
+             schemaAction.connect<SimpleAction::Activated>(
+                 [this, schemaId](InputContext *ic) {
+                     auto *state = this->state(ic);
+                     state->selectSchema(schemaId);
++                    refreshStatusArea(*ic);
+                     imAction_->update(ic);
+                 });
+             instance_->userInterfaceManager().registerAction(&schemaAction);
+diff --git a/src/rimeengine.h b/src/rimeengine.h
+index 459e727..c3fb771 100644
+--- a/src/rimeengine.h
++++ b/src/rimeengine.h
+@@ -6,6 +6,7 @@
+ #ifndef _FCITX_RIMEENGINE_H_
+ #define _FCITX_RIMEENGINE_H_
+
++#include "rimeaction.h"
+ #include "rimesession.h"
+ #include "rimestate.h"
+ #include <cstdint>
+@@ -206,6 +207,7 @@ private:
+
+     std::unique_ptr<Action> imAction_;
+     SimpleAction separatorAction_;
++    SimpleAction maintenanceAction_;
+     SimpleAction deployAction_;
+     SimpleAction syncAction_;
+
+@@ -216,7 +218,7 @@ private:
+     FCITX_ADDON_DEPENDENCY_LOADER(notifications, instance_->addonManager());
+
+     std::unordered_set<std::string> schemas_;
+-    std::list<SimpleAction> schemActions_;
++    std::list<RimeMenuAction> schemActions_;
+     std::unordered_map<std::string,
+                        std::list<std::unique_ptr<RimeOptionAction>>>
+         optionActions_;
+diff --git a/src/rimestate.cpp b/src/rimestate.cpp
+index 1d18afe..ef648f7 100644
+--- a/src/rimestate.cpp
++++ b/src/rimestate.cpp
+@@ -157,8 +157,23 @@ void RimeState::selectSchema(const std::string &schema) {
+     if (api->is_maintenance_mode()) {
+         return;
+     }
+-    api->set_option(session(), RIME_ASCII_MODE, false);
+-    api->select_schema(session(), schema.data());
++    RimeSchemaList schemas{};
++    bool available = false;
++    if (api->get_schema_list(&schemas)) {
++        for (size_t i = 0; i < schemas.size; ++i)
++            if (schema == schemas.list[i].schema_id)
++                available = true;
++        api->free_schema_list(&schemas);
++    }
++    const auto active = session();
++    if (!available || !active)
++        return;
++    api->clear_composition(active);
++    ic_.inputPanel().reset();
++    ic_.updatePreedit();
++    api->select_schema(active, schema.c_str());
++    updateUI(&ic_);
++    ic_.updateUserInterface(UserInterfaceComponent::StatusArea);
+ }
+
+ void RimeState::keyEvent(KeyEvent &event) {

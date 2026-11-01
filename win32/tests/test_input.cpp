@@ -6,6 +6,9 @@
 int main() {
     using namespace fcitx;
     namespace ipc = fcitx::win32::ipc;
+    assert(routesKey(VK_F4, 0, true, false));
+    assert(routesKey(VK_OEM_3, kModifierControl, true, false));
+    assert(!routesKey(VK_F4, kModifierAlt, true, false));
     assert(routesKey('N', 0, true, false));
     assert(!routesKey('N', 0, false, false));
     assert(!routesKey('C', kModifierControl, true, true));
@@ -58,7 +61,8 @@ int main() {
         assert(routesKey(key, 0, true, false));
         assert(routesKey(key, kModifierShift, true, false));
         assert(!routesKey(key, 0, false, false));
-        assert(!routesKey(key, kModifierControl, true, false));
+        assert(routesKey(key, kModifierControl, true, false) ==
+               (key == VK_OEM_3));
         assert(!routesKey(key, kModifierAlt, true, false));
         assert(!routesKey(key, kModifierSuper, true, false));
     }

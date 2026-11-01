@@ -12,6 +12,9 @@ constexpr uint32_t kModifierSuper = 1U << 3;
 
 inline bool routesKey(uint32_t key, uint32_t modifiers, bool enabled,
                       bool composing, bool codeInput = false) {
+    if (enabled && !(modifiers & (kModifierAlt | kModifierSuper)) &&
+        (key == VK_F4 || (key == VK_OEM_3 && (modifiers & kModifierControl))))
+        return true;
     if (!enabled ||
         (modifiers & (kModifierControl | kModifierAlt | kModifierSuper))) {
         return false;

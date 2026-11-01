@@ -3,6 +3,11 @@
 #include <cassert>
 
 int main() {
+    assert(!fcitx::win32::ipc::restrictedRequestAllowed(
+        fcitx::win32::ipc::MessageType::GetStatusMenu));
+    assert(!fcitx::win32::ipc::restrictedRequestAllowed(
+        fcitx::win32::ipc::MessageType::ActivateStatusMenu));
+
     namespace ipc = fcitx::win32::ipc;
     auto environment = ipc::clientEnvironment();
     assert(environment.tokenKnown && !environment.appContainer);

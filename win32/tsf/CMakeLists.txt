@@ -19,6 +19,8 @@ add_library(tsf STATIC
     candidatewindow.cpp
     candidateuielement.cpp
     langbaritem.cpp
+    statusmenu.cpp
+    statusmenudispatch.cpp
     aboutwindow.cpp
     pollstate.cpp
     servicecontrol.cpp

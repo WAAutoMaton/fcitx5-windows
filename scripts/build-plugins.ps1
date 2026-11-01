@@ -82,6 +82,13 @@ try {
             $rimeStage = "$stage/share/rime-data"
             New-Item -ItemType Directory -Force $rimeStage | Out-Null
             Copy-Item -Path "$rimeData/*" -Destination $rimeStage -Recurse -Force
+            # librime resolves schema OpenCC configurations relative to its
+            # shared data tree in a relocatable Windows package.
+            $openccData = "$sysroot/share/opencc"
+            if (Test-Path -LiteralPath $openccData -PathType Container) {
+                New-Item -ItemType Directory -Force "$rimeStage/opencc" | Out-Null
+                Copy-Item -Path "$openccData/*" -Destination "$rimeStage/opencc" -Recurse -Force
+            }
         }
         $destination = "$Prefix/plugins/$($plugin.Name)"
         New-Item -ItemType Directory -Force $destination | Out-Null

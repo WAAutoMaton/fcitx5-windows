@@ -52,6 +52,8 @@ try {
     }
     New-Item -ItemType Directory -Force "$msys2/clang64/share/rime-data" | Out-Null
     [IO.File]::WriteAllText("$msys2/clang64/share/rime-data/default.yaml", 'rime fixture')
+    New-Item -ItemType Directory -Force "$msys2/clang64/share/opencc" | Out-Null
+    [IO.File]::WriteAllText("$msys2/clang64/share/opencc/t2s.json", 'opencc fixture')
     $environmentBefore = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
     & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -WhatIf
     if ((Test-Path $prefix) -or (Test-Path $buildRoot) -or $testState.Calls.Count) {
@@ -65,6 +67,9 @@ try {
         [IO.File]::WriteAllText("$source/LICENSE", 'plugin license')
         & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 | Out-Null
         if ($name -eq 'fcitx5-rime') {
+            if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-rime/share/rime-data/opencc/t2s.json")) {
+                throw 'Rime OpenCC data was not copied into the plugin package.'
+            }
             if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-rime/share/rime-data/default.yaml")) {
                 throw 'Rime data was not copied into the plugin package.'
             }

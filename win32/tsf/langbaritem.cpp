@@ -33,6 +33,77 @@ constexpr MenuCommand kCommands[] = {
     {LangBarItem::kAboutMenuId, LangBarItem::kAboutMessage,
      win32::i18n::mark("menu", "About")}};
 
+HRESULT renderStatusMenu(const StatusMenuView &view, HMENU native,
+                         ITfMenu *system, uint32_t parent = 0) {
+    const auto cache = view.cache();
+    if (!cache)
+        return S_OK;
+    for (const auto &node : cache->reply.nodes) {
+        if (node.parentId != parent)
+            continue;
+        const auto text = statusMenuText(node);
+        const auto id = view.command(node.nodeId);
+        const bool submenu =
+            node.kind == win32::ipc::StatusMenuNodeKind::Submenu;
+        const bool separator =
+            node.kind == win32::ipc::StatusMenuNodeKind::Separator;
+        if (system) {
+            DWORD flags =
+                (submenu ? TF_LBMENUF_SUBMENU : 0) |
+                (separator ? TF_LBMENUF_SEPARATOR : 0) |
+                (!node.enabled && !separator ? TF_LBMENUF_GRAYED : 0) |
+                (node.checked ? TF_LBMENUF_CHECKED : 0);
+            CComPtr<ITfMenu> child;
+            const auto hr = system->AddMenuItem(
+                id, flags, nullptr, nullptr, text.c_str(),
+                static_cast<ULONG>(text.size()), submenu ? &child : nullptr);
+            if (FAILED(hr))
+                return hr;
+            if (submenu) {
+                if (!child)
+                    return E_FAIL;
+                const auto nested =
+                    renderStatusMenu(view, nullptr, child, node.nodeId);
+                if (FAILED(nested))
+                    return nested;
+            }
+        } else {
+            HMENU child = submenu ? CreatePopupMenu() : nullptr;
+            if (submenu && !child)
+                return E_OUTOFMEMORY;
+            if (child) {
+                const auto hr =
+                    renderStatusMenu(view, child, nullptr, node.nodeId);
+                if (FAILED(hr)) {
+                    DestroyMenu(child);
+                    return hr;
+                }
+            }
+            const UINT flags = (submenu ? MF_POPUP : MF_STRING) |
+                               (separator ? MF_SEPARATOR : 0) |
+                               (!node.enabled && !separator ? MF_GRAYED : 0) |
+                               (node.checked ? MF_CHECKED : 0);
+            if (!AppendMenuW(native, flags,
+                             submenu ? reinterpret_cast<UINT_PTR>(child) : id,
+                             text.c_str())) {
+                if (child)
+                    DestroyMenu(child);
+                return E_FAIL;
+            }
+        }
+    }
+    return S_OK;
+}
+struct PopupResources {
+    HMENU menu = CreatePopupMenu();
+    HWND auxiliary = nullptr;
+    ~PopupResources() {
+        if (menu)
+            DestroyMenu(menu);
+        if (auxiliary)
+            DestroyWindow(auxiliary);
+    }
+};
 HICON makeTextIcon(const wchar_t *text) {
     const auto baseSize = GetSystemMetrics(SM_CXSMICON);
     const auto size = std::max(16, baseSize > 0 ? baseSize : 16);
@@ -188,88 +259,171 @@ STDMETHODIMP LangBarItem::GetTooltipString(BSTR *pbstrToolTip) {
     return *pbstrToolTip ? S_OK : E_OUTOFMEMORY;
 }
 
+std::shared_ptr<StatusMenuView> LangBarItem::beginStatusMenu() {
+    statusIds_.clear();
+    const bool usable = statusContext_ && !restricted_ && dispatchWindow_;
+    statusIds_.open(usable ? statusCache_ : nullptr);
+    statusView_ = std::make_shared<StatusMenuView>(statusIds_);
+    if (usable && (!statusCache_ || statusCache_->reply.error !=
+                                        win32::ipc::StatusMenuError::None))
+        PostMessageW(dispatchWindow_, kStatusMenuMessage, 0, 0);
+    return statusView_;
+}
+void LangBarItem::invalidateStatusMenu() {
+    statusCache_.reset();
+    statusView_.reset();
+    statusIds_.clear();
+    statusContext_ = false;
+    if (ownMenuOpen_)
+        EndMenu();
+}
 STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT point, const RECT *) {
-    if (click == TF_LBI_CLK_LEFT && dispatchWindow_) {
+    if (click == TF_LBI_CLK_LEFT && dispatchWindow_)
         return PostMessageW(dispatchWindow_, kToggleMessage, 0, 0) ? S_OK
                                                                    : E_FAIL;
-    }
-    if (click == TF_LBI_CLK_RIGHT && dispatchWindow_ && !systemMenu_) {
-        CComPtr<LangBarItem> lifetime(this);
+    if (click != TF_LBI_CLK_RIGHT || !dispatchWindow_ || systemMenu_)
+        return S_OK;
+    CComPtr<LangBarItem> lifetime(this);
+    try {
+        const auto view = beginStatusMenu();
         AuxiliaryUI permission;
         if (!permission.begin(uiManager_, L"Fcitx5 menu", [] { EndMenu(); }))
             return S_OK;
-        const auto menu = CreatePopupMenu();
-        if (!menu) {
+        PopupResources resources;
+        if (!resources.menu)
             return E_OUTOFMEMORY;
+        HWND owner = GetForegroundWindow();
+        DWORD process = 0;
+        const auto thread = GetWindowThreadProcessId(owner, &process);
+        if (!owner || thread != GetCurrentThreadId() ||
+            process != GetCurrentProcessId()) {
+            resources.auxiliary = CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"", WS_POPUP,
+                point.x, point.y, 0, 0, nullptr, nullptr, nullptr, nullptr);
+            owner = resources.auxiliary;
         }
-        const auto owner =
-            CreateWindowExW(WS_EX_TOOLWINDOW, L"STATIC", L"", WS_POPUP, point.x,
-                            point.y, 0, 0, nullptr, nullptr, nullptr, nullptr);
-        bool populated = owner != nullptr;
+        if (!owner)
+            return E_FAIL;
+        auto hr = renderStatusMenu(*view, resources.menu, nullptr);
+        if (FAILED(hr)) {
+            statusView_.reset();
+            return hr;
+        }
         const auto translation = translation_;
         const win32::i18n::Translator english;
+        const auto &tr = translation ? *translation : english;
+        const bool nodes = view->cache() && !view->cache()->reply.nodes.empty();
+        if (statusContext_ && !restricted_ && !view->cache()) {
+            const auto text = tr.wide(
+                "menu", statusCache_ ? "Unable to read input method menu"
+                                     : "Reading input method menu...");
+            if (!AppendMenuW(resources.menu, MF_STRING | MF_GRAYED, 0,
+                             text.c_str()))
+                return E_FAIL;
+        }
+        if (nodes || (statusContext_ && !restricted_ && !view->cache()))
+            if (!AppendMenuW(resources.menu, MF_SEPARATOR, 0, nullptr))
+                return E_FAIL;
         for (const auto &command : kCommands) {
-            const auto text = (translation ? *translation : english)
-                                  .wide("menu", command.text);
-            populated = populated &&
-                        AppendMenuW(menu, MF_STRING, command.id, text.c_str());
+            if (restricted_ && command.id != kSettingsMenuId)
+                continue;
+            const auto text = tr.wide("menu", command.text);
+            if (!AppendMenuW(resources.menu, MF_STRING, command.id,
+                             text.c_str()))
+                return E_FAIL;
         }
-        if (!populated) {
-            if (owner) {
-                DestroyWindow(owner);
-            }
-            DestroyMenu(menu);
-            return E_FAIL;
-        }
-        SetForegroundWindow(owner);
+        ownMenuOpen_ = true;
         permission.setVisible(true);
         const auto selected = TrackPopupMenuEx(
-            menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, point.x,
-            point.y, owner, nullptr);
-        PostMessageW(owner, WM_NULL, 0, 0);
-        DestroyMenu(menu);
-        DestroyWindow(owner);
+            resources.menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+            point.x, point.y, owner, nullptr);
+        ownMenuOpen_ = false;
         permission.reset();
-        if (selected) {
-            return OnMenuSelect(selected);
-        }
+        hr = selected && statusView_ == view ? OnMenuSelect(selected) : S_OK;
+        if (statusView_ == view)
+            statusView_.reset();
+        return hr;
+    } catch (...) {
+        ownMenuOpen_ = false;
+        statusView_.reset();
+        return E_OUTOFMEMORY;
     }
-    return S_OK;
 }
-
 STDMETHODIMP LangBarItem::InitMenu(ITfMenu *menu) {
-    if (!menu) {
+    if (!menu)
         return E_INVALIDARG;
-    }
-    const auto translation = translation_;
-    const win32::i18n::Translator english;
-    for (const auto &command : kCommands) {
-        if ((restricted_ && command.id != kSettingsMenuId) ||
-            (systemMenu_ && command.id == kAboutMenuId))
-            continue;
-        const auto text =
-            (translation ? *translation : english).wide("menu", command.text);
-        const auto result =
-            menu->AddMenuItem(command.id, 0, nullptr, nullptr, text.c_str(),
-                              static_cast<ULONG>(text.size()), nullptr);
-        if (FAILED(result)) {
-            return result;
+    CComPtr<LangBarItem> lifetime(this);
+    try {
+        const auto view = beginStatusMenu();
+        auto hr = renderStatusMenu(*view, nullptr, menu);
+        if (FAILED(hr)) {
+            statusView_.reset();
+            return hr;
         }
+        const auto translation = translation_;
+        const win32::i18n::Translator english;
+        const auto &tr = translation ? *translation : english;
+        const bool loading = statusContext_ && !restricted_ && !view->cache();
+        if (loading) {
+            const auto text = tr.wide(
+                "menu", statusCache_ ? "Unable to read input method menu"
+                                     : "Reading input method menu...");
+            hr = menu->AddMenuItem(0, TF_LBMENUF_GRAYED, nullptr, nullptr,
+                                   text.c_str(),
+                                   static_cast<ULONG>(text.size()), nullptr);
+            if (FAILED(hr)) {
+                statusView_.reset();
+                return hr;
+            }
+        }
+        if (loading || (view->cache() && !view->cache()->reply.nodes.empty())) {
+            hr = menu->AddMenuItem(0, TF_LBMENUF_SEPARATOR, nullptr, nullptr,
+                                   L"", 0, nullptr);
+            if (FAILED(hr)) {
+                statusView_.reset();
+                return hr;
+            }
+        }
+        for (const auto &command : kCommands) {
+            if ((restricted_ && command.id != kSettingsMenuId) ||
+                (systemMenu_ && command.id == kAboutMenuId))
+                continue;
+            const auto text = tr.wide("menu", command.text);
+            hr =
+                menu->AddMenuItem(command.id, 0, nullptr, nullptr, text.c_str(),
+                                  static_cast<ULONG>(text.size()), nullptr);
+            if (FAILED(hr)) {
+                statusView_.reset();
+                return hr;
+            }
+        }
+        return S_OK;
+    } catch (...) {
+        statusView_.reset();
+        return E_OUTOFMEMORY;
     }
-    return S_OK;
 }
-
 STDMETHODIMP LangBarItem::OnMenuSelect(UINT id) {
     if ((restricted_ && id != kSettingsMenuId) ||
         (systemMenu_ && id == kAboutMenuId))
         return E_ACCESSDENIED;
-    for (const auto &command : kCommands) {
-        if (id == command.id) {
+    for (const auto &command : kCommands)
+        if (id == command.id)
             return !dispatchWindow_ ||
                            PostMessageW(dispatchWindow_, command.message, 0, 0)
                        ? S_OK
                        : E_FAIL;
+    StatusMenuSelection selection;
+    try {
+        if (dispatchWindow_ && !restricted_ && statusView_ && statusHandler_ &&
+            statusView_->select(id, selection)) {
+            const auto handler = statusHandler_;
+            return handler(selection);
         }
+    } catch (const std::bad_alloc &) {
+        return E_OUTOFMEMORY;
+    } catch (...) {
+        return E_FAIL;
     }
     return E_INVALIDARG;
 }
@@ -369,6 +523,8 @@ void LangBarItem::setInputMethod(bool enabled, std::wstring name,
 }
 
 void LangBarItem::detach() {
+    invalidateStatusMenu();
+    statusHandler_ = {};
     uiManager_.Release();
     dispatchWindow_ = nullptr;
     shown_ = false;

@@ -61,8 +61,43 @@ fcitx::Key keyFromWindows(uint32_t virtualKey, uint32_t scanCode,
                                             (virtualKey - 'A'));
     } else if (virtualKey >= '0' && virtualKey <= '9') {
         symbol = static_cast<fcitx::KeySym>(virtualKey);
+    } else if (virtualKey >= VK_F1 && virtualKey <= VK_F24) {
+        symbol = static_cast<KeySym>(FcitxKey_F1 + virtualKey - VK_F1);
     } else {
         switch (virtualKey) {
+        case VK_OEM_3:
+            symbol = FcitxKey_grave;
+            break;
+        case VK_OEM_1:
+            symbol = FcitxKey_semicolon;
+            break;
+        case VK_OEM_PLUS:
+            symbol = FcitxKey_equal;
+            break;
+        case VK_OEM_MINUS:
+            symbol = FcitxKey_minus;
+            break;
+        case VK_OEM_COMMA:
+            symbol = FcitxKey_comma;
+            break;
+        case VK_OEM_PERIOD:
+            symbol = FcitxKey_period;
+            break;
+        case VK_OEM_2:
+            symbol = FcitxKey_slash;
+            break;
+        case VK_OEM_4:
+            symbol = FcitxKey_bracketleft;
+            break;
+        case VK_OEM_5:
+            symbol = FcitxKey_backslash;
+            break;
+        case VK_OEM_6:
+            symbol = FcitxKey_bracketright;
+            break;
+        case VK_OEM_7:
+            symbol = FcitxKey_apostrophe;
+            break;
         case VK_SPACE:
             symbol = FcitxKey_space;
             break;
@@ -311,6 +346,8 @@ ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
     reply.settingsRevision = settingsEpoch_;
     reply.detailedLogging = detailedLogging_;
     context.updateCandidateIdentity(reply);
+    reply.statusMenuRevision =
+        statusMenus_.at(context.id())->revision(reply.inputMethod);
     if (diagnostic::coreLogger().enabled())
         diagnostic::coreLogger().event(
             diagnostic::Level::Debug, "core_snapshot",
@@ -355,6 +392,7 @@ void WindowsPipeServer::stop() {
         client.thread.join();
     }
     clients_.clear();
+    statusMenus_.clear();
     contexts_.clear();
     owners_.clear();
     if (stopEvent_) {
@@ -562,6 +600,9 @@ void WindowsPipeServer::runClient(HANDLE pipe, uint64_t clientId,
     dispatcher_.schedule([this, clientId] {
         for (auto iter = owners_.begin(); iter != owners_.end();) {
             if (iter->second == clientId) {
+                statusMenus_.erase(iter->first);
+                if (focusedContext_ == iter->first)
+                    focusedContext_ = 0;
                 contexts_.erase(iter->first);
                 iter = owners_.erase(iter);
             } else {
@@ -604,7 +645,8 @@ void WindowsPipeServer::process(const ipc::Frame &request,
           request.type == MessageType::FocusOut ||
           request.type == MessageType::DestroyContext ||
           request.type == MessageType::Reset ||
-          request.type == MessageType::PollState) &&
+          request.type == MessageType::PollState ||
+          request.type == MessageType::GetStatusMenu) &&
          !request.payload.empty())) {
         response.type = MessageType::Error;
         complete(pending, std::move(response));
@@ -807,6 +849,8 @@ void WindowsPipeServer::process(const ipc::Frame &request,
         auto context = std::make_unique<WindowsInputContext>(
             instance_.inputContextManager(), contextId, std::move(program));
         context->setCapabilities(capabilities & ((1ULL << 1) | (1ULL << 38)));
+        statusMenus_.emplace(contextId, std::make_unique<WindowsStatusMenu>(
+                                            instance_, *context));
         contexts_.emplace(contextId, std::move(context));
         owners_.emplace(contextId, clientId);
         response.type = MessageType::CreateContextReply;
@@ -821,6 +865,10 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             response.type = MessageType::Error;
             writer.string("unknown context");
         } else {
+            if (focusedContext_ && statusMenus_.contains(focusedContext_))
+                statusMenus_.at(focusedContext_)->release();
+            statusMenus_.at(request.contextId)->release();
+            focusedContext_ = request.contextId;
             iter->second->focusIn();
             instance_.setCurrentInputMethod(iter->second.get(),
                                             settings_.chineseEntry(), true);
@@ -834,6 +882,9 @@ void WindowsPipeServer::process(const ipc::Frame &request,
             response.type = MessageType::Error;
             writer.string("unknown context");
         } else {
+            statusMenus_.at(request.contextId)->release();
+            if (focusedContext_ == request.contextId)
+                focusedContext_ = 0;
             iter->second->reset();
             iter->second->takeCommit();
             iter->second->shortcutKeys.reset();
@@ -852,6 +903,9 @@ void WindowsPipeServer::process(const ipc::Frame &request,
                 iter->second->shortcutKeys.reset();
                 iter->second->focusOut();
             }
+            statusMenus_.erase(request.contextId);
+            if (focusedContext_ == request.contextId)
+                focusedContext_ = 0;
             contexts_.erase(iter);
             owners_.erase(request.contextId);
         }
@@ -939,6 +993,60 @@ void WindowsPipeServer::process(const ipc::Frame &request,
 #endif
         response.type = MessageType::KeyReply;
         response.payload = ipc::encodeKeyReply(snapshot(context, consumed));
+        break;
+    }
+    case MessageType::GetStatusMenu:
+    case MessageType::ActivateStatusMenu: {
+        auto &context = *contexts_.at(request.contextId);
+        const bool allowed =
+            !restricted && context.hasFocus() &&
+            focusedContext_ == request.contextId &&
+            instance_.lastFocusedInputContext() == &context &&
+            !context.capabilityFlags().testAny(CapabilityFlags{
+                CapabilityFlag::Password, CapabilityFlag::Sensitive});
+        const auto *entry = instance_.inputMethodEntry(&context);
+        const auto method = entry ? entry->uniqueName() : std::string{};
+        auto &menu = *statusMenus_.at(request.contextId);
+        if (request.type == MessageType::GetStatusMenu) {
+            ipc::StatusMenuReply reply;
+            if (!allowed)
+                reply.error = ipc::StatusMenuError::Unavailable;
+            else {
+                // Focus changes release the previous cache, so only the
+                // currently focused context retains an executable tree.
+                reply = menu.query(method);
+            }
+            if (diagnostic::coreLogger().enabled())
+                diagnostic::coreLogger().event(
+                    diagnostic::Level::Debug, "status_menu_snapshot",
+                    {{"context", request.contextId},
+                     {"generation", reply.generation},
+                     {"node_count", reply.nodes.size()},
+                     {"error", static_cast<unsigned>(reply.error)}});
+            response.type = MessageType::StatusMenuReply;
+            response.payload = ipc::encodeStatusMenu(reply);
+        } else {
+            ipc::StatusMenuActionReply reply;
+            uint64_t generation = 0;
+            uint32_t node = 0;
+            if (!reader.u64(generation) || !reader.u32(node) ||
+                reader.remaining())
+                reply.error = ipc::StatusMenuError::Invalid;
+            else if (!allowed)
+                reply.error = ipc::StatusMenuError::Unavailable;
+            else
+                reply.error = menu.activate(method, generation, node);
+            if (reply.error == ipc::StatusMenuError::None)
+                reply.state = snapshot(context, false);
+            if (diagnostic::coreLogger().enabled())
+                diagnostic::coreLogger().event(
+                    diagnostic::Level::Debug, "status_menu_action",
+                    {{"context", request.contextId},
+                     {"generation", generation},
+                     {"error", static_cast<unsigned>(reply.error)}});
+            response.type = MessageType::StatusMenuActionReply;
+            response.payload = ipc::encodeStatusMenuAction(reply);
+        }
         break;
     }
     case MessageType::CandidateAction: {

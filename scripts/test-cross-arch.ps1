@@ -23,8 +23,11 @@ try {
         $ready = New-Object Threading.EventWaitHandle($false, [Threading.EventResetMode]::ManualReset, "$base-ready")
         $stop = New-Object Threading.EventWaitHandle($false, [Threading.EventResetMode]::ManualReset, "$base-stop")
         $events += $ready, $stop
-        $children += Start-Process -FilePath $probes[$index] -ArgumentList @('--hold', "$base-ready", "$base-stop") `
+        $child = Start-Process -FilePath $probes[$index] -ArgumentList @('--hold', "$base-ready", "$base-stop") `
             -WindowStyle Hidden -PassThru -RedirectStandardOutput "$temporary/$index.out" -RedirectStandardError "$temporary/$index.err"
+        # Retain the handle before exit so Windows PowerShell can read ExitCode.
+        $null = $child.Handle
+        $children += $child
         if (!$ready.WaitOne(5000)) { throw "Client $index failed to connect; inspect $temporary." }
     }
     $servers = @(0..1 | ForEach-Object { (Get-Content "$temporary/$_.out" -Raw).Trim() })
@@ -32,7 +35,7 @@ try {
         throw 'Clients did not connect to the same Core PID.'
     }
     $null = $events[1].Set()
-    if (!$children[0].WaitForExit(5000) -or $children[0].ExitCode -ne 0) { throw 'First client cleanup failed.' }
+    if (!$children[0].WaitForExit(5000) -or $children[0].ExitCode -ne 0) { throw "First client cleanup failed (HasExited=$($children[0].HasExited), ExitCode=$($children[0].ExitCode))." }
     Start-Sleep -Milliseconds 200
     if ($children[1].HasExited) { throw 'Second client was interrupted by the first disconnect.' }
     $null = $events[3].Set()

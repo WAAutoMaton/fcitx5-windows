@@ -1,6 +1,6 @@
 # Windows 输入法设置设计与实现
 
-当前协议为 v12。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页包含只读“词库”tab，全局页包含“常规”、“开发者选项”、只读“插件”和“快捷键”tab。插件页展示 Core 当前发现的 addon 信息和加载状态，并提供打开个人插件目录的按钮，不触发加载或卸载。插件目录与状态说明见 [windows-plugins.md](windows-plugins.md)。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
+当前协议为 v13。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页包含只读“词库”tab，全局页包含“常规”、“开发者选项”、只读“插件”和“快捷键”tab。插件页展示 Core 当前发现的 addon 信息和加载状态，并提供打开个人插件目录的按钮，不触发加载或卸载。插件目录与状态说明见 [windows-plugins.md](windows-plugins.md)。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
 
 ## 当前方案
 
@@ -15,7 +15,7 @@
 - `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，显示当前输入法图标/标签和名称，左键轮换输入法；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
 - `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
-- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v12 framing、输入法目录、选项描述、全局语言/日志/快捷键设置、词库和插件状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。日志设计见 [windows-developer-logging-design.md](windows-developer-logging-design.md)，Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
+- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v13 framing、输入法目录、选项描述、全局语言/日志/快捷键设置、词库和插件状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。日志设计见 [windows-developer-logging-design.md](windows-developer-logging-design.md)，Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
 - `src/main.cpp`：初始化 Core、预热拼音并创建 Windows 设置管理器；完整内存输入法组由 `src/windowsinputmethods.cpp` 按已安装可用条目建立。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置保存、真实 profile 应用、中文 entry 切换与 context 同步。
 - `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。
@@ -76,6 +76,8 @@ flowchart LR
 
 ## 右键菜单
 
+菜单在动态输入法状态与方案子菜单下保留以下固定命令。动态区域见 [Windows 状态菜单设计](windows-status-menu-design.md)，采用通用 `Action/Menu` 桥接，运行时动作绑定原输入 context。
+
 菜单使用原生 `HMENU` / `TrackPopupMenuEx`，由 TSF 所在线程显示，内容为“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。左键与 Ctrl+Space 按用户列表顺序循环切换，右键不触发切换。指示栏通过 WIC 加载已安装的输入法 PNG 图标，加载失败时使用该输入法的紧凑标签图标；英文键盘使用 A。
 
 “用户数据文件夹”在后台任务中通过 Windows Roaming AppData known folder 定位 `%APPDATA%/Fcitx5`，目录不存在时创建，再通过 Shell 打开。该目录同时包含 `config/fcitx5` 设置和 `pinyin` 用户词典、学习历史；服务关闭时仍可打开，不启动 Core 或 Settings，不涉及 IPC 协议变更。
@@ -124,7 +126,7 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 
 ## IPC 与配置所有权
 
-当前 v12 协议包含输入法目录、有序选择、配置描述、全局语言/日志/快捷键设置、插件状态、宿主命令及候选动作，`KeyReply` 返回实际 entry、显示信息、日志状态和候选代次。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 和候选动作则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求。
+当前 v13 协议包含输入法目录、有序选择、配置描述、全局语言/日志/快捷键设置、插件状态、宿主命令及候选动作，`KeyReply` 返回实际 entry、显示信息、日志状态和候选代次。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 和候选动作则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求。
 
 | 请求 | 内容 / 回复 |
 | --- | --- |

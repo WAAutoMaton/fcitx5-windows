@@ -3,6 +3,7 @@ add_executable(Fcitx5
     main.cpp
     ../win32/ipc/diagnostic_log.cpp
     windowsfrontend.cpp
+    windowsstatusmenu.cpp
     windowslogging.cpp
     windowsplugins.cpp
     windowssettings.cpp
@@ -28,3 +29,10 @@ target_include_directories(Fcitx5 PRIVATE "${CMAKE_SOURCE_DIR}/win32/ipc")
 
 install(TARGETS Fcitx5 DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES windowskeyboard.conf DESTINATION "${CMAKE_INSTALL_DATADIR}/fcitx5/addon")
+
+option(ENABLE_WINDOWS_STATUS_MENU_TESTS "Build isolated status-menu bridge tests" OFF)
+if(ENABLE_WINDOWS_STATUS_MENU_TESTS)
+    add_executable(test_windowsstatusmenu test_windowsstatusmenu.cpp windowsstatusmenu.cpp)
+    target_link_libraries(test_windowsstatusmenu PRIVATE Fcitx5::Core)
+    target_compile_options(test_windowsstatusmenu PRIVATE -UNDEBUG)
+endif()

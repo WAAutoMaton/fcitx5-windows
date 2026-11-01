@@ -52,6 +52,22 @@ struct TsfCandidateTestAccess {
     static void staleEdit(Tsf &tsf) {
         assert(tsf.applySnapshot(0, nullptr, {}, tsf.generation_ + 1) == S_OK);
     }
+    static void staleMenu(Tsf &tsf) {
+        auto cache = std::make_shared<StatusMenuCache>();
+        cache->binding = {tsf.textEditSinkContext_, tsf.generation_, 99, 1};
+        cache->reply.revision = 1;
+        cache->reply.generation = 2;
+        StatusMenuSelection selection{cache, 1};
+        assert(tsf.queueStatusMenu(selection) == E_UNEXPECTED);
+        tsf.statusMenuActions_.push_back(selection);
+        const auto oldGeneration = tsf.generation_++;
+        tsf.processStatusMenu();
+        assert(tsf.statusMenuActions_.empty());
+        PipeClient::KeyReply reply;
+        reply.commit = "late menu commit";
+        assert(tsf.applySnapshot(0, cache->binding.context, reply,
+                                 oldGeneration) == S_OK);
+    }
 };
 } // namespace fcitx
 
@@ -542,6 +558,10 @@ void tests() {
     assert(ui.element->Show(TRUE) == E_UNEXPECTED);
     ui.element.Release();
 
+    const auto menuWrites = store->writes;
+    const auto menuText = store->text;
+    Access::staleMenu(*tsf);
+    assert(store->writes == menuWrites && store->text == menuText);
     Access::detach(*tsf);
     layout.Release();
     Access::staleEdit(*tsf);

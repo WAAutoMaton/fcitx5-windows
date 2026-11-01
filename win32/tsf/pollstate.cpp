@@ -72,6 +72,16 @@ LRESULT CALLBACK Tsf::messageWindowProc(HWND window, UINT message,
         self->Release();
         return 0;
     }
+    if (self && (message == LangBarItem::kStatusMenuMessage ||
+                 message == kStatusMenuActionMessage)) {
+        self->AddRef();
+        if (message == LangBarItem::kStatusMenuMessage)
+            self->refreshStatusMenu();
+        else
+            self->processStatusMenu();
+        self->Release();
+        return 0;
+    }
     if (self && message == kCandidateActionMessage) {
         self->AddRef();
         self->processCandidateActions();
@@ -173,6 +183,9 @@ void Tsf::pollState() {
         nextReconnect_ = GetTickCount64() + 2000;
         return;
     }
+    if (reply.inputMethod != inputMethod_)
+        clearStatusMenu();
+    scheduleStatusMenu(reply.statusMenuRevision);
     if (editRequested_ && reply.settingsRevision == state_.settingsRevision &&
         reply.commit.empty()) {
         return;

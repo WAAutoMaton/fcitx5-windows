@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Core、TSF 和 Settings 已接入共享异步结构化日志，Settings 的全局页提供默认关闭的详细日志开关。当前 IPC 为 v12，`windows-ui.conf` 为 v3；日志包括 Settings 窗口/进程退出、操作阶段、异常，以及 Pipe 握手身份和 UAC 关系诊断。
+Core、TSF 和 Settings 已接入共享异步结构化日志，Settings 的全局页提供默认关闭的详细日志开关。当前 IPC 为 v13，`windows-ui.conf` 为 v3；日志包括 Settings 窗口/进程退出、操作阶段、异常，以及 Pipe 握手身份和 UAC 关系诊断。
 
 启用方式及构建/测试入口见 [build.md](build.md#developer-logging)。日志主要用于 TSF/IPC、候选位置与渲染、焦点、Core 状态及 Settings 故障；不录制输入内容。
 
@@ -104,7 +104,7 @@ Core 的上游日志由 `src/windowslogging.cpp` 的自定义 streambuf 接入�
 
 | 层级 | 入口与覆盖 |
 | --- | --- |
-| 单元/模拟 | test_diagnostic_log：轮转/期限/容量/丢弃/失败；test_i18n：v1/v2 迁移、日志字段和共享 revision；test_protocol：v12 编码和非法字段 |
+| 单元/模拟 | test_diagnostic_log：轮转/期限/容量/丢弃/失败；test_i18n：v1/v2 迁移、日志字段和共享 revision；test_protocol：v13 编码和非法字段 |
 | TSF 免注册 | test_candidate、test_candidate_tsf：生产绘制/几何、UIElement、无 owner/layout、迟到 session 与日志元数据 |
 | 真实引擎/IPC | scripts/test-developer-logging.ps1：Core/TSF 开关同步、真实输入、断线与隐私检查 |
 | WinUI | scripts/test-ui-localization.ps1 -TestLogging：开发者页、应用/重置/冲突、目录与关闭行为 |

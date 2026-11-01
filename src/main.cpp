@@ -41,6 +41,16 @@ void setupEnv() {
     path.resize(length);
     auto rootPath = ::fs::path(path).parent_path().parent_path();
     win32::setupPluginEnvironment(rootPath, win32::pluginPrefixes(rootPath));
+#ifdef FCITX5_UI_TEST
+    const auto testRoot = getEnvironmentOrEmpty("FCITX5_TEST_USER_ROOT");
+    if (!testRoot.empty()) {
+        const auto expected = ::fs::u8path(testRoot) / "roaming" / "fcitx5";
+        if (StandardPaths::global()
+                .userDirectory(StandardPathsType::PkgData)
+                .lexically_normal() != expected.lexically_normal())
+            throw std::runtime_error("Isolated Core user root was not applied");
+    }
+#endif
 }
 
 void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,

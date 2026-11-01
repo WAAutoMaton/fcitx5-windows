@@ -71,6 +71,7 @@ bool Tsf::initRemoteContext() {
 }
 
 void Tsf::clearRemoteContext() {
+    clearStatusMenu();
     if (win32::diagnostic::tsfLogger().enabled())
         win32::diagnostic::tsfLogger().event(
             win32::diagnostic::Level::Debug, "context_clear",

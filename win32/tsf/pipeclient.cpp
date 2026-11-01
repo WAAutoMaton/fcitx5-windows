@@ -69,6 +69,7 @@ bool PipeClient::connect() {
         return false;
     }
     connectionStage_ = "CreateFile";
+    ++connectionGeneration_;
     pipe_ = CreateFileW(
         name.c_str(),
         restricted ? ipc::kInputPipeAccess : GENERIC_READ | GENERIC_WRITE, 0,
@@ -461,4 +462,25 @@ bool PipeClient::writeFrame(const ipc::Frame &frame) {
     return ipc::writeFrame(pipe_, frame, 500);
 }
 
+} // namespace fcitx
+
+namespace fcitx {
+bool PipeClient::getStatusMenu(uint64_t context, ipc::StatusMenuReply &reply) {
+    ipc::Frame response;
+    return request(ipc::MessageType::GetStatusMenu, context, {}, response) &&
+           response.type == ipc::MessageType::StatusMenuReply &&
+           ipc::decodeStatusMenu(response.payload, reply);
+}
+bool PipeClient::activateStatusMenu(uint64_t context, uint64_t generation,
+                                    uint32_t node,
+                                    ipc::StatusMenuActionReply &reply) {
+    ipc::Writer writer;
+    writer.u64(generation);
+    writer.u32(node);
+    ipc::Frame response;
+    return request(ipc::MessageType::ActivateStatusMenu, context, writer.take(),
+                   response) &&
+           response.type == ipc::MessageType::StatusMenuActionReply &&
+           ipc::decodeStatusMenuAction(response.payload, reply);
+}
 } // namespace fcitx

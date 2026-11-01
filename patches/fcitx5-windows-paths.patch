@@ -1,16 +1,33 @@
 diff --git a/src/lib/fcitx-utils/standardpaths_p_win.cpp b/src/lib/fcitx-utils/standardpaths_p_win.cpp
-index c9d6942..6251083 100644
+index c9d6942..c429b63 100644
 --- a/src/lib/fcitx-utils/standardpaths_p_win.cpp
 +++ b/src/lib/fcitx-utils/standardpaths_p_win.cpp
-@@ -19,6 +19,7 @@
+@@ -18,6 +18,7 @@
+ #include <initguid.h>
  #include <knownfolders.h>
  #include <ranges>
- #include "fcitx-utils/fcitxutils_export.h"
 +#include "fcitx-utils/environ.h"
+ #include "fcitx-utils/fcitxutils_export.h"
  #include "fcitx-utils/fs.h"
  #include "fcitx-utils/standardpaths.h"
- #include "fcitx-utils/stringutils.h"
-@@ -156,6 +157,26 @@ std::vector<std::filesystem::path> builtinPath(
+@@ -123,6 +124,16 @@ static bool isProcessLowIntegrity() {
+ }
+
+ std::filesystem::path localAppData(bool isRoaming) {
++#ifdef FCITX5_UI_TEST
++    const auto testRoot = getEnvironmentOrEmpty("FCITX5_TEST_USER_ROOT");
++    if (!testRoot.empty()) {
++        const auto isolated = std::filesystem::u8path(testRoot);
++        if (!isolated.is_absolute()) {
++            throw std::runtime_error("Test user root must be absolute");
++        }
++        return isolated / (isRoaming ? "roaming" : "local");
++    }
++#endif
+     static const bool isLow = isProcessLowIntegrity();
+     GUID id{};
+     if (isRoaming) {
+@@ -156,6 +167,27 @@ std::vector<std::filesystem::path> builtinPath(
          return *path;
      }
 
@@ -19,7 +36,8 @@ index c9d6942..6251083 100644
 +        {"datadir", "XDG_DATA_DIRS"},
 +        {"pkgdatadir", "FCITX_DATA_DIRS"},
 +    };
-+    if (auto *name = findValue(environment, std::string_view(builtInPathType))) {
++    if (auto *name =
++            findValue(environment, std::string_view(builtInPathType))) {
 +        std::vector<std::filesystem::path> paths;
 +        for (const auto &value :
 +             stringutils::split(getEnvironmentOrEmpty(*name), ";")) {
@@ -37,7 +55,7 @@ index c9d6942..6251083 100644
      static const std::filesystem::path defaultBasePath = []() {
          auto filename = appFileName();
          auto parent = filename.parent_path();
-@@ -176,11 +197,11 @@ std::vector<std::filesystem::path> builtinPath(
+@@ -176,11 +208,11 @@ std::vector<std::filesystem::path> builtinPath(
          {"basedir", basePath},
          {"configdir", basePath / "config"},
          {"pkgconfigdir", basePath / "config/fcitx5"},

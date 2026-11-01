@@ -11,7 +11,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 12;
+constexpr uint16_t kVersion = 13;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -57,6 +57,10 @@ enum class MessageType : uint16_t {
     CandidateAction = 39,
     GetPlugins = 40,
     PluginsReply = 41,
+    GetStatusMenu = 42,
+    StatusMenuReply = 43,
+    ActivateStatusMenu = 44,
+    StatusMenuActionReply = 45,
 };
 
 enum class CandidateAction : uint8_t { Select, Finalize, Abort };
@@ -220,6 +224,8 @@ struct KeyReply {
     bool enabled = true;
     std::string inputMethod;
     std::string inputMethodName;
+    std::string inputMethodSubMode;
+    std::string inputMethodSubModeLabel;
     std::string iconLabel;
     std::string inputMethodIcon;
     std::string inputMethodPanel;
@@ -229,6 +235,7 @@ struct KeyReply {
     uint64_t revision = 0;
     uint64_t settingsRevision = 0;
     bool detailedLogging = false;
+    uint64_t statusMenuRevision = 0;
     uint64_t candidateGeneration = 0;
     uint32_t selected = UINT32_MAX;
     bool hasPrev = false;
@@ -572,6 +579,8 @@ inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
     writer.u8(reply.enabled);
     writer.string(reply.inputMethod);
     writer.string(reply.inputMethodName);
+    writer.string(reply.inputMethodSubMode);
+    writer.string(reply.inputMethodSubModeLabel);
     writer.string(reply.iconLabel);
     writer.string(reply.inputMethodIcon);
     writer.string(reply.inputMethodPanel);
@@ -581,6 +590,7 @@ inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
     writer.u64(reply.revision);
     writer.u64(reply.settingsRevision);
     writer.u8(reply.detailedLogging);
+    writer.u64(reply.statusMenuRevision);
     writer.u64(reply.candidateGeneration);
     writer.u32(reply.selected);
     writer.u8(reply.hasPrev);
@@ -604,6 +614,8 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
     if (!reader.u8(consumed) || consumed > 1 || !reader.u8(enabled) ||
         enabled > 1 || !reader.string(result.inputMethod) ||
         !reader.string(result.inputMethodName) ||
+        !reader.string(result.inputMethodSubMode) ||
+        !reader.string(result.inputMethodSubModeLabel) ||
         !reader.string(result.iconLabel) ||
         !reader.string(result.inputMethodIcon) ||
         !reader.string(result.inputMethodPanel) ||
@@ -612,6 +624,7 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
         result.preeditCursor > result.preedit.size() ||
         !reader.u64(result.revision) || !reader.u64(result.settingsRevision) ||
         !reader.u8(detailedLogging) || detailedLogging > 1 ||
+        !reader.u64(result.statusMenuRevision) ||
         !reader.u64(result.candidateGeneration) ||
         !reader.u32(result.selected) || !reader.u8(hasPrev) || hasPrev > 1 ||
         !reader.u8(hasNext) || hasNext > 1 || !reader.u32(count) ||
@@ -674,3 +687,5 @@ inline bool decodeFrame(const std::vector<uint8_t> &data, Frame &frame) {
 } // namespace fcitx::win32::ipc
 
 #include "inputmethodprotocol.h"
+
+#include "statusmenuprotocol.h"

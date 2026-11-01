@@ -179,12 +179,43 @@ the SDK from the installed Core/libime staging prefix. See
 the generic addon toolchain and the isolated addon probe. Plugin-specific build
 and packaging instructions belong in each plugin's own repository.
 
+## Status Menus
+
+IPC v13 carries the current context's Fcitx `StatusArea` / `Action/Menu` tree.
+Core, both TSF architectures and Settings must be built and deployed together.
+Desktop popups and system `ITfMenu` share frozen views; AppContainer input pipes
+reject menu queries and actions.
+
+Build Core and TSF/probes with `-DCMAKE_CXX_FLAGS=-DFCITX5_UI_TEST` into separate
+test trees. Stage Pinyin and the Rime plugin with its matching librime DLLs,
+`share/rime-data` and `share/rime-data/opencc`, then run:
+
+```powershell
+./scripts/test-status-menu.ps1 -Prefix ./build/menu/prefix -TsfBuild ./build/menu/tsf -PeerTsfBuild ./build/menu/tsf-x86 -Rime
+```
+
+The runner sets `FCITX5_TEST_USER_ROOT` to a unique repository directory. Test
+builds redirect Windows Fcitx user paths there, and Core checks the effective
+PkgData directory before loading engines. Production builds ignore this variable.
+The Rime fixture deploys `luna_pinyin` and `luna_pinyin_simp`, checks their menu
+states, cancels the previous preedit, verifies traditional/simplified commits
+and opens the F4 candidate menu. Pinyin verifies a second plugin's real action.
+The optional peer runs the same checks and concurrent x86/x64 connection probes.
+The runner starts only its isolated Core and ends that exact process; it does
+not register TSF. Real language-bar dispatch, popup owner/focus, application
+coverage and physical DPI still require system acceptance.
+
+The root project exposes `-DENABLE_WINDOWS_STATUS_MENU_TESTS=ON` and the
+`test_windowsstatusmenu` target for synthetic tree, lifetime and exception tests.
+The independent TSF CTest suite includes protocol, frozen-view, native menu
+rendering and stale edit-session checks.
+
 ## Developer Logging
 
 In Settings, open **Global Settings > Developer options** and enable detailed
 logging, then apply. Core applies the change immediately; TSF learns the setting
 from its next Core reply. Core, TSF and Settings must be deployed together using
-IPC v12. `windows-ui.conf` now uses version 3; versions 1/2 gain the default
+IPC v13. `windows-ui.conf` now uses version 3; versions 1/2 gain the default
 shortcuts, and version 1 loads with logging off. Migration happens on the next
 successful save. Language, logging and shortcuts share a revision.
 
@@ -245,7 +276,7 @@ for the shared logger, privacy boundaries and Settings exit diagnostics.
 Global Settings → Shortcuts configures input-method cycling (Ctrl+Space by
 default) and direct selection of entries 1–5 (Ctrl+Alt+1…5). These settings use
 the existing multiline editor and recorder. Apply saves them; empty values
-disable an action. Core, TSF and Settings must be deployed together for IPC v12.
+disable an action. Core, TSF and Settings must be deployed together for IPC v13.
 The global file is now `windows-ui.conf` v3, with v1/v2 migration defaults.
 
 Engine key-list options have a record button alongside the editable text list.

@@ -39,6 +39,10 @@ class PipeClient {
     bool candidateAction(uint64_t contextId, uint64_t candidateGeneration,
                          ipc::CandidateAction action, uint32_t index,
                          KeyReply &reply);
+    bool getStatusMenu(uint64_t contextId, ipc::StatusMenuReply &reply);
+    bool activateStatusMenu(uint64_t contextId, uint64_t generation,
+                            uint32_t node, ipc::StatusMenuActionReply &reply);
+    uint64_t connectionGeneration() const { return connectionGeneration_; }
     bool reset(uint64_t contextId, KeyReply &reply);
     bool setMode(uint64_t contextId, bool enabled, KeyReply &reply);
     bool cycleInputMethod(uint64_t contextId, KeyReply &reply);
@@ -75,6 +79,7 @@ class PipeClient {
     const char *connectionStage_ = "not connected";
     DWORD serverProcessId_ = 0;
     uint64_t nextRequestId_ = 1;
+    uint64_t connectionGeneration_ = 0;
     mutable std::mutex mutex_;
 };
 

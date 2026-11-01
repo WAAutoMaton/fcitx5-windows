@@ -789,3 +789,11 @@ msgstr "中文標點"
 msgctxt "input-method"
 msgid "English punctuation"
 msgstr "英文標點"
+
+msgctxt "menu"
+msgid "Reading input method menu..."
+msgstr "正在讀取輸入法選單…"
+
+msgctxt "menu"
+msgid "Unable to read input method menu"
+msgstr "讀取輸入法選單失敗"

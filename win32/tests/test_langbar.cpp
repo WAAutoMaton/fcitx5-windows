@@ -72,6 +72,53 @@ class TestMenu : public ITfMenu {
     unsigned items = 0;
 };
 
+class DynamicMenu : public ITfMenu {
+  public:
+    struct Item {
+        UINT id;
+        DWORD flags;
+        std::wstring text;
+        CComPtr<ITfMenu> child;
+    };
+    std::vector<Item> items;
+    ULONG references = 1;
+    bool fail = false;
+    STDMETHODIMP QueryInterface(REFIID id, void **result) override {
+        if (!result)
+            return E_INVALIDARG;
+        *result = nullptr;
+        if (id != IID_IUnknown && id != IID_ITfMenu)
+            return E_NOINTERFACE;
+        *result = static_cast<ITfMenu *>(this);
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++references; }
+    STDMETHODIMP_(ULONG) Release() override {
+        const auto count = --references;
+        if (!count)
+            delete this;
+        return count;
+    }
+    STDMETHODIMP AddMenuItem(UINT id, DWORD flags, HBITMAP, HBITMAP,
+                             const WCHAR *text, ULONG length,
+                             ITfMenu **child) override {
+        if (child)
+            *child = nullptr;
+        if (fail)
+            return E_FAIL;
+        Item item{id, flags, std::wstring(text, length), {}};
+        if (flags & TF_LBMENUF_SUBMENU) {
+            assert(child);
+            item.child.Attach(new DynamicMenu());
+            item.child.CopyTo(child);
+        } else
+            assert(!child);
+        items.push_back(std::move(item));
+        return S_OK;
+    }
+};
+
 std::vector<DWORD> iconPixels(ITfLangBarItemButton *item) {
     HICON icon = nullptr;
     assert(item->GetIcon(&icon) == S_OK && icon);
@@ -155,6 +202,55 @@ int main() {
         CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                         nullptr, nullptr);
     assert(dispatch);
+    {
+        CComPtr<LangBarItem> dynamic;
+        dynamic.Attach(new LangBarItem(dispatch, true));
+        auto cache = std::make_shared<fcitx::StatusMenuCache>();
+        using namespace fcitx::win32::ipc;
+        cache->reply.revision = 1;
+        cache->reply.generation = 2;
+        cache->reply.nodes = {
+            {1, 0, StatusMenuNodeKind::Submenu, true, false, false, "parent"},
+            {2, 1, StatusMenuNodeKind::Command, true, true, true, "A&B"},
+            {3, 1, StatusMenuNodeKind::Command, false, false, false,
+             "disabled"}};
+        dynamic->setStatusMenuContext(true);
+        dynamic->setStatusMenu(cache);
+        unsigned selected = 0;
+        dynamic->setStatusMenuHandler(
+            [&](const fcitx::StatusMenuSelection &selection) {
+                assert(selection.cache == cache && selection.node == 2);
+                ++selected;
+                return S_OK;
+            });
+        CComPtr<DynamicMenu> tree;
+        tree.Attach(new DynamicMenu());
+        assert(dynamic->InitMenu(tree) == S_OK && tree->items.size() == 7);
+        assert(tree->items[0].flags == TF_LBMENUF_SUBMENU);
+        auto *child = static_cast<DynamicMenu *>(tree->items[0].child.p);
+        assert(child->items.size() == 2 && child->items[0].text == L"A&&B");
+        assert(child->items[0].flags & TF_LBMENUF_CHECKED);
+        assert(child->items[1].flags & TF_LBMENUF_GRAYED);
+        const auto old = child->items[0].id;
+        assert(dynamic->OnMenuSelect(child->items[1].id) == E_INVALIDARG);
+        assert(dynamic->OnMenuSelect(old) == S_OK && selected == 1);
+        assert(dynamic->OnMenuSelect(old) == E_INVALIDARG);
+        CComPtr<DynamicMenu> next;
+        next.Attach(new DynamicMenu());
+        assert(dynamic->InitMenu(next) == S_OK);
+        assert(dynamic->OnMenuSelect(old) == E_INVALIDARG);
+        const auto fresh =
+            static_cast<DynamicMenu *>(next->items[0].child.p)->items[0].id;
+        assert(fresh != old);
+        CComPtr<DynamicMenu> failed;
+        failed.Attach(new DynamicMenu());
+        failed->fail = true;
+        assert(dynamic->InitMenu(failed) == E_FAIL);
+        assert(dynamic->OnMenuSelect(fresh) == E_INVALIDARG);
+        dynamic->invalidateStatusMenu();
+        assert(dynamic->OnMenuSelect(fresh) == E_INVALIDARG);
+        dynamic->detach();
+    }
     CComPtr<LangBarItem> bound;
     bound.Attach(new LangBarItem(dispatch, true));
     assert(bound->OnMenuSelect(LangBarItem::kSettingsMenuId) == S_OK);

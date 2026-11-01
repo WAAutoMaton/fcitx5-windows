@@ -4,6 +4,7 @@
 #include "../win32/ipc/protocol.h"
 #include "windowsdictionaries.h"
 #include "windowssettings.h"
+#include "windowsstatusmenu.h"
 #include <atomic>
 #include <bitset>
 #include <condition_variable>
@@ -32,6 +33,7 @@ class WindowsInputContext final : public InputContext {
 
     const char *frontend() const override { return "win32"; }
 
+    uint64_t id() const { return id_; }
     void setCapabilities(uint64_t value);
     std::string takeCommit();
     std::string preedit() const;
@@ -115,6 +117,9 @@ class WindowsPipeServer {
     std::vector<ClientThread> clients_;
     std::unordered_map<uint64_t, uint64_t> owners_;
     uint64_t nextContextId_ = 1;
+    uint64_t focusedContext_ = 0;
+    std::unordered_map<uint64_t, std::unique_ptr<WindowsStatusMenu>>
+        statusMenus_;
     std::unordered_map<uint64_t, std::unique_ptr<WindowsInputContext>>
         contexts_;
 };

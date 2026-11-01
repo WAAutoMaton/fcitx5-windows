@@ -25,6 +25,9 @@ HRESULT Tsf::initLangBarItem() {
     }
     langBarItemManager_ = std::move(manager);
     langBarItem_.Attach(item);
+    item->setStatusMenuHandler([this](const StatusMenuSelection &selection) {
+        return queueStatusMenu(selection);
+    });
     item->setUiPolicy(modernUi_, restrictedInput_);
     if (restrictedInput_)
         item->setAvailable(pipe_.connected());
@@ -73,7 +76,10 @@ void Tsf::acceptInputMethod(const PipeClient::KeyReply &reply) {
              {"restricted", restrictedInput_ ? "true" : "false"},
              {"modern_ui", modernUi_ ? "true" : "false"},
              {"input_allowed", inputAllowed_ ? "true" : "false"}});
+    if (inputMethod_ != reply.inputMethod)
+        clearStatusMenu();
     inputMethod_ = reply.inputMethod;
+    scheduleStatusMenu(reply.statusMenuRevision);
     if (reply.enabled != keyboardOpen_) {
         setKeyboardOpen(reply.enabled);
     }
@@ -82,6 +88,13 @@ void Tsf::acceptInputMethod(const PipeClient::KeyReply &reply) {
         utf8ToWide(reply.inputMethodName, name);
         utf8ToWide(reply.iconLabel, label);
         utf8ToWide(reply.inputMethodIcon, icon);
+        std::wstring subMode, subLabel;
+        utf8ToWide(reply.inputMethodSubMode, subMode);
+        utf8ToWide(reply.inputMethodSubModeLabel, subLabel);
+        if (!subMode.empty())
+            name += L" \u00b7 " + subMode;
+        if (!subLabel.empty())
+            label = std::move(subLabel);
         langBarItem_.p->setInputMethod(reply.enabled, std::move(name),
                                        std::move(label), std::move(icon));
     }

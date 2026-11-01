@@ -45,7 +45,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-<当前用户SID>-*
 
 ### 1. 准备宿主输入法与目标沙箱
 
-1. 先在沙箱外确认 Fcitx5 已安装、已注册，并能在普通 x64 应用中输入中文。Core、TSF DLL 和 Settings 应来自同一套构建，使用一致的协议 v12。
+1. 先在沙箱外确认 Fcitx5 已安装、已注册，并能在普通 x64 应用中输入中文。Core、TSF DLL 和 Settings 应来自同一套构建，使用一致的协议 v13。
 2. 在 Sandboxie 管理器中确认要配置的沙箱已启用，并记下它在 `Sandboxie.ini` 中的节名，例如 `[DefaultBox]` 对应 `DefaultBox`。下文命令中的 `DefaultBox` 都要替换为实际节名，而非自定义显示名称。多个沙箱需要分别配置。
 3. 在沙箱外，以平时使用输入法的 Windows 用户启动已部署的 `bin/Fcitx5.exe`。例如安装目录为 `C:\Fcitx5` 时，在沙箱外 PowerShell 中运行：
 
@@ -131,7 +131,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 | 沙箱外正常，沙箱内无法输入 | 确认应用实际位于配置的沙箱，规则在正确节内，SID 属于当前用户，并已彻底退出、重新打开应用。若使用 `-SessionOnly`，重新生成当前 session 的规则。 |
 | 脚本提示沙箱不存在或未启用 | 检查 `-BoxName` 是否为配置节名，以及目标节的 `Enabled=y`；脚本不会新建或启用沙箱。 |
 | 规则无法保存或脚本写入失败 | 检查 Sandboxie 配置锁定、管理权限及 `SbieIni.exe` 路径，处理具体报错后重新确认规则已保存。 |
-| 连接后提示协议不匹配 | 使用同一套构建的 Core、TSF DLL 和 Settings，并重新打开加载旧 DLL 的应用。Pipe 名保留历史 `v2` 前缀，framing 当前为 `v12`，无需改名。 |
+| 连接后提示协议不匹配 | 使用同一套构建的 Core、TSF DLL 和 Settings，并重新打开加载旧 DLL 的应用。Pipe 名保留历史 `v2` 前缀，framing 当前为 `v13`，无需改名。 |
 | Settings 在沙箱内启动或出现另一份 Core | 检查是否仍在使用旧构建、残留沙箱进程或强制沙箱规则；当前实现要求 Core 和 Settings 在沙箱外运行。 |
 
 若已有构建产物，可在沙箱外和目标沙箱内分别运行 `ipc_probe.exe --diagnose`（使用实际文件路径），比较 Pipe 名称、连接阶段、Windows 错误码和服务端 PID。该命令不启动服务或修改配置。错误 `2/3` 只说明当前 Pipe 不可见，可能是宿主未启动、规则未生效或应用未重启；不能仅凭错误码判断原因。诊断成功只证明 IPC 连接，真实输入和候选窗仍需按上面的应用步骤验证。
@@ -159,7 +159,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 
 ## 验证与交付
 
-代码已接入 HostOnly 策略、服务端归属检查、UI 语言 IPC 和宿主操作。当前统一协议为 v12，Sandboxie endpoint 名保持历史 `v2` 前缀。生成规则：
+代码已接入 HostOnly 策略、服务端归属检查、UI 语言 IPC 和宿主操作。当前统一协议为 v13，Sandboxie endpoint 名保持历史 `v2` 前缀。生成规则：
 
 ```powershell
 ./scripts/sandboxie-template.ps1 -BoxName DefaultBox -SessionOnly

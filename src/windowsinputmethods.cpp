@@ -568,6 +568,10 @@ void WindowsSettings::decorate(InputContext *context,
         return;
     }
     reply.inputMethod = entry->uniqueName();
+    if (auto *engine = instance_.inputMethodEngine(context)) {
+        reply.inputMethodSubMode = engine->subMode(*entry, *context);
+        reply.inputMethodSubModeLabel = engine->subModeLabel(*entry, *context);
+    }
     if (const auto *info = method(reply.inputMethod)) {
         reply.inputMethodName = info->name;
         reply.iconLabel = info->iconLabel;

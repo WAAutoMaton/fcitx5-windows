@@ -119,6 +119,18 @@ class Tsf : public ITfTextInputProcessorEx,
     void finishEdit(uint64_t generation, HRESULT result);
     void cancelComposition();
     void pollState();
+    void clearStatusMenu();
+    void scheduleStatusMenu(uint64_t revision);
+    void refreshStatusMenu();
+    bool statusMenuBindingValid(const StatusMenuBinding &binding) const;
+    HRESULT queueStatusMenu(const StatusMenuSelection &selection);
+    void processStatusMenu();
+    static constexpr UINT kStatusMenuActionMessage = WM_APP + 14;
+    std::shared_ptr<const StatusMenuCache> statusMenuCache_;
+    std::deque<StatusMenuSelection> statusMenuActions_;
+    bool statusMenuRefreshPosted_ = false;
+    uint64_t statusMenuRevision_ = 0;
+    ULONGLONG nextStatusMenuQuery_ = 0;
     void requestService(UINT command);
     void pollServiceTask();
     bool initMessageWindow();

@@ -2,7 +2,7 @@
 
 ## 当前状态与边界
 
-AppContainer 输入传输、TSF 候选 UIElement/Behavior、敏感 context 透传和可选登录启动已接入，当前 IPC 为 v12。自动化覆盖真实 AppContainer token 和免注册 TSF context；已注册 TIP 的真实派发、签名部署与 UWP 应用矩阵列入后文验收范围。
+AppContainer 输入传输、TSF 候选 UIElement/Behavior、敏感 context 透传和可选登录启动已接入，当前 IPC 为 v13。自动化覆盖真实 AppContainer token 和免注册 TSF context；已注册 TIP 的真实派发、签名部署与 UWP 应用矩阵列入后文验收范围。
 
 目标为 Windows 11 x64 的普通文本输入。Terminal、Full Trust WinUI/XAML 和真正的 AppContainer 按实际 token 分别验收。已有 x86 TSF 构建与桌面 probe，现代应用的真实 x86 派发仍待验证；安全桌面、完整密码支持、触摸键盘专用布局、搜索集成、完整无障碍和 ARM64 TSF 尚待实现或验证。
 
