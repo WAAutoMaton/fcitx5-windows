@@ -164,8 +164,12 @@ void cycleProbe(HMODULE module) {
                 "cycle indicator name missing");
         const auto found = std::find_if(
             methods.begin(), methods.end(), [&](const auto &method) {
-                return fcitx::stringToWString(method.name, CP_UTF8) ==
-                       std::wstring(name);
+                const auto methodName =
+                    fcitx::stringToWString(method.name, CP_UTF8);
+                const std::wstring tooltip(name);
+                return tooltip == methodName ||
+                       (tooltip.starts_with(methodName + L" \u00b7 ") &&
+                        tooltip.size() > methodName.size() + 3);
             });
         require(found != methods.end(), "cycle indicator method not enabled");
         return static_cast<size_t>(found - methods.begin());
