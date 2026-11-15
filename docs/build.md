@@ -9,7 +9,7 @@ custom build paths, installer packaging, validation and input-method registratio
 The CI/Nightly workflow packages four Windows 11 x64 installers: `base`/`full`
 crossed with bundled/no bundled Visual C++/Windows App Runtime installers.
 `base` contains fcitx5-chinese-addons; `full` contains every plugin under `plugins/`,
-currently fcitx5-chinese-addons, fcitx5-rime and fcitx5-wenzhounese. See
+currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra and fcitx5-wenzhounese. See
 [Install in the README](../README.md#install) for package selection and removal,
 and [installer implementation](windows-installer-design.md) for current behavior
 and unverified system-installation scenarios. The build/deploy and registration
@@ -148,7 +148,7 @@ method data.
 ## Independent Input-Method Plugins
 
 Plugin source submodules live in `plugins/fcitx5-chinese-addons`, `plugins/fcitx5-wenzhounese`,
-and `plugins/fcitx5-rime`. fcitx5-chinese-addons is built by
+`plugins/fcitx5-table-extra` and `plugins/fcitx5-rime`. fcitx5-chinese-addons is built by
 `build-pinyin.ps1` as part of the base runtime. To extend an existing base runtime
 with every additional plugin using the same build's SDK:
 
@@ -172,6 +172,15 @@ from `clang64/share/rime-data` (or `clang64/share/rime/data`) into the plugin's
 `share/rime-data`. Apply the pinned Windows patches before standalone plugin
 builds. `scripts/test-build-plugins.ps1` covers discovery, package layout and
 dependency-copy behavior using fixture projects.
+
+fcitx5-table-extra is a resource package using the base runtime's `table` engine.
+The SDK's native `libime_tabledict.exe` compiles all 25 tables, including Wubi98,
+Zhengma, Boshiamy, Cangjie5 and Jyutping Table. Its input-method descriptions,
+compiled dictionaries, icons and licenses are installed under
+`plugins/fcitx5-table-extra`; no additional engine DLL is required. CI verifies
+candidate commits for Wubi98, Cangjie5 and Jyutping Table, their absence from base,
+and all table descriptions, dictionaries and the license in both full installer
+variants' file manifests.
 
 Additional input methods can use the existing shared-library addon loader and
 the SDK from the installed Core/libime staging prefix. See

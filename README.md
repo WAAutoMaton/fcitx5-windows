@@ -47,7 +47,7 @@ and Nightly release workflow.
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
 workflow publishes four Windows 11 x64 installers and their SHA256 files.
 Choose `base` for fcitx5-chinese-addons only, or `full` for all bundled plugins
-(currently fcitx5-chinese-addons, fcitx5-rime and fcitx5-wenzhounese). Each edition has two runtime variants:
+(currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra and fcitx5-wenzhounese). Each edition has two runtime variants:
 
 - `Fcitx5-<run>-<base|full>-x64-setup.exe`: bundles Visual C++ and Windows App Runtime installers.
 - `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`: requires those runtimes to be installed

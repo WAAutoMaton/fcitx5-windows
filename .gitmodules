@@ -16,3 +16,6 @@
 [submodule "fcitx5-rime"]
 	path = plugins/fcitx5-rime
 	url = https://github.com/fcitx/fcitx5-rime.git
+[submodule "plugins/fcitx5-table-extra"]
+	path = plugins/fcitx5-table-extra
+	url = https://github.com/fcitx/fcitx5-table-extra

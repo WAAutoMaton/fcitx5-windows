@@ -59,7 +59,9 @@ Settings 的“全局设置 → 插件”页通过只读 IPC 展示 Core 已发�
 
 ## 仓库插件与 full 包
 
-`build-pinyin.ps1` 构建 base 中的 fcitx5-chinese-addons；`build-plugins.ps1` 自动发现其余直接插件目录，使用同一次构建的 SDK，安装到 `Prefix/plugins/<name>`。当前 full 包包含 chinese-addons、fcitx5-rime 和 fcitx5-wenzhounese。脚本对额外插件执行 `git lfs pull`，需要 Git LFS。
+`build-pinyin.ps1` 构建 base 中的 fcitx5-chinese-addons；`build-plugins.ps1` 自动发现其余直接插件目录，使用同一次构建的 SDK，安装到 `Prefix/plugins/<name>`。当前 full 包包含 chinese-addons、fcitx5-rime、fcitx5-table-extra 和 fcitx5-wenzhounese。脚本对额外插件执行 `git lfs pull`，需要 Git LFS。
+
+fcitx5-table-extra 是资源包，复用 base 已包含的 `table` 引擎，不新增 DLL 或 addon。构建使用 SDK 的 Windows 原生 `libime_tabledict.exe` 生成全部 25 张码表，输入法描述、字典、图标和许可保留在 `plugins/fcitx5-table-extra`。CI 通过 addon probe 检查五笔 98、仓颉五代和粤拼码表的自动发现、配置与候选提交，以及 base 中的条目缺席；full 的两种安装包清单均检查全部码表描述、字典和许可。真实应用的系统派发仍需验收。
 
 Rime 的 Windows 补丁记录在 `patches/fcitx5-rime-windows.patch`，由 `apply-pinyin-patches.ps1` 按锁定版本应用。构建需匹配的 clang64 librime 和 librime-data 包；脚本将共享方案数据复制到 `plugins/fcitx5-rime/share/rime-data`，运行时通过 StandardPaths 查找 `default.yaml`。CI 当前用 addon probe 验证温州话 `nyi` 候选提交，Rime 的真实输入及首次方案部署仍需单独验证。
 

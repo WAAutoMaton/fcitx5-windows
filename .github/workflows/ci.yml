@@ -44,7 +44,7 @@ jobs:
           Copy-Item -LiteralPath dist/ci-runtime -Destination dist/ci-runtime-full -Recurse
           ./scripts/build-plugins.ps1 -CorePrefix ./build/ci-x64/prefix -Prefix ./dist/ci-runtime-full -BuildRoot ./build/ci-x64/plugins
 
-      - name: Verify bundled Wenzhounese discovery and commits
+      - name: Verify bundled plugin discovery and commits
         run: |
           $sdk = (Resolve-Path build/ci-x64/prefix).Path.Replace('\', '/')
           $env:MSYS2_ROOT = 'C:/msys64'
@@ -66,6 +66,12 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Bundled Wenzhounese probe failed.' }
             & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" "$PWD/dist/ci-runtime/plugins" wenzhounese --absent
             if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains Wenzhounese.' }
+            foreach ($sample in @(@('wubi98', 'wq'), @('cangjie5', 'a'), @('jyutping-table', 'm'))) {
+              & ./dist/ci-runtime-full/bin/addon_probe.exe "$PWD/dist/ci-runtime-full" --default $sample[0] $sample[1]
+              if ($LASTEXITCODE -ne 0) { throw "Bundled table-extra probe failed: $($sample[0])" }
+              & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default $sample[0] --absent
+              if ($LASTEXITCODE -ne 0) { throw "Base runtime unexpectedly contains table-extra: $($sample[0])" }
+            }
           } finally { Remove-Item -LiteralPath dist/ci-runtime-full/bin/addon_probe.exe, dist/ci-runtime/bin/addon_probe.exe }
 
       - name: Prepare portable TSF tests and probes
@@ -319,6 +325,19 @@ jobs:
                 throw "Installer output missing: $package$suffix"
               }
             }
+          }
+          $manifest = Get-Content -Raw "dist/installer/metadata/$env:FCITX5_PACKAGE.runtime.json" | ConvertFrom-Json
+          $tableExtra = 'plugins/fcitx5-table-extra'
+          $expected = @("$tableExtra/licenses/LICENSES/GPL-3.0-or-later.txt")
+          foreach ($source in Get-ChildItem plugins/fcitx5-table-extra/tables -Filter '*.conf.in' -File) {
+            $method = $source.Name -replace '\.conf\.in$', ''
+            $expected += "$tableExtra/share/fcitx5/inputmethod/$method.conf"
+            $expected += "$tableExtra/share/fcitx5/table/$method.main.dict"
+          }
+          foreach ($path in $expected) {
+            $count = @($manifest.files | Where-Object path -eq $path).Count
+            $required = if ('${{ matrix.edition }}' -eq 'full') { 1 } else { 0 }
+            if ($count -ne $required) { throw "Incorrect table-extra installer payload: $path" }
           }
 
       - name: Upload installer artifact
