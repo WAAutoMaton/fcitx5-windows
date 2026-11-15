@@ -20,7 +20,7 @@ public static class FcitxSettingsCapture {
 '@
 }
 if (Get-Process Fcitx5,Fcitx5Settings -ErrorAction SilentlyContinue) { throw 'Core or Settings is already running; isolated UI tests need a free endpoint.' }
-$coreProcess = $null; $windowProcess = $null; $secondProcess = $null
+$coreProcess = $null; $windowProcess = $null; $secondProcess = $null; $addWindow = $null
 $settingsFile = [IO.Path]::GetFullPath("$LogDirectory/windows.conf")
 [IO.File]::WriteAllText("$LogDirectory/windows-ui.conf", "[General]`nVersion=1`nLanguage=zh-Hans`nRevision=1`n")
 $configuration = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Fcitx5/config/fcitx5'
@@ -38,6 +38,22 @@ function Find-Id([string]$Id) {
 function Find-Name([string]$Name) {
     return $script:uiWindow.FindFirst([Windows.Automation.TreeScope]::Descendants,
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty,$Name))
+}
+function Find-WindowId($Window, [string]$Id) {
+    return $Window.FindFirst([Windows.Automation.TreeScope]::Descendants,
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,$Id))
+}
+function Open-AddWindow {
+    for ($attempt = 0; $attempt -lt 30; ++$attempt) {
+        $windows = [Windows.Automation.AutomationElement]::RootElement.FindAll(
+            [Windows.Automation.TreeScope]::Children,
+            [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty,$script:windowProcess.Id))
+        foreach ($window in $windows) {
+            if (Find-WindowId $window 'AddInputMethodLanguages') { return $window }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw 'Add input method window is missing.'
 }
 function Invoke-Control($Control) {
     if (!$Control) { throw 'Control is missing.' }
@@ -100,8 +116,19 @@ function Select-Combo([string]$Id, [string]$Name, [string]$ItemId = '') {
 }
 function Add-Method([string]$Id) {
     Invoke-Control (Find-Id 'AddInputMethod')
-    Select-Combo 'AvailableInputMethods' '' "available:$Id"
-    Invoke-Control (Find-Name (Text @(0x6dfb,0x52a0)))
+    $script:addWindow = Open-AddWindow
+    $item = Find-WindowId $script:addWindow "add-method:$Id"
+    if (!$item) {
+        # Input methods are grouped by language. Select the first group that
+        # contains the requested entry before looking it up again.
+        $language = if ($Id -like 'keyboard-*') { 'en' } else { 'zh_CN' }
+        $languageItem = Find-WindowId $script:addWindow "add-language:$language"
+        if ($languageItem) { $languageItem.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select(); Start-Sleep -Milliseconds 150 }
+        $item = Find-WindowId $script:addWindow "add-method:$Id"
+    }
+    if (!$item) { throw "Missing add candidate: $Id" }
+    $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Invoke-Control (Find-WindowId $script:addWindow 'AddInputMethodConfirm')
     Wait-Ready
     if (!(Find-Id "method:$Id")) { throw "Input method was not added: $Id" }
 }

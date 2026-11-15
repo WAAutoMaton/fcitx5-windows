@@ -2,7 +2,7 @@
 
 ## 状态与目标
 
-Core、IPC 和 x64/x86 TSF 已接入通用状态菜单桥接，统一协议为 v13；Settings 使用同一协议头配套构建。桌面 `HMENU` 与系统托管 `ITfMenu` 使用冻结视图，Rime 和拼音的真实动作已有隔离 probe。真实 Windows 语言栏派发、辅助 owner 焦点行为、DPI 和应用矩阵仍需系统验收。
+Core、IPC 和 x64/x86 TSF 已接入通用状态菜单桥接，统一协议为 v14；Settings 使用同一协议头配套构建。桌面 `HMENU` 与系统托管 `ITfMenu` 使用冻结视图，Rime 和拼音的真实动作已有隔离 probe。真实 Windows 语言栏派发、辅助 owner 焦点行为、DPI 和应用矩阵仍需系统验收。
 
 采用 Fcitx `StatusArea → Action/Menu` 到 Windows 原生菜单的通用桥接。Rime 是首个验证对象；其他插件通过相同接口提供模式、字符集、方案或其他状态动作，复用同一条 Core、IPC 和 TSF 路径。
 
@@ -127,7 +127,7 @@ Settings 继续承担持久配置和输入法列表管理。运行时方案选�
 
 ### 消息
 
-v13 分配 `GetStatusMenu=42`、`StatusMenuReply=43`、`ActivateStatusMenu=44` 和 `StatusMenuActionReply=45`：
+v14 分配 `GetStatusMenu=42`、`StatusMenuReply=43`、`ActivateStatusMenu=44` 和 `StatusMenuActionReply=45`：
 
 | 消息 | contextId | payload / reply |
 | --- | --- | --- |

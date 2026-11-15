@@ -10,7 +10,7 @@ int main() {
     wideIds.requestId = 0x8877665544332211ULL;
     wideIds.contextId = 0xffeeddccbbaa0099ULL;
     const std::vector<uint8_t> expected = {
-        0x58, 0x43, 0x57, 0x46, 13,   0,    8,    0,    0,    0,
+        0x58, 0x43, 0x57, 0x46, 14,   0,    8,    0,    0,    0,
         0,    0,    0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
         0x99, 0,    0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
     assert(encodeFrame(wideIds) == expected && expected.size() == kHeaderSize);
@@ -27,7 +27,7 @@ int main() {
     assert(globalSettingsRequest(MessageType::StopServices));
     assert(globalSettingsRequest(MessageType::GetGlobalSettings));
     assert(globalSettingsRequest(MessageType::SetGlobalSettings));
-    assert(kVersion == 13);
+    assert(kVersion == 14);
     GlobalSettings global{UiLanguage::TraditionalChinese, 42, true};
     GlobalSettings restoredGlobal;
     assert(decodeGlobalSettings(encodeGlobalSettings(global), restoredGlobal) &&
@@ -229,7 +229,8 @@ int main() {
     InputMethodsReply methods;
     methods.selection = {8, {"keyboard-us", "pinyin", "wbx"}};
     methods.methods = {
-        {"pinyin", "Pinyin", "fcitx-pinyin", "P", "pinyin", true, false}};
+        {"pinyin", "Pinyin", "fcitx-pinyin", "P", "pinyin", true, false,
+         "zh_CN"}};
     InputMethodsReply decodedMethods;
     const auto methodsPayload = encodeInputMethods(methods);
     assert(decodeInputMethods(methodsPayload, decodedMethods));

@@ -146,6 +146,7 @@ void WindowsSettings::initializeMethods() {
             info.icon = entry.icon();
             info.keyboard =
                 entry.isKeyboard() || entry.addon() == "windowskeyboard";
+            info.language = entry.languageCode();
             info.panel = info.keyboard ? "keyboard" : entry.addon();
             info.iconLabel = entry.label();
             if (info.id == "keyboard-us") {

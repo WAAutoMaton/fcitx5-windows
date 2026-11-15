@@ -13,6 +13,10 @@ struct InputMethodInfo {
     std::string id, name, icon, iconLabel, panel;
     bool available = false;
     bool keyboard = false;
+    // BCP-47-ish language code used to group entries in the Settings picker.
+    // Keep this after the existing fields so aggregate initializers from
+    // probes and fixtures remain source compatible.
+    std::string language;
     bool operator==(const InputMethodInfo &) const = default;
 };
 struct InputMethodSelection {
@@ -160,6 +164,7 @@ inline std::vector<uint8_t> encodeInputMethods(const InputMethodsReply &reply) {
         writer.string(method.panel);
         writer.u8(method.available);
         writer.u8(method.keyboard);
+        writer.string(method.language);
     }
     return writer.take();
 }
@@ -170,7 +175,7 @@ inline bool decodeInputMethods(const std::vector<uint8_t> &payload,
     uint32_t count = 0;
     if (!readSettingsError(reader, result.error) ||
         !readSelection(reader, result.selection) || !reader.u32(count) ||
-        count > kMaxInputMethods || count > reader.remaining() / 22) {
+        count > kMaxInputMethods || count > reader.remaining() / 26) {
         return false;
     }
     std::set<std::string> ids;
@@ -181,7 +186,8 @@ inline bool decodeInputMethods(const std::vector<uint8_t> &payload,
             !ids.insert(method.id).second || !reader.string(method.name) ||
             !reader.string(method.icon) || !reader.string(method.iconLabel) ||
             !reader.string(method.panel) || !reader.u8(available) ||
-            available > 1 || !reader.u8(keyboard) || keyboard > 1) {
+            available > 1 || !reader.u8(keyboard) || keyboard > 1 ||
+            !reader.string(method.language)) {
             return false;
         }
         method.available = available;

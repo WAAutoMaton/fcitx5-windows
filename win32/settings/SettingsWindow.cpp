@@ -11,6 +11,7 @@
 #include <cmath>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <microsoft.ui.xaml.window.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -267,9 +268,6 @@ void SettingsWindow::translateStatic() {
     root.FindName(L"MethodsHeading")
         .as<TextBlock>()
         .Text(tr("settings", "Input Methods"));
-    root.FindName(L"AddHeading")
-        .as<TextBlock>()
-        .Text(tr("settings", "Add Input Method"));
     root.FindName(L"GlobalSettingsText")
         .as<TextBlock>()
         .Text(tr("settings", "Global Settings"));
@@ -319,7 +317,6 @@ void SettingsWindow::translateStatic() {
     Automation::AutomationProperties::SetName(
         globalButton_, tr("settings", "Global Settings"));
     const std::pair<const wchar_t *, const char *> buttons[] = {
-        {L"AddConfirm", win32::i18n::mark("settings", "Add")},
         {L"ResetDefaults", win32::i18n::mark("settings", "Reset to Defaults")},
         {L"Retry", win32::i18n::mark("settings", "Reload")},
         {L"Cancel", win32::i18n::mark("settings", "Close")},
@@ -629,11 +626,6 @@ bool SettingsWindow::open() {
     <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
       <Button x:Name="Add" ToolTipService.ToolTip="Add Input Method" AutomationProperties.AutomationId="AddInputMethod">
         <FontIcon Glyph="&#xE710;" FontSize="16"/>
-        <Button.Flyout><Flyout><StackPanel Spacing="12" Width="260">
-          <TextBlock x:Name="AddHeading" Text="Add Input Method" FontWeight="SemiBold"/>
-          <ComboBox x:Name="Available" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AvailableInputMethods"/>
-          <Button x:Name="AddConfirm" Content="Add" HorizontalAlignment="Right"/>
-        </StackPanel></Flyout></Button.Flyout>
       </Button>
       <Button x:Name="Remove" ToolTipService.ToolTip="Remove" AutomationProperties.AutomationId="RemoveInputMethod"><FontIcon Glyph="&#xE74D;" FontSize="16"/></Button>
       <Button x:Name="Up" ToolTipService.ToolTip="Move Up" AutomationProperties.AutomationId="MoveInputMethodUp"><FontIcon Glyph="&#xE74A;" FontSize="16"/></Button>
@@ -729,7 +721,6 @@ bool SettingsWindow::open() {
 </Grid>)")
                     .as<FrameworkElement>();
     methods_ = root.FindName(L"Methods").as<ListView>();
-    available_ = root.FindName(L"Available").as<ComboBox>();
     options_ = root.FindName(L"Options").as<StackPanel>();
     heading_ = root.FindName(L"Heading").as<TextBlock>();
     add_ = root.FindName(L"Add").as<Button>();
@@ -757,9 +748,7 @@ bool SettingsWindow::open() {
             chooseMethod();
         }
     });
-    root.FindName(L"AddConfirm").as<Button>().Click([this](auto &&, auto &&) {
-        changeSelection(0);
-    });
+    add_.Click([this](auto &&, auto &&) { openAddWindow(); });
     remove_.Click([this](auto &&, auto &&) { changeSelection(1); });
     up_.Click([this](auto &&, auto &&) { changeSelection(2); });
     down_.Click([this](auto &&, auto &&) { changeSelection(3); });
@@ -819,6 +808,9 @@ bool SettingsWindow::open() {
     confirm_.Click([this](auto &&, auto &&) { transfer(true); });
     retry_.Click([this](auto &&, auto &&) { transfer(false); });
     window_.Closed([this](auto &&, auto &&) {
+        if (addWindow_) {
+            addWindow_.Close();
+        }
         win32::diagnostic::settingsLogger().event(
             win32::diagnostic::Level::Info, "settings_window_closed",
             {{"page", page_ == PageKind::Global ? "global" : "input_method"},
@@ -988,7 +980,6 @@ void SettingsWindow::renderMethods(const std::string &selected) {
     const settings::diagnostic::Operation operation("render_methods");
     rendering_ = true;
     methods_.Items().Clear();
-    available_.Items().Clear();
     availableIds_.clear();
     int selectedIndex = 0;
     for (size_t i = 0; i < catalog_.selection.enabled.size(); ++i) {
@@ -1044,16 +1035,182 @@ void SettingsWindow::renderMethods(const std::string &selected) {
                       catalog_.selection.enabled.end(),
                       info.id) == catalog_.selection.enabled.end()) {
             availableIds_.push_back(info.id);
-            ComboBoxItem item;
-            item.Content(box_value(to_hstring(info.name)));
-            Automation::AutomationProperties::SetAutomationId(
-                item, to_hstring("available:" + info.id));
-            available_.Items().Append(item);
         }
     }
     methods_.SelectedIndex(page_ == PageKind::Global ? -1 : selectedIndex);
-    available_.SelectedIndex(availableIds_.empty() ? -1 : 0);
     rendering_ = false;
+}
+
+void SettingsWindow::renderAddCandidates() {
+    if (!addLanguages_ || !addCandidates_)
+        return;
+    addCandidates_.Items().Clear();
+    addCandidateIds_.clear();
+    const auto index = addLanguages_.SelectedIndex();
+    if (index < 0 || index >= static_cast<int>(addLanguageCodes_.size())) {
+        addConfirm_.IsEnabled(false);
+        return;
+    }
+    const auto &language = addLanguageCodes_[index];
+    for (const auto &info : catalog_.methods) {
+        if (!info.available ||
+            std::find(catalog_.selection.enabled.begin(),
+                      catalog_.selection.enabled.end(),
+                      info.id) != catalog_.selection.enabled.end() ||
+            (info.language.empty() ? std::string("und") : info.language) !=
+                language) {
+            continue;
+        }
+        StackPanel row;
+        row.Orientation(Orientation::Horizontal);
+        row.Spacing(12);
+        TextBlock icon, name;
+        icon.Text(to_hstring(info.iconLabel.empty() ? "?" : info.iconLabel));
+        icon.Width(32);
+        icon.FontSize(18);
+        name.Text(to_hstring(info.name));
+        name.TextTrimming(TextTrimming::CharacterEllipsis);
+        row.Children().Append(icon);
+        row.Children().Append(name);
+        row.Padding({0, 8, 0, 8});
+        ListViewItem item;
+        item.Content(row);
+        Automation::AutomationProperties::SetName(item, to_hstring(info.name));
+        Automation::AutomationProperties::SetAutomationId(
+            item, to_hstring("add-method:" + info.id));
+        addCandidates_.Items().Append(item);
+        addCandidateIds_.push_back(info.id);
+    }
+    addCandidates_.SelectedIndex(addCandidateIds_.empty() ? -1 : 0);
+    addConfirm_.IsEnabled(!addCandidateIds_.empty());
+}
+
+void SettingsWindow::openAddWindow() {
+    if (!loaded_ || availableIds_.empty())
+        return;
+    if (addWindow_) {
+        addWindow_.Activate();
+        return;
+    }
+    addWindow_ = Window();
+    addWindow_.Title(tr("settings", "Add Input Method"));
+    auto root = Markup::XamlReader::Load(LR"(
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Padding="24" RowSpacing="16" ColumnSpacing="16">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <TextBlock x:Name="AddTitle" Text="Add Input Method" FontSize="24" FontWeight="SemiBold"/>
+  <Grid Grid.Row="1" ColumnSpacing="16">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <ListView x:Name="Languages" SelectionMode="Single" AutomationProperties.AutomationId="AddInputMethodLanguages"/>
+    <ListView x:Name="Candidates" Grid.Column="1" SelectionMode="Single" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="AddInputMethodCandidates"/>
+  </Grid>
+  <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+    <Button x:Name="AddCancel" Content="Cancel" AutomationProperties.AutomationId="AddInputMethodCancel"/>
+    <Button x:Name="AddConfirm" Content="Add" Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="AddInputMethodConfirm"/>
+  </StackPanel>
+</Grid>)").as<FrameworkElement>();
+    addLanguages_ = root.FindName(L"Languages").as<ListView>();
+    addCandidates_ = root.FindName(L"Candidates").as<ListView>();
+    addConfirm_ = root.FindName(L"AddConfirm").as<Button>();
+    const auto cancel = root.FindName(L"AddCancel").as<Button>();
+    root.FindName(L"AddTitle").as<TextBlock>().Text(
+        tr("settings", "Add Input Method"));
+    addConfirm_.Content(box_value(tr("settings", "Add")));
+    cancel.Content(box_value(tr("settings", "Cancel")));
+    addLanguages_.SelectionChanged([this](auto &&, auto &&) {
+        renderAddCandidates();
+    });
+    addCandidates_.SelectionChanged([this](auto &&, auto &&) {
+        addConfirm_.IsEnabled(addCandidates_.SelectedIndex() >= 0);
+    });
+    cancel.Click([this](auto &&, auto &&) { addWindow_.Close(); });
+    addConfirm_.Click([this](auto &&, auto &&) {
+        const auto index = addCandidates_.SelectedIndex();
+        if (index < 0 || index >= static_cast<int>(addCandidateIds_.size()))
+            return;
+        pendingAddId_ = addCandidateIds_[index];
+        addWindow_.Close();
+        changeSelection(0);
+    });
+    addWindow_.Closed([this](auto &&, auto &&) {
+        addLanguages_ = nullptr;
+        addCandidates_ = nullptr;
+        addConfirm_ = nullptr;
+        addWindow_ = nullptr;
+    });
+    addWindow_.Content(root);
+    addWindow_.SystemBackdrop(Media::MicaBackdrop());
+    addLanguageCodes_.clear();
+    std::map<std::string, bool> groups;
+    for (const auto &info : catalog_.methods) {
+        if (!info.available ||
+            std::find(catalog_.selection.enabled.begin(),
+                      catalog_.selection.enabled.end(),
+                      info.id) != catalog_.selection.enabled.end()) {
+            continue;
+        }
+        const auto language = info.language.empty() ? std::string("und")
+                                                    : info.language;
+        const auto [group, inserted] = groups.try_emplace(language, false);
+        group->second = group->second || !info.keyboard;
+        if (inserted) {
+            addLanguageCodes_.push_back(language);
+        }
+    }
+    std::sort(addLanguageCodes_.begin(), addLanguageCodes_.end(),
+              [&](const auto &left, const auto &right) {
+                  if (groups.at(left) != groups.at(right))
+                      return groups.at(left);
+                  if (left == "en")
+                      return right != "en";
+                  if (right == "en")
+                      return false;
+                  return left < right;
+              });
+    const auto languageName = [this](const std::string &code) {
+        if (translator_.language() == ipc::UiLanguage::SimplifiedChinese) {
+            if (code == "en") return std::wstring(L"英语");
+            if (code == "zh" || code == "zh_CN") return std::wstring(L"中文");
+            if (code == "zh_TW") return std::wstring(L"繁体中文");
+            if (code == "ja") return std::wstring(L"日语");
+            if (code == "ko") return std::wstring(L"韩语");
+            if (code == "ar") return std::wstring(L"阿拉伯语");
+            if (code == "fr") return std::wstring(L"法语");
+            if (code == "de") return std::wstring(L"德语");
+            if (code == "es") return std::wstring(L"西班牙语");
+            if (code == "ru") return std::wstring(L"俄语");
+        }
+        if (translator_.language() == ipc::UiLanguage::TraditionalChinese) {
+            if (code == "en") return std::wstring(L"英語");
+            if (code == "zh" || code == "zh_TW") return std::wstring(L"中文");
+            if (code == "zh_CN") return std::wstring(L"簡體中文");
+            if (code == "ja") return std::wstring(L"日語");
+            if (code == "ko") return std::wstring(L"韓語");
+        }
+        static const std::map<std::string, const char *> names = {
+            {"ar", "Arabic"}, {"de", "German"}, {"el", "Greek"},
+            {"en", "English"}, {"es", "Spanish"}, {"fr", "French"},
+            {"he", "Hebrew"}, {"it", "Italian"}, {"ja", "Japanese"},
+            {"ko", "Korean"}, {"pt", "Portuguese"}, {"ru", "Russian"},
+            {"th", "Thai"}, {"tr", "Turkish"}, {"uk", "Ukrainian"},
+            {"vi", "Vietnamese"}, {"zh", "Chinese"},
+            {"zh_CN", "Chinese (Simplified)"},
+            {"zh_TW", "Chinese (Traditional)"}, {"und", "Other"}};
+        const auto found = names.find(code);
+        return tr("settings", found == names.end() ? "Other" : found->second);
+    };
+    for (const auto &code : addLanguageCodes_) {
+        ListViewItem item;
+        item.Content(box_value(languageName(code)));
+        Automation::AutomationProperties::SetName(item, languageName(code));
+        Automation::AutomationProperties::SetAutomationId(
+            item, to_hstring("add-language:" + code));
+        addLanguages_.Items().Append(item);
+    }
+    addLanguages_.SelectedIndex(addLanguageCodes_.empty() ? -1 : 0);
+    const auto dpi = GetDpiForWindow(handle_);
+    addWindow_.AppWindow().Resize({MulDiv(760, dpi, 96), MulDiv(560, dpi, 96)});
+    addWindow_.Activate();
 }
 
 fire_and_forget SettingsWindow::loadIcon(Image image, TextBlock fallback,
@@ -1524,12 +1681,15 @@ fire_and_forget SettingsWindow::changeSelection(int action) try {
     const auto index = methods_.SelectedIndex();
     std::string selected = config_.id;
     if (action == 0) {
-        if (available_.SelectedIndex() < 0) {
+        if (pendingAddId_.empty() ||
+            std::find(catalog_.selection.enabled.begin(),
+                      catalog_.selection.enabled.end(),
+                      pendingAddId_) != catalog_.selection.enabled.end()) {
             co_return;
         }
-        next.enabled.push_back(availableIds_.at(available_.SelectedIndex()));
+        next.enabled.push_back(pendingAddId_);
         selected = next.enabled.back();
-        add_.Flyout().Hide();
+        pendingAddId_.clear();
     } else {
         if (index < 0) {
             co_return;

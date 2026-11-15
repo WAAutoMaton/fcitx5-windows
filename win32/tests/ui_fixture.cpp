@@ -17,10 +17,11 @@ int wmain(int argc, wchar_t **argv) {
     catalog.selection = {7, {"keyboard-us", "pinyin"}};
     catalog.methods = {{"keyboard-us",
                         translator.text("input-method", "English Keyboard"), "",
-                        "A", "keyboard", true, true},
+                        "A", "keyboard", true, true, "en"},
                        {"pinyin", translator.text("input-method", "Pinyin"), "",
-                        "P", "pinyin", true, false},
-                       {"wbx", "Wubi", "", "W", "table", true, false}};
+                        "P", "pinyin", true, false, "zh_CN"},
+                       {"wbx", "Wubi", "", "W", "table", true, false,
+                        "zh_CN"}};
     bool prediction = false;
     std::string prevPage = "Up\nminus";
     ipc::ServiceSecurity security;

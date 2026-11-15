@@ -34,6 +34,8 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     std::wstring tr(const char *context, const char *english) const;
     std::wstring errorText(ipc::SettingsError error) const;
     void translateStatic();
+    void openAddWindow();
+    void renderAddCandidates();
     winrt::fire_and_forget changeSelection(int action);
     winrt::Windows::Foundation::IAsyncOperation<bool> saveConfig();
     winrt::Windows::Foundation::IAsyncOperation<bool>
@@ -57,7 +59,6 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     void busy(bool enabled);
     winrt::Microsoft::UI::Xaml::Window window_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ListView methods_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::ComboBox available_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel options_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock heading_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button add_{nullptr},
@@ -67,6 +68,12 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     ipc::InputMethodsReply catalog_;
     ipc::MethodConfigReply config_;
     std::vector<std::string> availableIds_;
+    std::string pendingAddId_;
+    winrt::Microsoft::UI::Xaml::Window addWindow_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ListView addLanguages_{nullptr},
+        addCandidates_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button addConfirm_{nullptr};
+    std::vector<std::string> addLanguageCodes_, addCandidateIds_;
     bool working_ = false, rendering_ = false;
     enum class PageKind { InputMethod, Global };
     PageKind page_ = PageKind::InputMethod;
