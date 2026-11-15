@@ -43,8 +43,11 @@ sessions on the TSF owning thread.
 
 `windowskeyboard` is a static direct-input engine with no XKB dependency. It
 provides the first group entry required by Core; it never commits ASCII itself.
-The in-memory Windows group includes installed, available entries from the
-Pinyin and table addons. The current table set is:
+It also publishes multilingual keyboard entries with language metadata for the
+Settings picker. These entries pass keys through without changing the Windows
+keyboard layout or supplying their own character mapping.
+The in-memory Windows group includes installed, available addon entries.
+The base edition's table set is:
 
 | Entry | Input method |
 | --- | --- |
@@ -57,11 +60,17 @@ Pinyin and table addons. The current table set is:
 | `wanfeng` | Wanfeng |
 | `zrm` | Ziranma |
 
+The full edition adds Rime, Wenzhounese, Zhuyin and table-extra's 25 tables,
+including Wubi98, Cangjie5 and Jyutping Table. See
+[bundled plugins](windows-plugins.md#仓库插件与-full-包) for engines, data and dependencies.
+
 An entry is advertised as available only when its addon and table data can be
 loaded. The user's enabled list and order are stored separately; the default
 list is `keyboard-us` and `pinyin`.
 Settings can add, remove and reorder entries, including removing English
-keyboard, while retaining at least one available method.
+keyboard, while retaining at least one available method. Its separate add window
+groups available, not-yet-enabled entries by language, with languages containing
+non-keyboard input methods before keyboard-only groups.
 
 Indicator left-clicks use `CycleInputMethod` to advance through the ordered list,
 skipping unavailable entries. Keyboard cycling defaults to Ctrl+Space; Global
@@ -83,7 +92,8 @@ not consume the first key's IPC timeout. Runtime DLL search includes its own bin
 TSF publishes one Language Bar button with `GUID_LBI_INPUTMODE` while the TIP
 is activated and removes it when deactivated. It shows the current method's
 installed PNG icon, loaded through WIC, or a compact text-label fallback such as
-"拼" or "双"; English keyboard uses "A". The tooltip shows the method's name.
+"拼" or "双"; English keyboard uses "A". The tooltip shows the method's name
+and the engine's submode when available.
 Left-clicking posts a cycle request to the TSF owning thread; the Core reply
 updates the selected method, icon and keyboard compartment. Closing the
 compartment does not remove the item. Fallback glyphs use GDI at the system
@@ -131,8 +141,9 @@ The script verifies HEAD revisions, skips already-applied patches and refuses
 conflicting changes. It does not reset submodules or create commits.
 
 - `fcitx5-windows-paths.patch`: Windows built-in resource paths use the installed
-  `share`, `share/fcitx5` and `share/locale` directories. Core 5.1.22's Windows
-  StandardPaths does not use the earlier resource environment overrides.
+  `share`, `share/fcitx5` and `share/locale` directories. The patched Windows
+  StandardPaths also reads Core's generated addon/data search prefixes for
+  independent plugin packages; see [plugin discovery](windows-plugins.md#目录与发现).
 - `libime-windows.patch`: imported executable paths include `.exe`; model path
   lists use `;` on Windows, preserving drive letters.
 - `chinese-addons-windows.patch`: dictionary loading accepts filesystem paths,
@@ -142,8 +153,13 @@ conflicting changes. It does not reset submodules or create commits.
   Windows and resolves built-in table data from the deployed `share/libime` tree.
 - `fcitx5-rime-windows.patch`: resolves Rime shared data through the installed
   `share/rime-data` search path and converts native filesystem paths to UTF-8.
-  The full plugin build supplies librime and its schema data; see
+  It also adapts schema checks, preedit cancellation and UI refresh for status
+  menu actions. The full plugin build supplies librime, schema and OpenCC data; see
   [Windows plugins](windows-plugins.md).
+- `fcitx5-zhuyin-windows.patch`: adapts Windows paths and reports missing or
+  invalid models as addon load failures. `libpinyin-windows.patch` adapts the
+  libzhuyin dependency's file I/O, model saving and native data tools; see
+  [Zhuyin builds](build.md#independent-input-method-plugins).
 
 The submodule working trees are intentionally patched. Record Windows changes
 in the main-repository patch files; do not create local submodule commits or
@@ -668,11 +684,14 @@ dispatch remains unverified.
   upgrades and reboot cleanup still need system testing. See
   [installer status](windows-installer-design.md).
 - Xiaohe and Ziranma Shuangpin commits are validated by probes; input-method
-  probes also cover real Wubi commits. Other profiles, Wubi and other table
-  methods in real applications and registered modern-app compatibility need
-  broader validation. Rime is built with its shared data in the full edition;
-  its real application input still needs coverage. CI/Nightly declares modern
-  categories; signing and real UWP dispatch remain pending.
+  probes also cover real Wubi commits. CI addon probes check Wenzhounese,
+  Wubi98, Cangjie5, Jyutping Table and Standard Zhuyin commits, with a separate
+  repeated-save/reload check for Zhuyin models. Isolated status-menu probes
+  cover Pinyin actions and Rime's first deployment, two schemas, traditional/
+  simplified commits, preedit cancellation, F4/Ctrl+grave menus and redeployment.
+  Other profiles, normal-user Rime deployment and these engines' real application
+  coverage still need validation. See [status-menu tests](build.md#status-menus).
+  CI/Nightly declares modern categories; signing and real UWP dispatch remain pending.
 - Password scopes and disabled contexts have pass-through checks, but complete
   password/secure input, dead keys, AltGr/non-US layouts, forwarded keys and
   surrounding-text editing remain incomplete or unverified. `SECUREMODE` and
@@ -681,7 +700,7 @@ dispatch remains unverified.
   or transactional exactly-once delivery across process failures. An IPC timeout
   can lose the pending input; it does not guarantee recovery of a consumed key.
 - CI covers x64 Core, x64/x86 TSF probes, Pinyin/Shuangpin/Wubi input and
-  Wenzhounese plugin commits. Real x86 application input remains pending.
+  the additional plugin commits listed above. Real x86 application input remains pending.
   ARM64 is outside the current CI build matrix.
 
 The first-run Pinyin history load may log a missing/empty-history error; the

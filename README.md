@@ -3,7 +3,8 @@
 [中文文档](README_zh-cn.md)
 
 An in-progress Windows port of Fcitx5. On AMD64 it provides Pinyin, Shuangpin
-and multiple `fcitx5-chinese-addons` table input methods through a TSF integration.
+and table input methods through a TSF integration, with Rime, Wenzhounese and
+Zhuyin available in the full edition.
 Core runs in a separate process; a TSF DLL integrates with applications, and a
 WinUI settings app manages the ordered input-method list and engine
 configuration. Unified x64 installers are available through the CI packaging
@@ -22,17 +23,24 @@ and Nightly release workflow.
   cycles through the same input-method list.
 - Settings to add, remove and reorder installed input methods, with shared
   Pinyin/Shuangpin options, eight built-in Shuangpin profiles and table-engine
-  options. The bundled table entries are Wubi, Wubi Pinyin, Cangjie, Dianbaoma,
-  Erbi, Bingchan, Wanfeng and Ziranma; an entry is available when its engine and
+  options. A separate add window groups available methods by language, placing
+  languages with non-keyboard methods first. The base table entries are Wubi,
+  Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan, Wanfeng and Ziranma;
+  an entry is available when its engine and
   table data are installed.
+- The full edition adds Rime, Wenzhounese, Zhuyin and 25 extra tables, including
+  Wubi98, Zhengma, Boshiamy, Cangjie5 and Jyutping Table.
 - Third-party Pinyin dictionary loading status and automatic dictionary reload.
-- Independently built and installed input-method DLL plugins, with a read-only
+- Independently built and installed engine DLLs and resource packages, with a read-only
   addon status page in Global Settings.
 - Simplified Chinese, Traditional Chinese and English UI, with a system-language
   option in Global Settings. Engine/UI language changes take effect after a
   service restart; native menus and About refresh in the background.
 - Shortcut recording for global and engine key-list options, alongside manual
-  text editing, plus shared Chinese/English punctuation options for Pinyin/Shuangpin.
+  text editing.
+- Input-method status menus expose plugin modes, options and submenus, including
+  Rime schema selection. Chinese/English punctuation is switched in this menu
+  and shared by Pinyin, Shuangpin and table methods using the punctuation module.
 - Optional structured developer logs for Core, TSF and Settings, including
   Settings exit/exception diagnostics, without recording input text.
 - Sandboxie clients share the host Core through an explicit pipe rule.
@@ -46,7 +54,8 @@ and Nightly release workflow.
 
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
 workflow publishes four Windows 11 x64 installers and their SHA256 files.
-Choose `base` for fcitx5-chinese-addons only, or `full` for all bundled plugins
+Both editions include Core, x64/x86 TSF and Settings. Choose `base` for
+fcitx5-chinese-addons, or `full` for all bundled plugins
 (currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra,
 fcitx5-wenzhounese and fcitx5-zhuyin). Each edition has two runtime variants:
 
@@ -90,15 +99,29 @@ Core/Settings, separate x64/x86 TSF DLLs and setup/upgrade helpers, runs the def
 TSF CTest suites, and deploys to `dist/pinyin`. It uses checksum-verified
 precompiled dictionary/model data and reuses the build cache on subsequent runs.
 
+This builds the base edition. To add all full-edition plugins using the same SDK:
+
+```powershell
+./scripts/build-plugins.ps1 -CorePrefix ./build/all/prefix -Prefix ./dist/pinyin
+```
+
+The additional build requires Git LFS, matching clang64 librime/schema packages,
+and GLib/Berkeley DB for Zhuyin; see [plugin build details](docs/build.md#independent-input-method-plugins).
+
 Before updating an existing deployment, choose `Stop Services` and close
 applications loading its DLL. See [build options and deployment details](docs/build.md) for custom
 paths, individual builds and integration checks.
 
 ## Input-Method Plugins
 
-Input methods can be built and installed as independent DLL plugins without
+Input methods can be built and installed as independent engine or resource packages without
 adding them to the Core project. Existing `fcitx5-chinese-addons` continue to be built
 and deployed alongside Core.
+
+`fcitx5-table-extra` supplies 25 tables using the base `table` engine and adds no
+engine DLL. `fcitx5-zhuyin` uses libzhuyin built from pinned libpinyin sources
+and includes its model data. Rime includes shared schema data; plugin files and
+licenses remain in each package's directory.
 
 ### Install and Enable
 
@@ -110,7 +133,7 @@ Choose either plugin location:
 | `<Core installation>/plugins/<package>` | Portable deployment within the installation tree; the Core installation is the directory containing `bin/Fcitx5.exe` |
 
 1. Choose `Stop Services` from the input-method indicator's context menu.
-2. Put each package's `bin`, `lib` and `share` directories inside its own `<package>` directory. Engine DLLs belong in `<package>/lib/fcitx5`, private dependency DLLs in `<package>/bin`, and resources in the corresponding `lib` or `share` subdirectories. Core scans direct package subdirectories; the older shared `plugins/bin`, `plugins/lib` and `plugins/share` layout remains compatible.
+2. Keep each package's supplied `bin`, `lib`, `share` and `licenses` directories inside its own `<package>` directory. Engine DLLs belong in `<package>/lib/fcitx5`, private dependency DLLs in `<package>/bin`, and resources in the corresponding `lib` or `share` subdirectories. Resource-only packages need no DLL. Core scans direct package subdirectories; the older shared `plugins/bin`, `plugins/lib` and `plugins/share` layout remains compatible.
 3. Choose `Restart Services`, open `Input Method Settings`, and add the new input method to the enabled list. Adjust its order, then switch with `Ctrl+Space` or by left-clicking the indicator.
 
 Stop services before updating or removing a plugin, then restart afterward.
@@ -146,18 +169,25 @@ language options. Activation starts Core automatically.
 Use the configured cycle shortcut (default `Ctrl+Space`) or left-click the
 input-method indicator to cycle through the enabled list. The default list is
 English keyboard and Pinyin; Settings lets
-you add Shuangpin or any available table method and change their order.
+you add Shuangpin or other installed input methods and change their order.
 Unavailable entries are skipped. With Pinyin selected, type `nihao` in a text
 application and select a candidate with Space or a number key. With Wubi
 selected, enter a Wubi code and select its candidate in the same way. Changing
 input methods or losing focus cancels unfinished preedit without committing it.
 
+The add window also lists multilingual keyboard entries. These pass keys
+through to the application; character mapping follows the active Windows
+keyboard layout.
+
 **Global Settings > Shortcuts** changes the cycle shortcut and direct-selection
 shortcuts for entries 1–5. Direct selection uses the list's original positions;
 an absent or unavailable target passes the key through. Clear a shortcut to disable it.
-Pinyin and Shuangpin share the Chinese/English punctuation setting.
+Switch Chinese/English punctuation from the input indicator's status menu. The
+punctuation module saves the shared state; Pinyin/Shuangpin settings pages use
+the engine's other options.
 
-Right-click the input-method indicator for:
+Right-click the input-method indicator for the current engine's status actions
+and submenus, followed by these fixed commands:
 
 - `Input Method Settings`: manage the input-method list, edit engine options and view
   third-party Pinyin dictionaries. List changes save immediately; option edits
@@ -166,6 +196,13 @@ Right-click the input-method indicator for:
 - `Stop Services`: stop Core/Settings and pause automatic startup until a restart.
 - `User Data Folder`: open `%APPDATA%/Fcitx5`, including settings and Pinyin learning data.
 - `About`: show architecture, CI build number, commit and project/license links.
+
+With Rime selected, its schema submenu switches Rime schemas; `F4` opens the
+engine's candidate-based schema menu. `Ctrl+Space` and left-clicking still cycle
+the enabled input-method list. Rime deployment, schema switching and
+traditional/simplified commits have isolated probe coverage; real language-bar
+dispatch, first-use deployment in a normal user environment and application
+coverage still require validation. See [status menu details](docs/windows-status-menu-design.md).
 
 In **Global Settings**, the **General** tab selects the UI language; restart
 services after applying it to update Core and Settings. **Developer options**
@@ -203,6 +240,7 @@ for previews, alternate paths and troubleshooting.
 - [Input-method architecture and individual builds](docs/pinyin.md)
 - [Independent Windows input-method plugins and SDK builds](docs/windows-plugins.md)
 - [Windows settings design](docs/windows-settings-design.md)
+- [Input-method status menus and Rime schemas](docs/windows-status-menu-design.md)
 - [Candidate rendering](docs/windows-candidate-rendering.md)
 - [UI language and localization](docs/windows-ui-localization-design.md)
 - [Sandboxie host sharing and configuration](docs/windows-sandboxie-design.md)

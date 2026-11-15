@@ -542,6 +542,14 @@ require an interactive desktop and installed Settings runtimes. See
 [probe coverage and limits](pinyin.md#build-and-test-tsf) for the distinction
 between actual TSF contexts, simulated callbacks and real OS dispatch.
 
+The Settings UI runner opens the separate add window, selects a language group
+and adds an available input method. Groups with non-keyboard methods come first;
+multilingual keyboard entries pass keys through using the active Windows layout.
+The runner starts real Core and Settings with a temporary Windows settings file,
+backs up and restores the Pinyin/table engine configuration, and requires a free
+service endpoint. Registered system input dispatch still needs acceptance.
+See [Settings design](windows-settings-design.md).
+
 Default CTest includes `test_candidate` and `test_candidate_tsf`, which exercise the production
 DirectWrite/Direct2D draw function and popup lifecycle without Core or TIP
 registration. See [candidate rendering validation](windows-candidate-rendering.md#verification)

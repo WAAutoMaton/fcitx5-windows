@@ -63,7 +63,7 @@ Settings 的“全局设置 → 插件”页通过只读 IPC 展示 Core 已发�
 
 fcitx5-table-extra 是资源包，复用 base 已包含的 `table` 引擎，不新增 DLL 或 addon。构建使用 SDK 的 Windows 原生 `libime_tabledict.exe` 生成全部 25 张码表，输入法描述、字典、图标和许可保留在 `plugins/fcitx5-table-extra`。CI 通过 addon probe 检查五笔 98、仓颉五代和粤拼码表的自动发现、配置与候选提交，以及 base 中的条目缺席；full 的两种安装包清单均检查全部码表描述、字典和许可。真实应用的系统派发仍需验收。
 
-Rime 的 Windows 补丁记录在 `patches/fcitx5-rime-windows.patch`，由 `apply-pinyin-patches.ps1` 按锁定版本应用。构建需匹配的 clang64 librime 和 librime-data 包；脚本将共享方案数据复制到 `plugins/fcitx5-rime/share/rime-data`，运行时通过 StandardPaths 查找 `default.yaml`。CI 当前用 addon probe 验证温州话 `nyi` 候选提交，Rime 的真实输入及首次方案部署仍需单独验证。
+Rime 的 Windows 补丁记录在 `patches/fcitx5-rime-windows.patch`，由 `apply-pinyin-patches.ps1` 按锁定版本应用。构建需匹配的 clang64 librime 和 librime-data 包；脚本将共享方案数据复制到 `plugins/fcitx5-rime/share/rime-data`，并将 clang64 OpenCC 数据复制到其 `opencc` 子目录，运行时通过 StandardPaths 查找 `default.yaml`。`scripts/test-status-menu.ps1 -Rime` 使用隔离 Core 与临时用户目录，覆盖两个方案的首次部署、菜单勾选/切换、繁简输入提交、旧预编辑取消、F4/Ctrl+反引号选单和重新部署后的输入恢复；可用 `-PeerTsfBuild` 增加另一架构验证。真实语言栏派发、普通用户环境首次部署和应用覆盖仍需验收，前提与命令见 [状态菜单验证](build.md#status-menus)。温州话 `nyi` 候选提交由 CI addon probe 验证。
 
 fcitx5-zhuyin 使用 clang64 的 GLib 和 Berkeley DB（`mingw-w64-clang-x86_64-glib2`、`mingw-w64-clang-x86_64-db`）。插件脚本通过 `cmake/zhuyin-deps` 从固定 SHA256 的 libpinyin 2.10.3 源码构建 libzhuyin 及三个 Windows 原生数据工具，再将上游固定 SHA256 的模型编译到插件的 `share/fcitx5/zhuyin`。`patches/libpinyin-windows.patch` 适配二进制读写、文件同步、保存时替换旧模型、`size_t` 格式、`getline` 和禁用用户路径的 probe；`patches/fcitx5-zhuyin-windows.patch` 由补丁脚本应用，适配 Windows 路径，并在缺少 `table.conf` 或模型初始化失败时报告插件加载失败。full 包收录引擎、词库、图标、翻译和依赖许可，运行时依赖由 PE import 审计复制。CI 检查标准注音 `su3` 的候选选择和 Enter 提交、模型连续保存与重载、base 条目缺失及 full 安装包清单。真实应用系统派发仍需验收。
 

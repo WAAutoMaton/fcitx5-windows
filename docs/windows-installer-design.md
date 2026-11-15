@@ -11,7 +11,7 @@
 | `Fcitx5-<run>-<edition>-x64-setup.exe` | 附带 Microsoft x64 VC++ Redistributable 和 Windows App Runtime 安装程序 |
 | `Fcitx5-<run>-<edition>-x64-no-runtime-setup.exe` | 不附带或执行上述安装程序；须预先满足运行库要求 |
 
-四种包都包含完整 Core、TSF、Settings 和原生安装/升级 helper。`edition` 为 `base` 时仅包含 chinese-addons；`full` 自动包含 `plugins/` 下全部插件，目前额外提供 Rime 和温州话。额外插件部署到安装树 `plugins/<name>`，其文件进入安装/升级所有权清单。Settings 继续使用 framework-dependent Windows App SDK 1.8，要求当前用户有 x64 Framework/DDLM >= `8000.994.2142.0` 和 Visual C++ 运行库。不含运行库版本仍执行 Settings `--runtime-check`，缺少依赖时用户初始化不能成功完成。
+四种包都包含完整 Core、x64/x86 TSF、Settings 和原生安装/升级 helper。`edition` 为 `base` 时输入法插件为 fcitx5-chinese-addons；`full` 自动包含 `plugins/` 下全部插件，目前额外提供 fcitx5-rime、fcitx5-table-extra、fcitx5-wenzhounese 和 fcitx5-zhuyin。table-extra 复用 base 的 `table` 引擎，提供 25 张码表；注音包含 libzhuyin、模型及依赖许可。额外插件部署到安装树 `plugins/<name>`，其文件进入安装/升级所有权清单，依赖与布局见 [Windows 插件](windows-plugins.md)。Settings 继续使用 framework-dependent Windows App SDK 1.8，要求当前用户有 x64 Framework/DDLM >= `8000.994.2142.0` 和 Visual C++ 运行库。不含运行库版本仍执行 Settings `--runtime-check`，缺少依赖时用户初始化不能成功完成。
 
 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.22000` 和 `PrivilegesRequired=admin`，使用固定 AppId。不声明 Windows 10 或 ARM64 仿真安装支持。x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册；两者使用同一 CLSID/profile 和独立 registry view，详见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)。
 
@@ -116,10 +116,10 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 | Job | 当前流程 |
 | --- | --- |
-| `build-x64` | 统一 Release 构建 base，复用同一 SDK 构建全部额外插件生成 full，验证温州话加载与提交，上传两套运行树及共享测试/Settings artifact |
+| `build-x64` | 统一 Release 构建 base，复用同一 SDK 构建全部额外插件生成 full；验证温州话、额外码表和注音候选提交及对应 base 条目缺席，检查注音模型保存/重载，上传两套运行树及共享测试/Settings artifact |
 | `test-x64` | 复用运行树和测试包，执行脚本/注册检查回归、图标校验、默认 CTest、拼音/TSF/settings、五笔/输入法列表、引擎翻译及词库验证 |
 | `test-x86` | 独立构建/测试 x86 TSF；对 x64 Core 执行 x86 拼音/TSF 和双架构 Pipe 并发/断线 probe |
-| `package-installer-x64` | base/full × runtime/no-runtime 四个矩阵 job，各下载对应运行树；含运行库 job 下载并核对运行库 SHA256，执行打包回归并生成对应安装包 |
+| `package-installer-x64` | base/full × runtime/no-runtime 四个矩阵 job，各下载对应运行树；含运行库 job 下载并核对运行库 SHA256，执行打包回归并生成对应安装包；检查额外码表、注音引擎/模型及许可在 full 清单中存在、base 中缺席 |
 | `installer-smoke-x64` | 对 base/full 不含运行库包分别执行静默 machine-only 安装，检查实际 COM/profile/现代 category 双向注册、安装状态及卸载清理 |
 | `release` | 等待构建、测试、打包和安装 smoke 成功，在 master 且提交消息不含 `!release` 时用 GitHub CLI 更新 `latest` 预发布 |
 

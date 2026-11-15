@@ -102,6 +102,7 @@ flowchart LR
 | --- | --- |
 | 标题 | “输入法设置”，使用系统标题栏 |
 | 输入法列表 | `ListView`：按用户顺序显示图标和名称；添加、删除、上移、下移 |
+| 添加窗口 | 独立窗口，左侧按输入法 `language` 分组，右侧列出尚未启用的可用条目；有非键盘输入法的语言优先于只有键盘候选的语言 |
 | 全局设置 | 左侧操作按钮下方的独立导航项；“常规”tab 提供语言下拉框：跟随系统、简体中文、繁體中文、English |
 | 开发者选项 | 详细日志开关、状态、日志目录/数量/大小和目录按钮；开关与语言共用全局草稿，使用“应用”保存 |
 | 插件 | 只读 addon 名称、标识、版本、库、说明与状态；提供个人插件目录按钮 |
@@ -126,7 +127,7 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 
 ## IPC 与配置所有权
 
-当前 v14 协议包含输入法目录、有序选择、配置描述、全局语言/日志/快捷键设置、插件状态、宿主命令及候选动作，`KeyReply` 返回实际 entry、显示信息、日志状态和候选代次。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod` 和候选动作则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求。
+当前 v14 协议包含输入法目录、有序选择、配置描述、全局语言/日志/快捷键设置、插件状态、宿主命令、候选动作及状态菜单，`KeyReply` 返回实际 entry、子模式显示信息、日志状态、候选代次和状态菜单 revision。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod`、候选动作及状态菜单请求则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求或状态菜单动作。
 
 | 请求 | 内容 / 回复 |
 | --- | --- |
@@ -136,7 +137,7 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 | `SetSettings` | 提交 scheme、profile、revision（草稿读取时的版本）；返回实际配置、新 revision 或错误 |
 | `GetDictionaries` | 返回第三方词库目录、实际发现的扩展词库路径和加载状态 |
 | `GetPlugins` | 返回个人插件目录及 Core 已发现 addon 的标识、名称、说明、版本、库和当前状态；不触发按需加载，受限输入入口不开放此消息 |
-| `GetInputMethods` / `SetInputMethods` | 目录及有序选择，字段包含 id、name、icon、iconLabel、panel、available、keyboard；写入使用共享 revision，拒绝空列表和重复 id |
+| `GetInputMethods` / `SetInputMethods` | 目录及有序选择，字段包含 id、name、icon、iconLabel、panel、language、available、keyboard；写入使用共享 revision，拒绝空列表和重复 id |
 | `GetMethodConfig` / `SetMethodConfig` | 获取引擎声明的可编辑选项或提交 path/value；校验声明、类型、范围、枚举、按键语法及 revision |
 | `OpenUserDataFolder` / `RestartServices` / `StopServices` | Sandboxie 等 HostOnly 客户端请求宿主执行固定操作；空 payload，回复接受结果后再调度 |
 
@@ -152,13 +153,15 @@ scheme 使用明确枚举；profile 使用稳定的协议 ID 或上游字符串�
 
 ## 真正切换引擎
 
-1. 启动时枚举已安装的 entry 和 addon。拼音、双拼、五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风、自然码可加入用户列表；缺失引擎或码表时标为不可用，不允许新添加。
+1. 启动时枚举已安装的 entry 和 addon。base 包提供拼音、双拼、五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风、自然码；full 还提供 Rime、温州话、注音及 table-extra 的 25 张码表，具体组件见 [Windows 插件](windows-plugins.md#仓库插件与-full-包)。添加窗口按语言展示可用条目；缺失引擎或码表时标为不可用，不允许新添加。
 2. Core 保存有序列表，每个 TSF 实例保存当前 entry 并在焦点切换和重连时恢复。Windows compartment 的布尔值由实际 entry 是否为键盘推导；外部开关只在用户已选择的键盘/非键盘条目之间切换，没有对应条目时保持当前输入法。
 3. 通过 addon 的 `getConfigForInputMethod` / `setConfigForInputMethod` 读写公开配置。拼音/双拼共用上游配置，码表按各自输入法保存。引擎未声明或隐藏的选项不能通过协议修改。
 4. 在 Core 主事件循环内执行设置操作。Pipe worker 不直接操作 Instance、addon 或 context。
 5. 移除当前条目时回退到仍选中的可用条目。列表顺序和 Core 的内部组顺序分开：内部组第一项保留 Fcitx 的键盘槽位，但它不强迫用户保留英文键盘。
 6. scheme 或双拼键位改变时，取消旧方案尚未提交的预编辑和候选，不自动选词提交；已经提交的文本保持有效。相同设置不重复 reset。
 7. 配置的全局快捷键由 Core 在引擎按键处理前匹配，自动重复和释放不再次切换；TSF 测试回调只观察缓存。语言栏左键通过 `CycleInputMethod` 轮换。循环切换和删除当前条目会丢弃旧预编辑。
+
+`windowskeyboard` 提供英语、法语、德语、中日韩等多语言键盘候选，并通过 `language` 元数据进入添加窗口的对应分组。所有键盘条目均透传物理按键，字符映射使用 Windows 当前布局；选择条目不会切换 Windows 键盘布局，也不加载 XKB 数据。
 
 ## 扩展约定
 
@@ -196,7 +199,7 @@ TSF 在非键盘输入法空闲时也将 OEM 标点键及 Shift+数字送到 Cor
 
 录制区域获得焦点时临时安装 `WH_KEYBOARD_LL` hook，在系统输入法快捷键、TSF 和文本编辑处理前消费按键。回调只在 Settings 窗口位于前台时录制和消费事件；失焦、关闭对话框或异常退出时释放 hook。每次按下更新预览，自动重复和释放修饰键不会覆盖已录制的完整组合，左右修饰键分别编码。
 
-结果遵循 Core 的 Windows 按键映射及 Fcitx portable 格式和 normalization。Core 尚未映射为符号的按键（例如 F1、带 Control/Alt 的 OEM 标点键）使用已有的 `<scanCode>` 语法按位置匹配，包含扩展键标记。Settings 不链接 Core 的 GNU 引擎库；协议不变，Core 继续负责校验配置和保存。系统保留组合、死键、AltGr 和复杂布局仍受现有 Windows 输入支持范围限制。
+结果遵循 Core 的 Windows 按键映射及 Fcitx portable 格式和 normalization。Core 已映射 F1～F24 和常用无 Unicode 的 OEM 标点键；录制编码也可使用已有的 `<scanCode>` 语法按位置匹配，包含扩展键标记。Settings 不链接 Core 的 GNU 引擎库，Core 继续负责校验配置和保存。系统保留组合、死键、AltGr 和复杂布局仍受现有 Windows 输入支持范围限制。
 
 `test_keycapture` 验证编码、normalization、左右修饰键、重复/释放状态；`scripts/test-settings-keycapture.ps1` 使用 `-UiTest` Settings 与 `ui_fixture` 的隔离端点验证实际录制、追加/替换、取消和应用后重新加载，不需要注册 TSF。
 

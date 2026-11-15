@@ -101,7 +101,7 @@ DetailedLogging=false
 
 ## IPC 扩展
 
-当前协议为 v12，Core、TSF 和 Settings 同步更新。`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId=0`。语言请求始于 v7，v10 增加详细日志字段，v11 增加独立的只读插件查询，v12 增加全局快捷键；以下为当前相关字段。AppContainer 仅允许读取，不允许 `SetGlobalSettings`。
+当前协议为 v14，Core、TSF 和 Settings 同步更新。`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId=0`。语言请求始于 v7，v10 增加详细日志字段，v11 增加独立的只读插件查询，v12 增加全局快捷键；当前协议还包含状态菜单和输入法语言元数据，以下为全局设置相关字段。AppContainer 仅允许读取，不允许 `SetGlobalSettings`。
 
 ```cpp
 enum class UiLanguage : uint8_t {
@@ -200,7 +200,7 @@ Core 目录内的英文键盘、拼音、双拼及五笔硬编码中文名称改
 | 语言映射 | 中文 script/地区、英文地区、未知语言、有序偏好列表、API 失败 |
 | 翻译资源 | 上下文、缺词回退、UTF-8/UTF-16、可重排占位符、格式错误与资源缺失 |
 | 配置 | 首次默认、原子替换、非法/超大/损坏文件、只读失败、并发 session revision 冲突、隔离路径 |
-| IPC | v12 语言/日志/快捷键字段往返、非法枚举/布尔值/长度/contextId、锁忙/保存失败、超时后只查询不重放 |
+| IPC | v14 语言/日志/快捷键字段往返、非法枚举/布尔值/长度/contextId、锁忙/保存失败、超时后只查询不重放 |
 | WinUI 自动化 | 入口位置、选中状态、四个选项、跨页草稿、添加导航、当前页重置、最小尺寸与长译文 |
 | 服务集成 | 应用语言后 Settings 保持旧语言，重启后新语言，单实例激活不重建，Core 标签一致 |
 | TSF 回归 | HMENU 与 `InitMenu` 同一快照、后台刷新与停用竞态、Core 停止后菜单/关于可用、窗口复用刷新 |

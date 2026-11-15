@@ -23,15 +23,15 @@ Core、IPC 和 x64/x86 TSF 已接入通用状态菜单桥接，统一协议为 v
 | `plugins/fcitx5-rime/src/rimeengine.cpp` | `updateSchemaMenu()` 通过 librime 枚举方案，创建 `Action/Menu`，放入 context 的 `StatusArea`；另有部署、同步及方案选项动作 | 首个真实插件适配 |
 | `plugins/fcitx5-rime/src/rimestate.cpp` | `selectSchema()` 调用 librime，`keyEvent()` 将引擎输出转为预编辑和候选 | 保留方案和输入语义 |
 | `fcitx5/src/lib/fcitx/action.h`、`menu.h`、`statusarea.h` | 提供动作、菜单树、勾选及更新通知 | 通用菜单来源 |
-| `src/windowsfrontend.*` | 主线程处理 context IPC，序列化输入状态和候选动作 | 增加状态菜单桥接 |
-| `win32/tsf/langbaritem.*` | 固定右键菜单，桌面使用 `HMENU`，系统托管路径使用 `ITfMenu` | 增加动态区域 |
+| `src/windowsfrontend.*` | 主线程处理 context IPC、状态菜单查询/动作，序列化输入状态和候选动作 | 状态菜单桥接入口 |
+| `win32/tsf/langbaritem.*` | 动态状态区域及固定命令，桌面使用 `HMENU`，系统托管路径使用 `ITfMenu` | 冻结视图与原生菜单渲染 |
 | `win32/tsf/EditSession.cpp` | 绑定 context 和代次应用 Core 回复 | 复用编辑边界 |
 | `src/windowsinputmethods.cpp` | 将输入法名称和图标等加入 `KeyReply` | 增加通用子模式显示 |
 
 Rime 有两个独立入口：
 
-1. **F4 方案选单**：librime 生成候选，fcitx5-rime 转为 `CandidateList`，现有 IPC 和候选 UI 负责显示。优先补通 TSF 按键路由与 Core 键码映射，再验证选择和翻页。
-2. **语言栏方案子菜单**：插件生成 Fcitx `Action/Menu`，本设计将其转换为 Windows 菜单。点击触发原动作，不合成 F4 或选词按键。
+1. **F4 方案选单**：librime 生成候选，fcitx5-rime 转为 `CandidateList`，现有 IPC 和候选 UI 负责显示。TSF 按键路由与 Core 键码映射已接入，隔离 probe 验证 F4 和 Ctrl+反引号打开候选；真实应用中的选择和翻页仍需验收。
+2. **语言栏方案子菜单**：插件生成 Fcitx `Action/Menu`，通用桥接将其转换为 Windows 菜单。点击触发原动作，不合成 F4 或选词按键。
 
 `routesKey()` 已允许 F4 和 Ctrl+反引号，`keyFromWindows()` 已补齐功能键和常用无 Unicode 的 OEM 键映射，其他 Ctrl 组合键继续沿用原路由策略。快捷键由引擎决定是否消费；`Action::hotkey()` 只用于显示，不会自动注册快捷键。
 
@@ -328,7 +328,7 @@ F4 方案选单与语言栏动作都需要验证方案切换、状态恢复、�
 
 ## 文件与构建改动
 
-下列是实施位置，新增文件名为建议命名：
+当前实现分布如下：
 
 | 文件 | 改动 |
 | --- | --- |
@@ -371,13 +371,13 @@ Core 使用根工程的 MSYS2/Clang GNU 工具链；x64/x86 TSF 各自使用独�
 
 ### Rime 隔离 probe
 
-新增独立 Rime probe，使用 `FCITX5_UI_TEST` 的隔离服务与临时用户数据根；真实用户方案和词典不得作为测试工作区。运行前校验隔离数据路径确实生效，复制两个已部署可用方案及依赖到测试树。
+`scripts/test-status-menu.ps1 -Rime` 调用 `statusmenu_probe`，使用 `FCITX5_UI_TEST` 的隔离服务与临时用户数据根。运行前检查测试构建标记及共享方案数据，由 Core 校验实际用户路径；脚本在临时目录写入仅启用 `luna_pinyin` 和 `luna_pinyin_simp` 的配置，再由 librime 首次部署。真实用户方案和词典不作为测试工作区。
 
-覆盖初次部署、F4 候选菜单、语言栏方案动作、当前方案勾选、两个方案的实际输入/提交、切换时取消旧预编辑、繁简转换保留合理输入状态，以及 `InputState` 的共享和独立策略。部署过程中旧节点失效，完成后新动作可用；还需测试不可用方案、部署失败和连接中断。
+当前覆盖初次部署、F4/Ctrl+反引号候选菜单、方案动作、当前方案勾选、两个方案的繁简输入/提交、切换时取消旧预编辑，以及重新部署后的方案与输入恢复。另验证拼音真实动作、重复动作拒绝、跨连接归属、旧焦点拒绝和普通 poll 保持代次稳定。`-PeerTsfBuild` 增加另一架构及双架构并发 Pipe 验证。`InputState` 共享/独立策略、不可用方案、部署失败与中断恢复仍需补充覆盖。
 
 ### 构建与实际系统验证
 
-实施后先运行新增目标及受影响的 `test_protocol`、`test_langbar`、隔离策略和候选/edit session 回归，再执行 x64/x86 CTest、双架构同 Core probe 和 Settings 构建。完整构建使用 `scripts/build-and-deploy.ps1` 的独立 `-Prefix`/`-BuildRoot`，按 [构建指南](build.md) 选择 full 插件与测试选项。
+修改菜单相关代码后，先运行受影响的 `test_statusmenu`、`test_protocol`、`test_langbar`、隔离策略和候选/edit session 回归，再执行 x64/x86 CTest、双架构同 Core probe 和 Settings 构建。完整构建使用 `scripts/build-and-deploy.ps1` 的独立 `-Prefix`/`-BuildRoot`，按 [构建指南](build.md#status-menus) 选择 full 插件与测试选项。
 
 真实验收矩阵：
 
@@ -393,15 +393,11 @@ Core 使用根工程的 MSYS2/Clang GNU 工具链；x64/x86 TSF 各自使用独�
 
 自动化入口包括 `test_statusmenu`、`test_langbar`、`test_candidate_tsf` 和根工程的 `test_windowsstatusmenu`。`scripts/test-status-menu.ps1` 使用 `FCITX5_UI_TEST` Core/TSF 及独立 `FCITX5_TEST_USER_ROOT`，由 Core 核对实际用户数据目录；可验证拼音动作、Rime 两方案部署、勾选、简繁输出、预编辑取消、F4 选单及双架构客户端。真实系统派发、辅助 owner 焦点、DPI、部署失败恢复与应用矩阵仍按上表验收。
 
-## 实施顺序与完成条件
+## 实现状态与后续验收
 
-1. 补通 F4 及相关键码映射，用隔离 Rime probe 验证候选方案选单。
-2. 实现通用菜单模型、生命周期与 IPC，使用非 Rime 测试插件验证查询、执行和失效。
-3. 接入 TSF 缓存与两种原生菜单，完成重入、迟到选择和 edit session 回归。
-4. 补齐 Rime 勾选、切换取消和子模式反馈，验证真实输入；同步协议消费者和翻译。
-5. 执行双架构及真实应用矩阵，确认桌面 owner/focus 行为和系统托管菜单支持后交付。
+F4 键码路由、通用菜单模型与 IPC、TSF 缓存及两种原生菜单、Rime 勾选/切换取消和子模式反馈均已接入。Rime 和拼音通过同一通用路径执行，Rime 两种方案具有隔离输入验证；协议消费者和翻译配套更新。
 
-完成条件是两个不同插件均通过同一通用路径展示和执行，Rime 两种方案具有真实输入验证，旧菜单不会操作新焦点，受限入口权限保持明确，且 Core/TSF/Settings 的配套构建与测试完成。AppContainer 动态动作授权作为后续扩展保留。
+后续验收集中于上表中的真实系统派发、桌面 owner/focus、系统托管菜单、DPI/无障碍及应用矩阵，并补齐部署失败、中断恢复和 `InputState` 策略覆盖。AppContainer 动态动作授权作为后续扩展保留。
 
 ## 参考
 
