@@ -9,12 +9,13 @@ $patches = @{
     'libime' = 'libime-windows.patch'
     'fcitx5-chinese-addons' = @('chinese-addons-windows.patch', 'chinese-addons-windows-table.patch')
     'fcitx5-rime' = 'fcitx5-rime-windows.patch'
+    'fcitx5-zhuyin' = 'fcitx5-zhuyin-windows.patch'
 }
 foreach ($repository in $patches.Keys) {
     if ($repository -eq 'fcitx5-chinese-addons') {
         $source = "$root/plugins/fcitx5-chinese-addons"
-    } elseif ($repository -eq 'fcitx5-rime') {
-        $source = "$root/plugins/fcitx5-rime"
+    } elseif ($repository -in @('fcitx5-rime', 'fcitx5-zhuyin')) {
+        $source = "$root/plugins/$repository"
     } else {
         $source = Join-Path $root $repository
     }

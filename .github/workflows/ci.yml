@@ -32,6 +32,8 @@ jobs:
             mingw-w64-clang-x86_64-libuv `
             mingw-w64-clang-x86_64-boost `
             mingw-w64-clang-x86_64-zstd `
+            mingw-w64-clang-x86_64-glib2 `
+            mingw-w64-clang-x86_64-db `
             mingw-w64-clang-x86_64-librime `
             mingw-w64-clang-x86_64-librime-data
           Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
@@ -72,6 +74,13 @@ jobs:
               & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default $sample[0] --absent
               if ($LASTEXITCODE -ne 0) { throw "Base runtime unexpectedly contains table-extra: $($sample[0])" }
             }
+            & ./dist/ci-runtime-full/bin/addon_probe.exe "$PWD/dist/ci-runtime-full" --default zhuyin 'su3' --preedit
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled Zhuyin probe failed.' }
+            & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default zhuyin --absent
+            if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains Zhuyin.' }
+            $env:PATH = "$PWD/dist/ci-runtime-full/bin;$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/bin;$env:PATH"
+            & ./build/ci-x64/plugins/zhuyin-deps/zhuyin_model_probe.exe "$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/share/fcitx5/zhuyin"
+            if ($LASTEXITCODE -ne 0) { throw 'Zhuyin model save/reload probe failed.' }
           } finally { Remove-Item -LiteralPath dist/ci-runtime-full/bin/addon_probe.exe, dist/ci-runtime/bin/addon_probe.exe }
 
       - name: Prepare portable TSF tests and probes
@@ -334,10 +343,20 @@ jobs:
             $expected += "$tableExtra/share/fcitx5/inputmethod/$method.conf"
             $expected += "$tableExtra/share/fcitx5/table/$method.main.dict"
           }
+          $zhuyin = 'plugins/fcitx5-zhuyin'
+          $expected += @("$zhuyin/lib/fcitx5/zhuyin.dll", "$zhuyin/bin/libzhuyin.dll",
+            "$zhuyin/share/fcitx5/addon/zhuyin.conf", "$zhuyin/share/fcitx5/inputmethod/zhuyin.conf",
+            "$zhuyin/licenses/libpinyin/COPYING", "$zhuyin/licenses/LICENSES/GPL-2.0-or-later.txt",
+            "$zhuyin/licenses/glib2/COPYING", "$zhuyin/licenses/db/LICENSE")
+          foreach ($name in @('bigram.db', 'gb_char.bin', 'gbk_char.bin', 'merged.bin',
+              'phrase_index.bin', 'pinyin_index.bin', 'addon_phrase_index.bin', 'addon_pinyin_index.bin',
+              'table.conf', 'easysymbols.txt')) {
+            $expected += "$zhuyin/share/fcitx5/zhuyin/$name"
+          }
           foreach ($path in $expected) {
             $count = @($manifest.files | Where-Object path -eq $path).Count
             $required = if ('${{ matrix.edition }}' -eq 'full') { 1 } else { 0 }
-            if ($count -ne $required) { throw "Incorrect table-extra installer payload: $path" }
+            if ($count -ne $required) { throw "Incorrect plugin installer payload: $path" }
           }
 
       - name: Upload installer artifact

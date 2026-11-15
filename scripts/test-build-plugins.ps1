@@ -11,7 +11,7 @@ $buildRoot = "$temporary/build"
 $msys2 = "$temporary/msys2"
 $testState = @{ Builds = @{}; Calls = @(); GitCalls = @(); FailBuild = $false; FailLfs = $false }
 
-# Simulate resource-only plugins, without executing a compiler or system actions.
+# Simulate plugin installs, without executing a compiler or system actions.
 function cmake {
     $testState.Calls += ,@($args)
     if ($args -contains '-S') {
@@ -24,6 +24,11 @@ function cmake {
         $data = "$($project.Stage)/share/fcitx5/inputmethod"
         New-Item -ItemType Directory -Force $data | Out-Null
         [IO.File]::WriteAllText("$data/$($project.Name).conf", 'plugin fixture')
+        if ($project.Name -eq 'zhuyin-deps') {
+            New-Item -ItemType Directory -Force "$($project.Stage)/bin", "$($project.Stage)/licenses/libpinyin" | Out-Null
+            [IO.File]::WriteAllText("$($project.Stage)/bin/libzhuyin.dll", 'dependency fixture')
+            [IO.File]::WriteAllText("$($project.Stage)/licenses/libpinyin/COPYING", 'dependency license')
+        }
     }
     $status = if ($testState.FailBuild -and $args[0] -eq '--build') { 9 } else { 0 }
     Set-Variable -Name LASTEXITCODE -Value $status -Scope 1
@@ -43,9 +48,16 @@ function Assert-Failure([scriptblock]$Action, [string]$Message) {
     }
 }
 
+function Invoke-ReadobjFixture {
+    Set-Variable -Name LASTEXITCODE -Value 0 -Scope 1
+}
+
 try {
     New-Item -ItemType Directory -Force "$temporary/scripts", "$temporary/plugins/fcitx5-chinese-addons" | Out-Null
     Copy-Item -LiteralPath "$PSScriptRoot/build-plugins.ps1" -Destination $entry
+    $fixtureScript = [IO.File]::ReadAllText($entry).Replace(
+        '& "$sysroot/bin/llvm-readobj.exe" --coff-imports $file', 'Invoke-ReadobjFixture $file')
+    [IO.File]::WriteAllText($entry, $fixtureScript)
     foreach ($name in @('Fcitx5Core', 'LibIMECore')) {
         New-Item -ItemType Directory -Force "$sdk/lib/cmake/$name" | Out-Null
         [IO.File]::WriteAllText("$sdk/lib/cmake/$name/${name}Config.cmake", 'fixture')
@@ -54,6 +66,10 @@ try {
     [IO.File]::WriteAllText("$msys2/clang64/share/rime-data/default.yaml", 'rime fixture')
     New-Item -ItemType Directory -Force "$msys2/clang64/share/opencc" | Out-Null
     [IO.File]::WriteAllText("$msys2/clang64/share/opencc/t2s.json", 'opencc fixture')
+    foreach ($name in @('glib2', 'db')) {
+        New-Item -ItemType Directory -Force "$msys2/clang64/share/licenses/$name" | Out-Null
+        [IO.File]::WriteAllText("$msys2/clang64/share/licenses/$name/COPYING", 'fixture license')
+    }
     $environmentBefore = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
     & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -WhatIf
     if ((Test-Path $prefix) -or (Test-Path $buildRoot) -or $testState.Calls.Count) {
@@ -85,6 +101,19 @@ try {
     $lfsCalls = @($testState.GitCalls | ForEach-Object { $_ -join ' ' } | Where-Object { $_ -match ' lfs pull$' })
     if ($testState.GitCalls.Count -ne 6 -or $lfsCalls.Count -ne 6) {
         throw 'Every plugin build must fetch Git LFS assets before building.'
+    }
+    New-Item -ItemType Directory -Force "$temporary/plugins/fcitx5-zhuyin", "$msys2/clang64/bin" | Out-Null
+    [IO.File]::WriteAllText("$temporary/plugins/fcitx5-zhuyin/CMakeLists.txt", 'fixture')
+    & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 | Out-Null
+    foreach ($relative in @('bin/libzhuyin.dll', 'licenses/libpinyin/COPYING', 'licenses/glib2/COPYING', 'licenses/db/COPYING')) {
+        if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-zhuyin/$relative")) { throw "Missing Zhuyin dependency output: $relative" }
+    }
+    $zhuyinSource = [IO.Path]::GetFullPath("$temporary/plugins/fcitx5-zhuyin")
+    $zhuyinConfigure = @($testState.Calls | Where-Object {
+        $_ -contains $zhuyinSource -and $_ -contains '-DLIBZHUYIN_DATABASE_FORMAT=BerkeleyDB'
+    })
+    if (!$zhuyinConfigure.Count) {
+        throw 'Zhuyin did not use the native Berkeley DB backend.'
     }
     $testState.FailLfs = $true
     Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'git failed (1)'

@@ -9,7 +9,8 @@ custom build paths, installer packaging, validation and input-method registratio
 The CI/Nightly workflow packages four Windows 11 x64 installers: `base`/`full`
 crossed with bundled/no bundled Visual C++/Windows App Runtime installers.
 `base` contains fcitx5-chinese-addons; `full` contains every plugin under `plugins/`,
-currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra and fcitx5-wenzhounese. See
+currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra,
+fcitx5-wenzhounese and fcitx5-zhuyin. See
 [Install in the README](../README.md#install) for package selection and removal,
 and [installer implementation](windows-installer-design.md) for current behavior
 and unverified system-installation scenarios. The build/deploy and registration
@@ -23,7 +24,7 @@ Install the following before running the build scripts:
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
 | Core/input methods | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; the pinned libime/fcitx5-chinese-addons data supplies Pinyin, Shuangpin and table methods |
-| Full plugin edition | Git LFS; matching clang64 `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` packages for Rime |
+| Full plugin edition | Git LFS; matching clang64 `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` packages for Rime; clang64 `glib2` and `db` packages for Zhuyin |
 | TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
@@ -148,7 +149,8 @@ method data.
 ## Independent Input-Method Plugins
 
 Plugin source submodules live in `plugins/fcitx5-chinese-addons`, `plugins/fcitx5-wenzhounese`,
-`plugins/fcitx5-table-extra` and `plugins/fcitx5-rime`. fcitx5-chinese-addons is built by
+`plugins/fcitx5-table-extra`, `plugins/fcitx5-rime` and `plugins/fcitx5-zhuyin`.
+fcitx5-chinese-addons is built by
 `build-pinyin.ps1` as part of the base runtime. To extend an existing base runtime
 with every additional plugin using the same build's SDK:
 
@@ -181,6 +183,21 @@ compiled dictionaries, icons and licenses are installed under
 candidate commits for Wubi98, Cangjie5 and Jyutping Table, their absence from base,
 and all table descriptions, dictionaries and the license in both full installer
 variants' file manifests.
+
+fcitx5-zhuyin requires clang64 GLib and Berkeley DB (`mingw-w64-clang-x86_64-glib2`
+and `mingw-w64-clang-x86_64-db`). The plugin builder uses
+`cmake/zhuyin-deps` to build libzhuyin and its three native data generators from
+SHA256-pinned libpinyin 2.10.3 sources. The compatibility patch handles Windows
+binary file I/O, file synchronization, replacement of saved models, `size_t`
+formats and `getline`.
+The upstream SHA256-pinned model archive is compiled into the plugin's
+`share/fcitx5/zhuyin` directory. The package includes the engine, libzhuyin,
+translations, icons and dependency licenses; the PE audit copies required
+GLib/Berkeley DB DLLs into the runtime tree. The plugin patch also adapts
+filesystem paths, reports missing `table.conf` or failed model initialization
+and supports probes with user paths disabled. CI verifies a Standard Zhuyin
+`su3` candidate selection and Enter commit, repeated model saves and reloads,
+its absence from base and the full installer payload.
 
 Additional input methods can use the existing shared-library addon loader and
 the SDK from the installed Core/libime staging prefix. See
@@ -375,7 +392,7 @@ run in separate jobs:
 
 | Job | Responsibility |
 | --- | --- |
-| `build-x64` | Build base with `-ModernApps -SkipTests`, copy it and build all additional plugins using the same SDK; verify Wenzhounese commits and upload base/full runtime trees, portable TSF tests/probes and standalone Settings |
+| `build-x64` | Build base with `-ModernApps -SkipTests`, copy it and build all additional plugins using the same SDK; verify Wenzhounese, table-extra and Zhuyin commits and upload base/full runtime trees, portable TSF tests/probes and standalone Settings |
 | `test-x64` | Download the x64 runtime and tests; run build/deploy/plugin-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, relocated engine translations, default CTest and dictionary integration checks |
 | `test-x86` | Build/test x86 in an independent VS/LLVM tree; run x86 Pinyin/TSF probes and concurrent x86/x64 Pipe clients against the shared x64 Core |
 | `package-installer-x64` | Use a 2×2 matrix of base/full and runtime/no-runtime; download the matching runtime tree, run packaging regressions and build one installer per job |

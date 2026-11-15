@@ -1,0 +1,43 @@
+diff --git a/src/zhuyinengine.cpp b/src/zhuyinengine.cpp
+index 7554e1d..7c608ee 100644
+--- a/src/zhuyinengine.cpp
++++ b/src/zhuyinengine.cpp
+@@ -36,6 +36,7 @@
+ #include <istream>
+ #include <limits>
+ #include <memory>
++#include <stdexcept>
+ #include <string>
+ #include <utility>
+ #include <zhuyin.h>
+@@ -307,16 +308,22 @@ ZhuyinEngine::ZhuyinEngine(Instance *instance)
+           return new ZhuyinState(this, &ic);
+       }) {
+     const auto &sp = StandardPaths::global();
+-    auto userDir = sp.userDirectory(StandardPathsType::PkgData) / "zhuyin";
+-    if (!fs::makePath(userDir)) {
+-        if (fs::isdir(userDir)) {
+-            ZHUYIN_DEBUG() << "Failed to create user directory: " << userDir;
+-        }
++    const auto userRoot = sp.userDirectory(StandardPathsType::PkgData);
++    const auto userDir =
++        userRoot.empty() ? std::string() : (userRoot / "zhuyin").string();
++    if (!userDir.empty() && !fs::makePath(userDir) && !fs::isdir(userDir)) {
++        throw std::runtime_error("Cannot create Zhuyin user directory");
+     }
+-    std::string tablePath =
++    const auto tablePath =
+         sp.locate(StandardPathsType::PkgData, "zhuyin/table.conf");
+-    context_.reset(zhuyin_init(fcitx::fs::dirName(tablePath).c_str(),
+-                               userDir.string().c_str()));
++    if (tablePath.empty()) {
++        throw std::runtime_error("Zhuyin table.conf is missing");
++    }
++    context_.reset(zhuyin_init(tablePath.parent_path().string().c_str(),
++                               userDir.empty() ? nullptr : userDir.c_str()));
++    if (!context_) {
++        throw std::runtime_error("Cannot load Zhuyin language model");
++    }
+
+     instance->inputContextManager().registerProperty("zhuyinState", &factory_);
+     reloadConfig();

@@ -61,15 +61,33 @@ try {
         Invoke-PluginCommand 'git' @('-C', $plugin.FullName, 'lfs', 'pull')
         $build = "$BuildRoot/$($plugin.Name)"
         $stage = "$build/prefix"
+        $pluginDependencies = $DependencyPrefix
+        $pluginOptions = @()
+        if ($plugin.Name -eq 'fcitx5-zhuyin') {
+            $dependencyBuild = "$BuildRoot/zhuyin-deps"
+            $zhuyinPrefix = "$dependencyBuild/prefix"
+            $env:PATH = ($runtimeDirectories -join ';') + ";$oldPath"
+            Invoke-PluginCommand 'cmake' @('-S', "$root/cmake/zhuyin-deps", '-B', $dependencyBuild, '-G', 'Ninja',
+                "-DCMAKE_TOOLCHAIN_FILE=$root/cmake/pinyin-toolchain.cmake",
+                "-DWINDOWS_DEPENDENCY_PREFIX=$DependencyPrefix", "-DCMAKE_INSTALL_PREFIX=$zhuyinPrefix",
+                '-DARCH=AMD64', '-DCMAKE_BUILD_TYPE=Release',
+                "-DCMAKE_CXX_COMPILER=$sysroot/bin/clang++.exe", "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe")
+            Invoke-PluginCommand 'cmake' @('--build', $dependencyBuild, '-j', "$Jobs")
+            Invoke-PluginCommand 'cmake' @('--install', $dependencyBuild)
+            $pluginDependencies = (@($zhuyinPrefix, $DependencyPrefix) | Where-Object { $_ }) -join ';'
+            $env:PKG_CONFIG_PATH = "$zhuyinPrefix/lib/pkgconfig;$DependencyPrefix/lib/pkgconfig;$sysroot/lib/pkgconfig"
+            $runtimeDirectories = @("$zhuyinPrefix/bin") + $runtimeDirectories
+            $pluginOptions += '-DLIBZHUYIN_DATABASE_FORMAT=BerkeleyDB'
+        }
         $env:PATH = "$CorePrefix/bin;$build/bin;" + ($runtimeDirectories -join ';') + ";$MSYS2Root/usr/bin;$oldPath"
-        Invoke-PluginCommand 'cmake' @('-S', $plugin.FullName, '-B', $build, '-G', 'Ninja',
+        Invoke-PluginCommand 'cmake' (@('-S', $plugin.FullName, '-B', $build, '-G', 'Ninja',
             "-DCMAKE_TOOLCHAIN_FILE=$root/cmake/windows-addon-toolchain.cmake",
-            "-DFCITX5_WINDOWS_SDK=$CorePrefix", "-DWINDOWS_DEPENDENCY_PREFIX=$DependencyPrefix",
+            "-DFCITX5_WINDOWS_SDK=$CorePrefix", "-DWINDOWS_DEPENDENCY_PREFIX=$pluginDependencies",
             '-DARCH=AMD64', '-DCMAKE_BUILD_TYPE=Release', '-DENABLE_TEST=OFF',
             "-DCMAKE_INSTALL_PREFIX=$stage", '-DCMAKE_INSTALL_LIBDIR=lib',
             "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=$build/bin", "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$build/bin",
             "-DCMAKE_C_COMPILER=$sysroot/bin/clang.exe", "-DCMAKE_CXX_COMPILER=$sysroot/bin/clang++.exe",
-            "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe", '-DCMAKE_CXX_FLAGS=-fexperimental-library')
+            "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe", '-DCMAKE_CXX_FLAGS=-fexperimental-library') + $pluginOptions)
         Invoke-PluginCommand 'cmake' @('--build', $build, '-j', "$Jobs")
         Invoke-PluginCommand 'cmake' @('--install', $build)
         if ($plugin.Name -eq 'fcitx5-rime') {
@@ -101,6 +119,18 @@ try {
         if ($licenses.Count) {
             New-Item -ItemType Directory -Force "$destination/licenses" | Out-Null
             $licenses | Copy-Item -Destination "$destination/licenses" -Recurse -Force
+        }
+        if ($plugin.Name -eq 'fcitx5-zhuyin') {
+            New-Item -ItemType Directory -Force "$destination/bin", "$destination/licenses" | Out-Null
+            Copy-Item -LiteralPath "$zhuyinPrefix/bin/libzhuyin.dll" -Destination "$destination/bin" -Force
+            Copy-Item -LiteralPath "$zhuyinPrefix/licenses/libpinyin" -Destination "$destination/licenses" -Recurse -Force
+            foreach ($dependency in @('glib2', 'db')) {
+                $license = @($DependencyPrefix, $sysroot) | Where-Object { $_ } |
+                    ForEach-Object { "$_/share/licenses/$dependency" } |
+                    Where-Object { Test-Path -LiteralPath $_ -PathType Container } | Select-Object -First 1
+                if (!$license) { throw "Missing $dependency dependency license." }
+                Copy-Item -LiteralPath $license -Destination "$destination/licenses" -Recurse -Force
+            }
         }
     }
 

@@ -1,0 +1,565 @@
+diff --git a/src/include/memory_chunk.h b/src/include/memory_chunk.h
+index 713fb5c..92c1a0c 100644
+--- a/src/include/memory_chunk.h
++++ b/src/include/memory_chunk.h
+@@ -27,6 +27,12 @@
+ #include <sys/stat.h>
+ #include <unistd.h>
+ #include <fcntl.h>
++#ifdef _WIN32
++#include <io.h>
++#define fsync _commit
++#else
++#define O_BINARY 0
++#endif
+ #include <stdlib.h>
+ #ifdef HAVE_MMAP
+ #include <sys/mman.h>
+@@ -412,7 +418,7 @@ public:
+         /* free old data */
+         reset();
+
+-        int fd = open(filename, O_RDONLY);
++        int fd = open(filename, O_RDONLY | O_BINARY);
+         if (-1 == fd)
+             return false;
+
+@@ -471,7 +477,7 @@ public:
+         /* free old data */
+         reset();
+
+-        int fd = open(filename, O_RDONLY);
++        int fd = open(filename, O_RDONLY | O_BINARY);
+         if (-1 == fd)
+             return false;
+
+@@ -529,7 +535,7 @@ public:
+      *
+      */
+     bool save(const char * filename){
+-        int fd = open(filename, O_CREAT|O_WRONLY|O_TRUNC, 0644);
++        int fd = open(filename, O_CREAT|O_WRONLY|O_TRUNC|O_BINARY, 0644);
+         if ( -1 == fd )
+             return false;
+
+diff --git a/src/lookup/lookup.cpp b/src/lookup/lookup.cpp
+index ac3d705..3a3ad2c 100644
+--- a/src/lookup/lookup.cpp
++++ b/src/lookup/lookup.cpp
+@@ -62,7 +62,7 @@ bool convert_to_utf8(FacadePhraseIndex * phrase_index,
+         if ( NULL == result_string )
+             result_string = g_strdup(phrase);
+         else
+-            result_string = g_strconcat(result_string, delimiter, phrase, NULL);
++            result_string = g_strconcat(result_string, delimiter, phrase, nullptr);
+         g_free(phrase);
+         g_free(tmp);
+     }
+diff --git a/src/storage/chewing_large_table.cpp b/src/storage/chewing_large_table.cpp
+index bd76e9b..d722a77 100644
+--- a/src/storage/chewing_large_table.cpp
++++ b/src/storage/chewing_large_table.cpp
+@@ -670,10 +670,10 @@ bool ChewingLargeTable::load_text(FILE * infile, TABLE_PHONETIC_TYPE type) {
+
+     while (!feof(infile)) {
+ #ifdef __APPLE__
+-        int num = fscanf(infile, "%255s %255[^ \t] %u %ld",
++        int num = fscanf(infile, "%255s %255[^ \t] %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #else
+-        int num = fscanf(infile, "%255s %255s %u %ld",
++        int num = fscanf(infile, "%255s %255s %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #endif
+
+@@ -708,7 +708,7 @@ bool ChewingLargeTable::load_text(FILE * infile, TABLE_PHONETIC_TYPE type) {
+         };
+
+         if (len != keys->len) {
+-            fprintf(stderr, "ChewingLargeTable::load_text:%s\t%s\t%u\t%ld\n",
++            fprintf(stderr, "ChewingLargeTable::load_text:%s\t%s\t%u\t%zu\n",
+                     pinyin, phrase, token, freq);
+             continue;
+         }
+diff --git a/src/storage/chewing_large_table2.cpp b/src/storage/chewing_large_table2.cpp
+index 7ac1398..2703c97 100644
+--- a/src/storage/chewing_large_table2.cpp
++++ b/src/storage/chewing_large_table2.cpp
+@@ -116,10 +116,10 @@ bool ChewingLargeTable2::load_text(FILE * infile, TABLE_PHONETIC_TYPE type) {
+
+     while (!feof(infile)) {
+ #ifdef __APPLE__
+-        int num = fscanf(infile, "%255s %255[^ \t] %u %ld",
++        int num = fscanf(infile, "%255s %255[^ \t] %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #else
+-        int num = fscanf(infile, "%255s %255s %u %ld",
++        int num = fscanf(infile, "%255s %255s %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #endif
+
+@@ -154,7 +154,7 @@ bool ChewingLargeTable2::load_text(FILE * infile, TABLE_PHONETIC_TYPE type) {
+         };
+
+         if (len != keys->len) {
+-            fprintf(stderr, "ChewingLargeTable2::load_text:%s\t%s\t%u\t%ld\n",
++            fprintf(stderr, "ChewingLargeTable2::load_text:%s\t%s\t%u\t%zu\n",
+                     pinyin, phrase, token, freq);
+             continue;
+         }
+diff --git a/src/storage/ngram_bdb.cpp b/src/storage/ngram_bdb.cpp
+index 8910f9d..93ff368 100644
+--- a/src/storage/ngram_bdb.cpp
++++ b/src/storage/ngram_bdb.cpp
+@@ -56,6 +56,9 @@ bool Bigram::load_db(const char * dbfile){
+     if ( ret != 0 )
+         return false;
+
++    if (!dbfile)
++        return true;
++
+     /* load db into memory. */
+     DB * tmp_db = NULL;
+     ret = db_create(&tmp_db, NULL, 0);
+diff --git a/src/storage/phonetic_key_matrix.cpp b/src/storage/phonetic_key_matrix.cpp
+index ab7e879..e1e39ce 100644
+--- a/src/storage/phonetic_key_matrix.cpp
++++ b/src/storage/phonetic_key_matrix.cpp
+@@ -327,7 +327,7 @@ bool dump_matrix(PhoneticKeyMatrix * matrix) {
+         if (0 == keys->len)
+             continue;
+
+-        printf("Column:%ld:\n", index);
++        printf("Column:%zu:\n", index);
+
+         for (size_t i = 0; i < keys->len; ++i) {
+             ChewingKey key = g_array_index(keys, ChewingKey, i);
+diff --git a/src/storage/phrase_index.cpp b/src/storage/phrase_index.cpp
+index bb98251..0e110ef 100644
+--- a/src/storage/phrase_index.cpp
++++ b/src/storage/phrase_index.cpp
+@@ -535,10 +535,10 @@ bool FacadePhraseIndex::load_text(guint8 phrase_index, FILE * infile,
+
+     while (!feof(infile)){
+ #ifdef __APPLE__
+-        int num = fscanf(infile, "%255s %255[^ \t] %u %ld",
++        int num = fscanf(infile, "%255s %255[^ \t] %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #else
+-        int num = fscanf(infile, "%255s %255s %u %ld",
++        int num = fscanf(infile, "%255s %255s %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #endif
+
+diff --git a/src/storage/phrase_large_table2.cpp b/src/storage/phrase_large_table2.cpp
+index 202a69a..0c78d80 100644
+--- a/src/storage/phrase_large_table2.cpp
++++ b/src/storage/phrase_large_table2.cpp
+@@ -473,10 +473,10 @@ bool PhraseLargeTable2::load_text(FILE * infile){
+
+     while (!feof(infile)) {
+ #ifdef __APPLE__
+-        int num = fscanf(infile, "%255s %255[^ \t] %u %ld",
++        int num = fscanf(infile, "%255s %255[^ \t] %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #else
+-        int num = fscanf(infile, "%255s %255s %u %ld",
++        int num = fscanf(infile, "%255s %255s %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #endif
+
+diff --git a/src/storage/phrase_large_table3.cpp b/src/storage/phrase_large_table3.cpp
+index 1e8fd76..9018331 100644
+--- a/src/storage/phrase_large_table3.cpp
++++ b/src/storage/phrase_large_table3.cpp
+@@ -129,10 +129,10 @@ bool PhraseLargeTable3::load_text(FILE * infile){
+
+     while (!feof(infile)) {
+ #ifdef __APPLE__
+-        int num = fscanf(infile, "%255s %255[^ \t] %u %ld",
++        int num = fscanf(infile, "%255s %255[^ \t] %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #else
+-        int num = fscanf(infile, "%255s %255s %u %ld",
++        int num = fscanf(infile, "%255s %255s %u %zu",
+                          pinyin, phrase, &token, &freq);
+ #endif
+
+diff --git a/src/storage/punct_table.cpp b/src/storage/punct_table.cpp
+index 249f6c3..be25484 100644
+--- a/src/storage/punct_table.cpp
++++ b/src/storage/punct_table.cpp
+@@ -184,10 +184,10 @@ bool PunctTable::load_text(FILE * infile) {
+
+     while (!feof(infile)) {
+ #ifdef __APPLE__
+-        int num = fscanf(infile, "%u %255[^ \t] %255[^ \t] %ld",
++        int num = fscanf(infile, "%u %255[^ \t] %255[^ \t] %zu",
+                          &token, phrase, punct, &freq);
+ #else
+-        int num = fscanf(infile, "%u %255s %255s  %ld",
++        int num = fscanf(infile, "%u %255s %255s  %zu",
+                          &token, phrase, punct, &freq);
+ #endif
+
+diff --git a/src/storage/zhuyin_parser2.cpp b/src/storage/zhuyin_parser2.cpp
+index 3f14eab..5df697a 100644
+--- a/src/storage/zhuyin_parser2.cpp
++++ b/src/storage/zhuyin_parser2.cpp
+@@ -192,7 +192,7 @@ bool ZhuyinSimpleParser2::parse_one_key(pinyin_option_t options,
+             chewing = g_strdup(onechar);
+         } else {
+             gchar * tmp = chewing;
+-            chewing = g_strconcat(chewing, onechar, NULL);
++            chewing = g_strconcat(chewing, onechar, nullptr);
+             g_free(tmp);
+         }
+     }
+@@ -387,7 +387,7 @@ probe:
+         return false;
+     }
+
+-    gchar * chewing = g_strconcat(initial, middle, final, NULL);
++    gchar * chewing = g_strconcat(initial, middle, final, nullptr);
+
+     /* search the chewing in the chewing index table. */
+     if (index == len && search_chewing_index(options, m_chewing_index,
+@@ -696,7 +696,7 @@ bool ZhuyinDaChenCP26Parser2::parse_one_key(pinyin_option_t options,
+         goto probe;
+
+ probe:
+-    gchar * chewing = g_strconcat(initial, middle, final, NULL);
++    gchar * chewing = g_strconcat(initial, middle, final, nullptr);
+
+     /* search the chewing in the chewing index table. */
+     if (index == len && search_chewing_index(options, m_chewing_index,
+diff --git a/src/zhuyin.cpp b/src/zhuyin.cpp
+index 1aeecf5..3bfdc07 100644
+--- a/src/zhuyin.cpp
++++ b/src/zhuyin.cpp
+@@ -115,7 +115,7 @@ static bool _clean_user_files(const char * user_dir,
+         const char * userfilename = table_info->m_user_filename;
+
+         /* remove dbin file. */
+-        gchar * filename = g_build_filename(user_dir, userfilename, NULL);
++        gchar * filename = g_build_filename(user_dir, userfilename, nullptr);
+         unlink(filename);
+         g_free(filename);
+     }
+@@ -125,10 +125,12 @@ static bool _clean_user_files(const char * user_dir,
+
+ static bool check_format(zhuyin_context_t * context){
+     const char * user_dir = context->m_user_dir;
++    if (!user_dir)
++        return true;
+
+     UserTableInfo user_table_info;
+     gchar * filename = g_build_filename
+-        (user_dir, USER_TABLE_INFO, NULL);
++        (user_dir, USER_TABLE_INFO, nullptr);
+     user_table_info.load(filename);
+     g_free(filename);
+
+@@ -144,17 +146,17 @@ static bool check_format(zhuyin_context_t * context){
+     _clean_user_files(user_dir, phrase_files);
+
+     filename = g_build_filename
+-        (user_dir, USER_PINYIN_INDEX, NULL);
++        (user_dir, USER_PINYIN_INDEX, nullptr);
+     unlink(filename);
+     g_free(filename);
+
+     filename = g_build_filename
+-        (user_dir, USER_PHRASE_INDEX, NULL);
++        (user_dir, USER_PHRASE_INDEX, nullptr);
+     unlink(filename);
+     g_free(filename);
+
+     filename = g_build_filename
+-        (user_dir, USER_BIGRAM, NULL);
++        (user_dir, USER_BIGRAM, nullptr);
+     unlink(filename);
+     g_free(filename);
+
+@@ -168,7 +170,7 @@ static bool mark_version(zhuyin_context_t * context){
+     user_table_info.make_conform(&context->m_system_table_info);
+
+     gchar * filename = g_build_filename
+-        (userdir, USER_TABLE_INFO, NULL);
++        (userdir, USER_TABLE_INFO, nullptr);
+     bool retval = user_table_info.save(filename);
+     g_free(filename);
+
+@@ -194,7 +196,7 @@ static bool _load_phrase_library (const char * system_dir,
+         const char * systemfilename = table_info->m_system_filename;
+         /* check bin file in system dir. */
+         gchar * chunkfilename = g_build_filename(system_dir,
+-                                                 systemfilename, NULL);
++                                                 systemfilename, nullptr);
+ #ifdef LIBPINYIN_USE_MMAP
+         if (!chunk->mmap(chunkfilename))
+             fprintf(stderr, "mmap %s failed!\n", chunkfilename);
+@@ -207,10 +209,13 @@ static bool _load_phrase_library (const char * system_dir,
+
+         phrase_index->load(index, chunk);
+
++        if (!user_dir)
++            return true;
++
+         const char * userfilename = table_info->m_user_filename;
+
+         chunkfilename = g_build_filename(user_dir,
+-                                         userfilename, NULL);
++                                         userfilename, nullptr);
+
+         MemoryChunk * log = new MemoryChunk;
+         log->load(chunkfilename);
+@@ -228,7 +233,7 @@ static bool _load_phrase_library (const char * system_dir,
+         const char * systemfilename = table_info->m_system_filename;
+         /* check bin file in system dir. */
+         gchar * chunkfilename = g_build_filename(system_dir,
+-                                                 systemfilename, NULL);
++                                                 systemfilename, nullptr);
+ #ifdef LIBPINYIN_USE_MMAP
+         if (!chunk->mmap(chunkfilename))
+             fprintf(stderr, "mmap %s failed!\n", chunkfilename);
+@@ -246,11 +251,15 @@ static bool _load_phrase_library (const char * system_dir,
+
+     if (USER_FILE == table_info->m_file_type) {
+         /* user phrase library */
++        if (!user_dir) {
++            phrase_index->create_sub_phrase(index);
++            return true;
++        }
+         MemoryChunk * chunk = new MemoryChunk;
+         const char * userfilename = table_info->m_user_filename;
+
+         gchar * chunkfilename = g_build_filename(user_dir,
+-                                                 userfilename, NULL);
++                                                 userfilename, nullptr);
+
+         /* check bin file exists. if not, create a new one. */
+         if (chunk->load(chunkfilename)) {
+@@ -277,7 +286,7 @@ zhuyin_context_t * zhuyin_init(const char * systemdir, const char * userdir){
+     context->m_modified = false;
+
+     gchar * filename = g_build_filename
+-        (context->m_system_dir, SYSTEM_TABLE_INFO, NULL);
++        (context->m_system_dir, SYSTEM_TABLE_INFO, nullptr);
+     if (!context->m_system_table_info.load(filename)) {
+         fprintf(stderr, "load %s failed!\n", filename);
+         return NULL;
+@@ -295,9 +304,9 @@ zhuyin_context_t * zhuyin_init(const char * systemdir, const char * userdir){
+     context->m_pinyin_table = new FacadeChewingTable2;
+
+     gchar * system_filename = g_build_filename
+-        (context->m_system_dir, SYSTEM_PINYIN_INDEX, NULL);
+-    gchar * user_filename = g_build_filename
+-        (context->m_user_dir, USER_PINYIN_INDEX, NULL);
++        (context->m_system_dir, SYSTEM_PINYIN_INDEX, nullptr);
++    gchar * user_filename = (context->m_user_dir ? g_build_filename
++        (context->m_user_dir, USER_PINYIN_INDEX, nullptr) : nullptr);
+     context->m_pinyin_table->load(system_filename, user_filename);
+     g_free(user_filename);
+     g_free(system_filename);
+@@ -306,9 +315,9 @@ zhuyin_context_t * zhuyin_init(const char * systemdir, const char * userdir){
+     context->m_phrase_table = new FacadePhraseTable3;
+
+     system_filename = g_build_filename
+-        (context->m_system_dir, SYSTEM_PHRASE_INDEX, NULL);
+-    user_filename = g_build_filename
+-        (context->m_user_dir, USER_PHRASE_INDEX, NULL);
++        (context->m_system_dir, SYSTEM_PHRASE_INDEX, nullptr);
++    user_filename = (context->m_user_dir ? g_build_filename
++        (context->m_user_dir, USER_PHRASE_INDEX, nullptr) : nullptr);
+     context->m_phrase_table->load(system_filename, user_filename);
+     g_free(user_filename);
+     g_free(system_filename);
+@@ -334,12 +343,13 @@ zhuyin_context_t * zhuyin_init(const char * systemdir, const char * userdir){
+     }
+
+     context->m_system_bigram = new Bigram;
+-    filename = g_build_filename(context->m_system_dir, SYSTEM_BIGRAM, NULL);
++    filename = g_build_filename(context->m_system_dir, SYSTEM_BIGRAM, nullptr);
+     context->m_system_bigram->attach(filename, ATTACH_READONLY);
+     g_free(filename);
+
+     context->m_user_bigram = new Bigram;
+-    filename = g_build_filename(context->m_user_dir, USER_BIGRAM, NULL);
++    filename = context->m_user_dir ?
++        g_build_filename(context->m_user_dir, USER_BIGRAM, nullptr) : nullptr;
+     context->m_user_bigram->load_db(filename);
+     g_free(filename);
+
+@@ -583,7 +593,7 @@ bool zhuyin_save(zhuyin_context_t * context){
+
+             /* check bin file in system dir. */
+             gchar * chunkfilename = g_build_filename(context->m_system_dir,
+-                                                     systemfilename, NULL);
++                                                     systemfilename, nullptr);
+ #ifdef LIBPINYIN_USE_MMAP
+             if (!chunk->mmap(chunkfilename))
+                 fprintf(stderr, "mmap %s failed!\n", chunkfilename);
+@@ -599,14 +609,14 @@ bool zhuyin_save(zhuyin_context_t * context){
+             gchar * tmpfilename = g_strdup_printf("%s.tmp", userfilename);
+
+             gchar * tmppathname = g_build_filename(context->m_user_dir,
+-                                                   tmpfilename, NULL);
++                                                   tmpfilename, nullptr);
+             g_free(tmpfilename);
+
+             gchar * chunkpathname = g_build_filename(context->m_user_dir,
+-                                                     userfilename, NULL);
++                                                     userfilename, nullptr);
+             log->save(tmppathname);
+
+-            int result = rename(tmppathname, chunkpathname);
++            int result = g_rename(tmppathname, chunkpathname);
+             if (0 != result)
+                 fprintf(stderr, "rename %s to %s failed.\n",
+                         tmppathname, chunkpathname);
+@@ -624,15 +634,15 @@ bool zhuyin_save(zhuyin_context_t * context){
+             const char * userfilename = table_info->m_user_filename;
+             gchar * tmpfilename = g_strdup_printf("%s.tmp", userfilename);
+             gchar * tmppathname = g_build_filename(context->m_user_dir,
+-                                                   tmpfilename, NULL);
++                                                   tmpfilename, nullptr);
+             g_free(tmpfilename);
+
+             gchar * chunkpathname = g_build_filename(context->m_user_dir,
+-                                                     userfilename, NULL);
++                                                     userfilename, nullptr);
+
+             chunk->save(tmppathname);
+
+-            int result = rename(tmppathname, chunkpathname);
++            int result = g_rename(tmppathname, chunkpathname);
+             if (0 != result)
+                 fprintf(stderr, "rename %s to %s failed.\n",
+                         tmppathname, chunkpathname);
+@@ -645,14 +655,14 @@ bool zhuyin_save(zhuyin_context_t * context){
+
+     /* save user pinyin table */
+     gchar * tmpfilename = g_build_filename
+-        (context->m_user_dir, USER_PINYIN_INDEX ".tmp", NULL);
++        (context->m_user_dir, USER_PINYIN_INDEX ".tmp", nullptr);
+     unlink(tmpfilename);
+     gchar * filename = g_build_filename
+-        (context->m_user_dir, USER_PINYIN_INDEX, NULL);
++        (context->m_user_dir, USER_PINYIN_INDEX, nullptr);
+
+     context->m_pinyin_table->store(tmpfilename);
+
+-    int result = rename(tmpfilename, filename);
++    int result = g_rename(tmpfilename, filename);
+     if (0 != result)
+         fprintf(stderr, "rename %s to %s failed.\n",
+                 tmpfilename, filename);
+@@ -662,14 +672,14 @@ bool zhuyin_save(zhuyin_context_t * context){
+
+     /* save user phrase table */
+     tmpfilename = g_build_filename
+-        (context->m_user_dir, USER_PHRASE_INDEX ".tmp", NULL);
++        (context->m_user_dir, USER_PHRASE_INDEX ".tmp", nullptr);
+     unlink(tmpfilename);
+     filename = g_build_filename
+-        (context->m_user_dir, USER_PHRASE_INDEX, NULL);
++        (context->m_user_dir, USER_PHRASE_INDEX, nullptr);
+
+     context->m_phrase_table->store(tmpfilename);
+
+-    result = rename(tmpfilename, filename);
++    result = g_rename(tmpfilename, filename);
+     if (0 != result)
+         fprintf(stderr, "rename %s to %s failed.\n",
+                 tmpfilename, filename);
+@@ -679,12 +689,12 @@ bool zhuyin_save(zhuyin_context_t * context){
+
+     /* save user bi-gram */
+     tmpfilename = g_build_filename
+-        (context->m_user_dir, USER_BIGRAM ".tmp", NULL);
++        (context->m_user_dir, USER_BIGRAM ".tmp", nullptr);
+     unlink(tmpfilename);
+-    filename = g_build_filename(context->m_user_dir, USER_BIGRAM, NULL);
++    filename = g_build_filename(context->m_user_dir, USER_BIGRAM, nullptr);
+     context->m_user_bigram->save_db(tmpfilename);
+
+-    result = rename(tmpfilename, filename);
++    result = g_rename(tmpfilename, filename);
+     if (0 != result)
+         fprintf(stderr, "rename %s to %s failed.\n",
+                 tmpfilename, filename);
+@@ -793,7 +803,7 @@ bool zhuyin_mask_out(zhuyin_context_t * context,
+             const char * systemfilename = table_info->m_system_filename;
+             /* check bin file in system dir. */
+             gchar * chunkfilename = g_build_filename(context->m_system_dir,
+-                                                     systemfilename, NULL);
++                                                     systemfilename, nullptr);
+
+ #ifdef LIBPINYIN_USE_MMAP
+             if (!chunk->mmap(chunkfilename))
+@@ -810,7 +820,7 @@ bool zhuyin_mask_out(zhuyin_context_t * context,
+             const char * userfilename = table_info->m_user_filename;
+
+             chunkfilename = g_build_filename(context->m_user_dir,
+-                                             userfilename, NULL);
++                                             userfilename, nullptr);
+
+             MemoryChunk * log = new MemoryChunk;
+             log->load(chunkfilename);
+diff --git a/utils/storage/gen_binary_files.cpp b/utils/storage/gen_binary_files.cpp
+index e3f2d81..8cb74e4 100644
+--- a/utils/storage/gen_binary_files.cpp
++++ b/utils/storage/gen_binary_files.cpp
+@@ -57,7 +57,7 @@ bool generate_binary_files(const char * pinyin_table_filename,
+
+         const char * tablename = table_info->m_table_filename;
+
+-        gchar * filename = g_build_filename(table_dir, tablename, NULL);
++        gchar * filename = g_build_filename(table_dir, tablename, nullptr);
+         FILE * tablefile = fopen(filename, "r");
+
+         if (NULL == tablefile) {
+@@ -93,7 +93,7 @@ bool generate_punct_table(const char * tablename) {
+         exit(ENOENT);
+     }
+
+-    gchar * filename = g_build_filename(table_dir, "punct.table", NULL);
++    gchar * filename = g_build_filename(table_dir, "punct.table", nullptr);
+     FILE * tablefile = fopen(filename, "r");
+     if (NULL == tablefile) {
+         fprintf(stderr, "open %s failed!\n", filename);
+diff --git a/utils/storage/import_interpolation.cpp b/utils/storage/import_interpolation.cpp
+index a07ed47..9a40569 100644
+--- a/utils/storage/import_interpolation.cpp
++++ b/utils/storage/import_interpolation.cpp
+@@ -23,6 +23,29 @@
+ #endif
+
+ #include <stdio.h>
++#ifdef _WIN32
++#include <string>
++#include <stdlib.h>
++#include <string.h>
++// The native Windows CRT does not provide POSIX getline.
++static ssize_t getline(char **buffer, size_t *capacity, FILE *input) {
++    std::string line;
++    int c;
++    while ((c = fgetc(input)) != EOF) {
++        line += static_cast<char>(c);
++        if (c == '\n') break;
++    }
++    if (line.empty()) return -1;
++    if (*capacity <= line.size()) {
++        auto *next = static_cast<char *>(realloc(*buffer, line.size() + 1));
++        if (!next) return -1;
++        *buffer = next;
++        *capacity = line.size() + 1;
++    }
++    memcpy(*buffer, line.c_str(), line.size() + 1);
++    return static_cast<ssize_t>(line.size());
++}
++#endif
+ #include <locale.h>
+ #include <glib.h>
+ #include "pinyin_internal.h"

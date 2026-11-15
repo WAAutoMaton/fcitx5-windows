@@ -52,10 +52,15 @@ std::string utf8(const wchar_t *value) {
 
 int wmain(int argc, wchar_t **argv) {
     try {
-        if (argc != 5) {
+        if (argc != 5 && argc != 6) {
             throw std::runtime_error(
                 "Usage: addon_probe <Core prefix> <plugin prefix> <method> "
-                "<keys|--absent|--unavailable>");
+                "<keys|--absent|--unavailable> [--preedit]");
+        }
+        const bool preedit =
+            argc == 6 && std::wstring_view(argv[5]) == L"--preedit";
+        if (argc == 6 && !preedit) {
+            throw std::runtime_error("Unknown probe option");
         }
         fcitx::setEnvironment("SKIP_FCITX_USER_PATH", "1");
         fcitx::setEnvironment("SKIP_FCITX_SYSTEM_PATH", "1");
@@ -128,12 +133,33 @@ int wmain(int argc, wchar_t **argv) {
                     "Input method did not consume the key");
             }
         }
+        if (preedit) {
+            fcitx::KeyEvent down(&context, fcitx::Key(FcitxKey_Down));
+            context.keyEvent(down);
+            if (!down.accepted()) {
+                throw std::runtime_error(
+                    "Input method did not open candidates");
+            }
+        }
         const auto candidates = context.inputPanel().candidateList();
         if (!candidates || candidates->empty()) {
             throw std::runtime_error("Input method produced no candidates");
         }
         const auto expected = candidates->candidate(0).text().toString();
         candidates->candidate(0).select(&context);
+        if (preedit) {
+            if (!context.commit.empty() ||
+                context.inputPanel().clientPreedit().toStringForCommit() !=
+                    expected) {
+                throw std::runtime_error(
+                    "Candidate selection did not update preedit");
+            }
+            fcitx::KeyEvent enter(&context, fcitx::Key(FcitxKey_Return));
+            context.keyEvent(enter);
+            if (!enter.accepted()) {
+                throw std::runtime_error("Input method did not commit preedit");
+            }
+        }
         if (expected.empty() || context.commit != expected) {
             throw std::runtime_error(
                 "Candidate selection did not commit its text");

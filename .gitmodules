@@ -19,3 +19,6 @@
 [submodule "plugins/fcitx5-table-extra"]
 	path = plugins/fcitx5-table-extra
 	url = https://github.com/fcitx/fcitx5-table-extra
+[submodule "plugins/fcitx5-zhuyin"]
+	path = plugins/fcitx5-zhuyin
+	url = https://github.com/fcitx/fcitx5-zhuyin
