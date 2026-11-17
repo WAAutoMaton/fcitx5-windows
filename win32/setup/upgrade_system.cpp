@@ -249,6 +249,83 @@ void restoreKey(HKEY parent, const std::wstring &path, const Tree &snapshot,
     }
 }
 
+// Only the default DLL path is suspended. Profiles, categories, threading
+// metadata and user preferences remain registered throughout the upgrade.
+void suspendComActivation(HKEY parent, const std::wstring &clsid,
+                          const fs::path &transaction) {
+    const auto saved = transaction / "activation.json";
+    const auto server = clsid + L"\\InprocServer32";
+    if (!fs::exists(saved)) {
+        Tree snapshot;
+        snapshot.put("schemaVersion", 1);
+        snapshot.add_child("x64", snapshotKey(parent, server));
+        snapshot.add_child(
+            "x86", snapshotKey(parent, server, true, 0, KEY_WOW64_32KEY));
+        save(saved, snapshot);
+    }
+    for (const auto view : {KEY_WOW64_64KEY, KEY_WOW64_32KEY}) {
+        Key key;
+        const auto opened =
+            RegOpenKeyExW(parent, server.c_str(), 0,
+                          KEY_SET_VALUE | KEY_QUERY_VALUE | view, &key.value);
+        if (opened == ERROR_FILE_NOT_FOUND)
+            continue;
+        reg(opened);
+        const auto removed = RegDeleteValueW(key.value, nullptr);
+        if (removed != ERROR_FILE_NOT_FOUND)
+            reg(removed);
+        reg(RegFlushKey(key.value));
+    }
+}
+
+void resumeComActivation(HKEY parent, const std::wstring &clsid,
+                         const fs::path &transaction) {
+    const auto saved = transaction / "activation.json";
+    if (!fs::exists(saved))
+        return;
+    const auto snapshot = load(saved);
+    if (snapshot.get<unsigned>("schemaVersion") != 1)
+        fail(ERROR_REVISION_MISMATCH);
+    const auto server = clsid + L"\\InprocServer32";
+    restoreKey(parent, server, snapshot.get_child("x64"));
+    restoreKey(parent, server, snapshot.get_child("x86"), true, 0,
+               KEY_WOW64_32KEY);
+    for (const auto view : {KEY_WOW64_64KEY, KEY_WOW64_32KEY}) {
+        Key key;
+        const auto opened = RegOpenKeyExW(parent, server.c_str(), 0,
+                                          KEY_QUERY_VALUE | view, &key.value);
+        if (opened == ERROR_FILE_NOT_FOUND)
+            continue;
+        reg(opened);
+        reg(RegFlushKey(key.value));
+    }
+    // Keep the snapshot through both view restores so an interrupted restore
+    // can be retried without capturing the partially suspended registration.
+    fs::remove(saved);
+}
+
+Tree classSnapshot(HKEY parent, const std::wstring &clsid,
+                   const fs::path &transaction, REGSAM view) {
+    auto snapshot = snapshotKey(parent, clsid, true, 0, view);
+    const auto saved = transaction / "activation.json";
+    if (fs::exists(saved) && snapshot.get<bool>("exists")) {
+        auto &children = snapshot.get_child("children");
+        for (auto it = children.begin(); it != children.end();) {
+            if (it->second.get<std::string>("name") == "InprocServer32")
+                it = children.erase(it);
+            else
+                ++it;
+        }
+        auto server =
+            load(saved).get_child(view == KEY_WOW64_32KEY ? "x86" : "x64");
+        if (server.get<bool>("exists")) {
+            server.put("name", "InprocServer32");
+            children.push_back({"", server});
+        }
+    }
+    return snapshot;
+}
+
 fs::path modulePath() {
     std::wstring path(32768, L'\0');
     const auto size =
@@ -293,7 +370,12 @@ DWORD process(const fs::path &path, const std::wstring &arguments) {
 class NativeMachine : public Machine {
   public:
     explicit NativeMachine(fs::path root) : root_(std::move(root)) {}
-    void validate() override {
+    void validate() override { validateInstallation(true); }
+    void validateSuspension() override {
+        validateInstallation(false);
+        validateSecurity(root_ / "setup/upgrades/current");
+    }
+    void validateInstallation(bool inspectTree) {
         logEnvironment();
         loggedPhase("host-services policy", [] { ipc::requireHostServices(); });
         loggedPhase("administrator token", [] {
@@ -350,28 +432,45 @@ class NativeMachine : public Machine {
                 fail(ERROR_NOT_SUPPORTED);
         });
         // Validate every active/control directory before allowing SYSTEM work.
-        loggedPhase("installation tree security", [&] {
-            size_t index = 0;
-            for (const auto &entry : fs::recursive_directory_iterator(root_)) {
-                try {
-                    validatePath(entry.path());
-                    validateSecurity(entry.path());
-                } catch (const std::system_error &error) {
-                    logStep("upgrade installation tree entry failed index=" +
+        if (inspectTree)
+            loggedPhase("installation tree security", [&] {
+                size_t index = 0;
+                for (const auto &entry :
+                     fs::recursive_directory_iterator(root_)) {
+                    try {
+                        validatePath(entry.path());
+                        validateSecurity(entry.path());
+                    } catch (const std::system_error &error) {
+                        logStep(
+                            "upgrade installation tree entry failed index=" +
                                 std::to_string(index),
                             DWORD(error.code().value()));
-                    throw;
+                        throw;
+                    }
+                    ++index;
                 }
-                ++index;
-            }
-            logMessage("upgrade installation tree entries=" +
-                       std::to_string(index));
-        });
+                logMessage("upgrade installation tree entries=" +
+                           std::to_string(index));
+            });
         loggedPhase("pending restart operations", [&] { pendingOperations(); });
     }
     void gate(std::string_view state) override {
         writeText(root_ / "setup" / "install-state", std::string(state) + "\n");
         setString(win32::ipc::kInstallerKey, L"State", wide(state));
+    }
+    void shutdownService(bool enable, std::string_view id) override {
+        if (!id.empty())
+            configureShutdownService(root_, enable, id);
+    }
+    void suspendActivation(const fs::path &transaction) override {
+        loggedPhase("suspend COM activation", [&] {
+            suspendComActivation(HKEY_LOCAL_MACHINE, kClsid, transaction);
+        });
+    }
+    void resumeActivation(const fs::path &transaction) override {
+        loggedPhase("restore COM activation", [&] {
+            resumeComActivation(HKEY_LOCAL_MACHINE, kClsid, transaction);
+        });
     }
     bool sameBoot() override {
         DWORD value = 0, size = sizeof(value);
@@ -559,10 +658,13 @@ class NativeMachine : public Machine {
     }
     void snapshot(const fs::path &transaction) override {
         Tree snapshot;
-        snapshot.add_child("clsid", snapshotKey(HKEY_LOCAL_MACHINE, kClsid));
+        snapshot.add_child("clsid",
+                           classSnapshot(HKEY_LOCAL_MACHINE, kClsid,
+                                         transaction, KEY_WOW64_64KEY));
         snapshot.add_child("tip", snapshotKey(HKEY_LOCAL_MACHINE, kTip));
-        snapshot.add_child("clsid32", snapshotKey(HKEY_LOCAL_MACHINE, kClsid,
-                                                  true, 0, KEY_WOW64_32KEY));
+        snapshot.add_child("clsid32",
+                           classSnapshot(HKEY_LOCAL_MACHINE, kClsid,
+                                         transaction, KEY_WOW64_32KEY));
         snapshot.add_child("tip32", snapshotKey(HKEY_LOCAL_MACHINE, kTip, true,
                                                 0, KEY_WOW64_32KEY));
         snapshot.add_child(
@@ -795,7 +897,9 @@ bool upgradeCommand(std::wstring_view command) {
     return command == L"begin-stage" || command == L"seal-stage" ||
            command == L"cancel-upgrade" || command == L"complete-upgrade" ||
            command == L"recover-upgrade" || command == L"cleanup-upgrade" ||
-           command == L"query-upgrade";
+           command == L"query-upgrade" || command == L"suspend-upgrade" ||
+           command == L"resume-upgrade" ||
+           command == L"upgrade-shutdown-service";
 }
 DWORD runUpgrade(const fs::path &root, std::wstring_view command,
                  const fs::path &source, std::string_view transaction,
@@ -808,6 +912,8 @@ DWORD runUpgrade(const fs::path &root, std::wstring_view command,
     });
     auto machine = nativeMachine(root);
     Engine engine(root, *machine, parentProcess());
+    if (command == L"upgrade-shutdown-service")
+        return preview ? ERROR_SUCCESS : runShutdownService(root, transaction);
     if (command == L"query-upgrade") {
         logMessage("upgrade phase=query state begin");
         const auto value = engine.query();
@@ -818,7 +924,12 @@ DWORD runUpgrade(const fs::path &root, std::wstring_view command,
                         MB_OK | MB_ICONINFORMATION);
         return ERROR_SUCCESS;
     }
-    loggedPhase("machine validation", [&] { machine->validate(); });
+    loggedPhase("machine validation", [&] {
+        if (command == L"suspend-upgrade" || command == L"resume-upgrade")
+            machine->validateSuspension();
+        else
+            machine->validate();
+    });
     if (preview)
         return ERROR_SUCCESS;
     logMessage("upgrade phase=installation lock begin");
@@ -828,22 +939,27 @@ DWORD runUpgrade(const fs::path &root, std::wstring_view command,
         load(root / "setup" / "upgrades" / "current" / "plan.json")
                 .get<std::string>("id") != transaction)
         fail(ERROR_INVALID_DATA);
+    if (command == L"suspend-upgrade")
+        return engine.suspend();
+    if (command == L"resume-upgrade")
+        return engine.resume();
     if (command == L"begin-stage") {
         auto &native = static_cast<NativeMachine &>(*machine);
         loggedPhase("target package validation",
                     [&] { native.checkTarget(manifest(source)); });
-        loggedPhase("current installation state", [&] {
-            if (readText(root / "setup" / "install-state", 64) != "installed\n")
-                fail(ERROR_INVALID_STATE);
-        });
-        if (hasTransaction(root) && (transactionState(root) == "committed" ||
-                                     transactionState(root) == "rolled-back"))
-            loggedPhase("old transaction cleanup", [&] { engine.cleanup(); });
-        if (!hasTransaction(root))
-            native.installHost();
         DWORD result = ERROR_GEN_FAILURE;
-        loggedPhase("create upgrade transaction",
-                    [&] { result = engine.begin(source); });
+        loggedPhase("create upgrade transaction", [&] {
+            result = engine.begin(source, [&] {
+                // The old observer must be stopped before its executable is
+                // replaced by the current package's maintenance host.
+                loggedPhase("current installation state", [&] {
+                    if (readText(root / "setup" / "install-state", 64) !=
+                        "installed\n")
+                        fail(ERROR_INVALID_STATE);
+                });
+                native.installHost();
+            });
+        });
         return result;
     }
     if (command == L"seal-stage")

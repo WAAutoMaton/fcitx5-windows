@@ -315,9 +315,12 @@ DWORD configure(const fs::path &root) {
 }
 
 DWORD uninstallLauncher(const fs::path &root, bool silent, bool elevated) {
-    if (upgrade::hasTransaction(root) &&
-        upgrade::busyState(upgrade::transactionState(root)))
-        return ERROR_BUSY;
+    if (upgrade::hasTransaction(root)) {
+        const auto state = upgrade::transactionState(root);
+        if (upgrade::busyState(state) && state != "suspending" &&
+            state != "suspended")
+            return ERROR_BUSY;
+    }
     if (!elevated && !administrator()) {
         const auto prepared = fcitx::setup::removeUser(root, false);
         if (prepared) {

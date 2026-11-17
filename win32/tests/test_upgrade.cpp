@@ -47,15 +47,22 @@ class FakeMachine : public upgrade::Machine {
             upgrade::fail(ERROR_ACCESS_DENIED);
         armed = enable;
     }
+    void shutdownService(bool enable, std::string_view) override {
+        observer = enable;
+    }
+    void suspendActivation(const fs::path &) override { suspended = true; }
+    void resumeActivation(const fs::path &) override { suspended = false; }
     void controls(bool install, const fs::path &) override { routed = install; }
     void snapshot(const fs::path &) override {
         snapshotVersion = activeVersion;
     }
     void restore(const fs::path &) override {
         activeVersion = snapshotVersion;
+        suspended = false;
         ++restores;
     }
     void registerVersion(const upgrade::Manifest &value) override {
+        suspended = false;
         activeVersion = value.version;
         if (registrationError)
             upgrade::fail(ERROR_INSTALL_FAILURE);
@@ -70,6 +77,7 @@ class FakeMachine : public upgrade::Machine {
     bool boot = true, armed = false, routed = false;
     bool registrationError = false;
     bool taskRemovalError = false;
+    bool observer = false, suspended = false;
     DWORD dependencyError = 0;
     unsigned restores = 0;
     std::string activeVersion = "1.0.0.0", snapshotVersion;
@@ -145,8 +153,6 @@ int main() {
         Fixture test(1);
         test.stage();
         assert(test.engine.complete() == ERROR_SUCCESS_REBOOT_REQUIRED);
-        assert(test.engine.begin(test.source / "setup/runtime-manifest.json") ==
-               ERROR_SUCCESS_REBOOT_REQUIRED);
         test.machine.boot = false;
         {
             upgrade::FileGuard occupied(test.root / "tsf/fcitx5-x86_64.dll");
@@ -411,6 +417,177 @@ int main() {
         }
         assert(rejected && !upgrade::hasTransaction(test.root));
         test.oldVersion();
+    }
+    {
+        Fixture test(42);
+        test.stage();
+        assert(test.machine.observer && !test.machine.suspended);
+        assert(test.engine.suspend() == 0);
+        assert(test.machine.suspended);
+        assert(upgrade::transactionState(test.root) == "suspended");
+        assert(upgrade::readText(test.root / "setup/install-state") ==
+               "maintenance\n");
+        assert(test.engine.complete() == ERROR_SUCCESS_REBOOT_REQUIRED);
+        assert(test.engine.suspend() == 0);
+        test.machine.boot = false;
+        assert(test.engine.complete() == 0);
+        assert(!test.machine.suspended && !test.machine.observer);
+        assert(test.machine.activeVersion == "2.0.0.0");
+    }
+    {
+        Fixture test(43);
+        test.stage();
+        test.engine.suspend();
+        assert(test.engine.resume() == 0);
+        assert(!test.machine.suspended && test.machine.observer);
+        test.oldVersion();
+        test.engine.suspend();
+        assert(test.engine.cancel() == 0);
+        assert(!test.machine.suspended && !test.machine.observer);
+        test.oldVersion();
+    }
+    {
+        Fixture test(44);
+        test.stage();
+        test.engine.suspend();
+        test.machine.boot = false;
+        {
+            upgrade::FileGuard occupied(test.root / "tsf/x86/fcitx5-x86.dll");
+            assert(test.engine.complete() == ERROR_SUCCESS_REBOOT_REQUIRED);
+        }
+        assert(!test.machine.suspended && test.machine.observer);
+        test.oldVersion();
+    }
+    for (auto checkpoint :
+         {"suspending", "activation-suspended", "suspended"}) {
+        Fixture test(index++);
+        test.stage();
+        test.engine.checkpoint = [&](std::string_view point) {
+            if (point == checkpoint)
+                throw Crash{};
+        };
+        try {
+            test.engine.suspend();
+            assert(false);
+        } catch (const Crash &) {
+        }
+        test.machine.boot = false;
+        upgrade::Engine recovery(test.root, test.machine);
+        assert(recovery.complete(true) == 0);
+        assert(!test.machine.suspended && !test.machine.observer);
+    }
+    {
+        Fixture test(45);
+        test.stage();
+        test.engine.suspend();
+        test.machine.boot = false;
+        test.machine.registrationError = true;
+        assert(test.engine.complete() == ERROR_INSTALL_FAILURE);
+        assert(!test.machine.suspended && !test.machine.observer);
+        test.oldVersion();
+    }
+    {
+        Fixture test(46);
+        test.stage();
+        test.engine.suspend();
+        upgrade::writeText(test.root /
+                               "setup/upgrades/current/payload/share/data.txt",
+                           "tampered");
+        test.machine.boot = false;
+        try {
+            test.engine.complete();
+            assert(false);
+        } catch (const std::system_error &) {
+        }
+        assert(!test.machine.suspended && test.machine.observer);
+        test.oldVersion();
+    }
+    for (const bool suspend : {false, true}) {
+        Fixture test(index++);
+        test.stage();
+        const auto oldPlan =
+            upgrade::readText(test.root / "setup/upgrades/current/plan.json");
+        if (suspend) {
+            test.engine.suspend();
+            saveManifest(test.source, test.paths, "3.0.0.0");
+        }
+        bool prepared = false;
+        assert(
+            test.engine.begin(test.source / "setup/runtime-manifest.json", [&] {
+                assert(!upgrade::hasTransaction(test.root));
+                assert(!test.machine.suspended && !test.machine.observer);
+                prepared = true;
+            }) == 0);
+        assert(prepared);
+        assert(!test.machine.suspended && !test.machine.observer &&
+               !test.machine.armed);
+        assert(upgrade::transactionState(test.root) == "preparing");
+        assert(upgrade::readText(
+                   test.root / "setup/upgrades/current/plan.json") != oldPlan);
+        test.oldVersion();
+        assert(test.engine.cancel() == 0);
+    }
+    {
+        Fixture test(47);
+        test.stage();
+        test.engine.checkpoint = [](std::string_view point) {
+            if (point == "applying")
+                throw Crash{};
+        };
+        test.machine.boot = false;
+        try {
+            test.engine.complete();
+            assert(false);
+        } catch (const Crash &) {
+        }
+        const auto saved =
+            upgrade::readText(test.root / "setup/upgrades/current/plan.json");
+        try {
+            test.engine.begin(test.source / "setup/runtime-manifest.json");
+            assert(false);
+        } catch (const std::system_error &error) {
+            assert(error.code().value() == ERROR_INSTALL_ALREADY_RUNNING);
+        }
+        assert(upgrade::readText(test.root /
+                                 "setup/upgrades/current/plan.json") == saved);
+        upgrade::Engine recovery(test.root, test.machine);
+        assert(recovery.complete(true) == ERROR_INSTALL_FAILURE);
+        test.oldVersion();
+    }
+    {
+        Fixture test(48);
+        test.stage();
+        const auto saved =
+            upgrade::readText(test.root / "setup/upgrades/current/plan.json");
+        upgrade::writeText(test.source / "setup/runtime-manifest.json",
+                           "invalid incoming manifest");
+        try {
+            test.engine.begin(test.source / "setup/runtime-manifest.json");
+            assert(false);
+        } catch (const std::system_error &) {
+        }
+        assert(upgrade::readText(test.root /
+                                 "setup/upgrades/current/plan.json") == saved);
+        assert(upgrade::transactionState(test.root) == "staged" &&
+               test.machine.observer);
+    }
+    {
+        Fixture test(49);
+        assert(test.engine.begin(test.source / "setup/runtime-manifest.json") ==
+               0);
+        const auto saved =
+            upgrade::readText(test.root / "setup/upgrades/current/plan.json");
+        upgrade::Engine otherInstaller(test.root, test.machine,
+                                       GetCurrentProcessId() + 1);
+        try {
+            otherInstaller.begin(test.source / "setup/runtime-manifest.json");
+            assert(false);
+        } catch (const std::system_error &error) {
+            assert(error.code().value() == ERROR_BUSY);
+        }
+        assert(upgrade::readText(test.root /
+                                 "setup/upgrades/current/plan.json") == saved);
+        assert(test.engine.cancel() == 0);
     }
     std::cout << "PASS: stage, same-boot refusal, dual-architecture lock "
                  "deferral, duplicate, "

@@ -315,7 +315,9 @@ jobs:
         run: ./scripts/test-build-installer.ps1
 
       - name: Test installer wizard without system changes
-        run: ./scripts/test-installer-wizard.ps1 -IsccPath $env:FCITX5_ISCC_PATH
+        run: |
+          ./scripts/test-installer-wizard.ps1 -IsccPath $env:FCITX5_ISCC_PATH
+          ./scripts/test-installer-restart.ps1 -IsccPath $env:FCITX5_ISCC_PATH
 
       - name: Build installer
         run: |

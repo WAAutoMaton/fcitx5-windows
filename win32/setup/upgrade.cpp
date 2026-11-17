@@ -292,7 +292,7 @@ void Engine::result(std::string_view value, DWORD error) {
     save(root_ / "setup" / "upgrade-result.json", result);
 }
 
-DWORD Engine::begin(const fs::path &manifestPath) {
+void Engine::replacePending(const fs::path &manifestPath) {
     logMessage("upgrade phase=engine validation begin");
     machine_.validate();
     logMessage("upgrade phase=engine validation complete");
@@ -318,12 +318,25 @@ DWORD Engine::begin(const fs::path &manifestPath) {
         cleanup();
     if (hasTransaction(root_)) {
         const auto current = stateAt(transaction_);
-        if (current == "staged" &&
-            sha256(manifestPath) ==
-                sha256(transaction_ / "target-manifest.json"))
-            return ERROR_SUCCESS_REBOOT_REQUIRED;
-        fail(ERROR_INSTALL_ALREADY_RUNNING);
+        if (current == "staged" || current == "suspending" ||
+            current == "suspended" || current == "cancelling" ||
+            current == "preparing") {
+            logMessage(
+                "upgrade phase=cancel previous uncommitted transaction begin");
+            cancel();
+            logMessage("upgrade phase=cancel previous uncommitted transaction "
+                       "complete");
+        } else {
+            fail(ERROR_INSTALL_ALREADY_RUNNING);
+        }
     }
+}
+
+DWORD Engine::begin(const fs::path &manifestPath,
+                    const std::function<void()> &beforeCreate) {
+    replacePending(manifestPath);
+    if (beforeCreate)
+        beforeCreate();
     logMessage("upgrade phase=transaction directories begin");
     fs::create_directories(transaction_ / "payload");
     fs::create_directories(transaction_ / "dependencies");
@@ -387,8 +400,50 @@ DWORD Engine::seal() {
     machine_.controls(true, transaction_);
     machine_.task(true, idAt(transaction_));
     state("staged");
+    machine_.shutdownService(true, idAt(transaction_));
     result("staged", ERROR_SUCCESS_REBOOT_REQUIRED);
     return ERROR_SUCCESS_REBOOT_REQUIRED;
+}
+
+DWORD Engine::suspend() {
+    machine_.validateSuspension();
+    const auto current = stateAt(transaction_);
+    if (current != "staged" && current != "suspending" &&
+        current != "suspended")
+        fail(ERROR_INVALID_STATE);
+    state("suspending");
+    try {
+        machine_.suspendActivation(transaction_);
+        point("activation-suspended");
+        machine_.gate("maintenance");
+        state("suspended");
+        result("suspended", ERROR_SUCCESS_REBOOT_REQUIRED);
+    } catch (const std::system_error &error) {
+        defer(DWORD(error.code().value()));
+        throw;
+    }
+    return ERROR_SUCCESS;
+}
+
+void Engine::defer(DWORD error) {
+    machine_.resumeActivation(transaction_);
+    machine_.gate("installed");
+    machine_.markBoot(true);
+    state("staged", error);
+    result("staged", error);
+    machine_.shutdownService(true, idAt(transaction_));
+}
+
+DWORD Engine::resume() {
+    machine_.validateSuspension();
+    const auto current = stateAt(transaction_);
+    if (current != "suspending" && current != "suspended" &&
+        current != "staged")
+        fail(ERROR_INVALID_STATE);
+    if (!machine_.sameBoot())
+        fail(ERROR_INVALID_STATE);
+    defer(ERROR_SUCCESS_REBOOT_REQUIRED);
+    return ERROR_SUCCESS;
 }
 
 DWORD Engine::cancel() {
@@ -400,10 +455,14 @@ DWORD Engine::cancel() {
         return cleanup();
     if (current == "preparing")
         requireOwner(transaction_, owner_);
-    else if (busyState(current))
+    else if (busyState(current) && current != "suspending" &&
+             current != "suspended")
         fail(ERROR_BUSY);
     state("cancelling");
     machine_.task(false, idAt(transaction_));
+    machine_.shutdownService(false, idAt(transaction_));
+    machine_.resumeActivation(transaction_);
+    machine_.gate("installed");
     machine_.markBoot(false);
     // Retain a supported uninstall route until the transaction has disappeared.
     result("cancelled", ERROR_CANCELLED);
@@ -431,7 +490,8 @@ DWORD Engine::complete(bool /*recover*/) {
             json(transaction_ / "plan.json").get<std::string>("manifestHash") !=
                 sha256(transaction_ / "target-manifest.json"))
             fail(ERROR_CRC);
-        if (current != "staged" && current != "validating") {
+        if (current != "staged" && current != "validating" &&
+            current != "suspending" && current != "suspended") {
             // A durable commit record precedes publication of installed. Finish
             // forward after a crash in that window; do not roll back running
             // code.
@@ -451,6 +511,8 @@ DWORD Engine::complete(bool /*recover*/) {
         }
         if (machine_.sameBoot())
             return ERROR_SUCCESS_REBOOT_REQUIRED;
+        if (current == "suspending" || current == "suspended")
+            machine_.suspendActivation(transaction_);
         const auto target = manifest(transaction_ / "target-manifest.json");
         const auto plan = json(transaction_ / "plan.json");
         if (plan.get<std::string>("manifestHash") !=
@@ -485,10 +547,7 @@ DWORD Engine::complete(bool /*recover*/) {
             }
         } catch (const std::system_error &error) {
             guards.clear();
-            machine_.gate("installed");
-            machine_.markBoot(true);
-            state("staged", DWORD(error.code().value()));
-            result("staged", DWORD(error.code().value()));
+            defer(DWORD(error.code().value()));
             const auto code = DWORD(error.code().value());
             return code == ERROR_SHARING_VIOLATION ||
                            code == ERROR_LOCK_VIOLATION ||
@@ -500,10 +559,7 @@ DWORD Engine::complete(bool /*recover*/) {
             const auto dependency = machine_.dependencies(transaction_, target);
             if (dependency) {
                 guards.clear();
-                machine_.gate("installed");
-                machine_.markBoot(true);
-                state("staged", dependency);
-                result("staged", dependency);
+                defer(dependency);
                 return dependency;
             }
             // No active file changes before the entire backup and inventory
@@ -572,10 +628,7 @@ DWORD Engine::complete(bool /*recover*/) {
             if (fs::exists(transaction_ / "commit-ready"))
                 throw;
             if (stateAt(transaction_) == "validating") {
-                machine_.gate("installed");
-                machine_.markBoot(true);
-                state("staged", DWORD(error.code().value()));
-                result("staged", DWORD(error.code().value()));
+                defer(DWORD(error.code().value()));
                 return DWORD(error.code().value());
             }
             return rollback(DWORD(error.code().value()));
@@ -586,8 +639,9 @@ DWORD Engine::complete(bool /*recover*/) {
             const auto current = stateAt(transaction_);
             state(current, DWORD(error.code().value()));
             result(current, DWORD(error.code().value()));
-            if (current == "staged")
-                machine_.markBoot(true);
+            if (current == "staged" || current == "suspending" ||
+                current == "suspended")
+                defer(DWORD(error.code().value()));
         }
         throw;
     }
@@ -653,6 +707,7 @@ DWORD Engine::cleanup() {
             const auto id = json(saved).get<std::string>("transactionId", "");
             if (!id.empty()) {
                 machine_.task(false, id);
+                machine_.shutdownService(false, id);
                 machine_.markBoot(false);
             }
         }
@@ -672,6 +727,7 @@ DWORD Engine::cleanup() {
         result("committed", ERROR_SUCCESS);
     }
     machine_.task(false, id);
+    machine_.shutdownService(false, id);
     machine_.markBoot(false);
     const auto garbage = transaction_.parent_path() / ("completed-" + id);
     if (!MoveFileExW(transaction_.c_str(), garbage.c_str(),

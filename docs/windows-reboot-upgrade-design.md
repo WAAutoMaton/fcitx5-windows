@@ -43,7 +43,7 @@ ctest --test-dir ./build/installer/tsf --output-on-failure
 | 入口 | 当前行为 |
 | --- | --- |
 | `installer/fcitx5.iss` / `DetectMode` | 在暂停用户服务和维护动作前区分首次安装与受管理升级 |
-| `PrepareToInstall` / `[Files]` | 升级调用 `begin-stage`，将文件复制到 `setup/upgrades/current/payload`；重复暂存跳过复制 |
+| `PrepareToInstall` / `[Files]` | 升级调用 `begin-stage`，撤销未提交的旧事务后将当前包复制到 `setup/upgrades/current/payload` |
 | `CurStepChanged(ssPostInstall)` | 升级调用 `seal-stage` 并返回 `3010`；首次安装继续注册和用户配置 |
 | `win32/setup/upgrade.*` | 单一事务、状态/恢复、活动文件摘要及所有权 |
 | `win32/setup/upgrade_files.*` | 安装文件锁、句柄保护、备份、文件发布和安全检查 |
@@ -55,7 +55,7 @@ Core、TSF 和 Settings 仍通过现有 Named Pipe 协议通信。本方案不�
 
 ## 3. 方案选择
 
-采用“受保护暂存目录 + 临时 SYSTEM 开机任务 + 原生提交程序”。开机程序先建立维护门控并确认活动文件可替换，再提交完整新版，最后验证和注册。
+采用“受保护暂存目录 + 临时 SYSTEM 重启准备服务和开机任务 + 原生提交程序”。重启前暂停 COM 加载入口，开机程序确认活动文件可替换后提交完整新版，最后验证和恢复注册。
 
 暂存程序不对活动运行文件登记逐文件 `restartreplace`，也不向 `PendingFileRenameOperations` 排入整套升级。原因是逐文件队列没有整套成功或回滚语义；部分登记失败、部分执行失败以及撤销时与其他软件共享队列的协调，都需要额外恢复机制。现有 `uninsrestartdelete` 可继续用于卸载清理，但不能代替本方案的升级事务。
 
@@ -141,6 +141,8 @@ Task Scheduler 与登录程序的先后顺序仍是系统验收重点。旧映�
 | 无事务 | `installed` | 当前版 | 安装、升级或卸载 |
 | `preparing` | `installed` | 旧版 | 完成校验，或取消并清理 |
 | `staged` | `installed` | 旧版 | 等待重启、取消、查询 |
+| `suspending` | `installed` 或 `maintenance` | 完整旧版，COM 入口可能部分暂停 | 完成暂停、恢复入口、取消 |
+| `suspended` | `maintenance` | 完整旧版，COM 入口暂停 | 重启后提交、恢复入口、取消 |
 | `cancelling` | `installed` | 旧版 | 幂等撤销任务、控制入口及暂存 |
 | `validating` | `maintenance` | 完整旧版 | 取得替换条件，或恢复旧版并等待 |
 | `applying` | `maintenance` | 可能处于变更中 | 只允许继续提交或恢复 |
@@ -158,13 +160,13 @@ Task Scheduler 与登录程序的先后顺序仍是系统验收重点。旧映�
 
 1. 新安装器从自己的可信载荷启动新版维护程序，取得安装互斥。预检冲突注册、旧事务和安装根下其他待重启删除/替换条目，不依赖活动旧 helper 是否存在或是否认识新命令。
 2. 区分首次安装、受管理升级及修复。升级的路径选择发生在 `pause-user` 和 `set-maintenance` 之前。确认第三方占用时进入延迟路径；占用查询失败是错误，不能当作无占用继续。
-3. 初版受管理版本升级统一走暂存路径，以免为了探测即时升级而先中断旧版。若后续增加即时路径，也必须复用相同的提交保护与恢复机制，不能在复制一半后临时降级为暂存。
+3. 受管理升级统一走暂存路径。新包先通过清单、协议、架构、版本及空间检查；已有 `staged`、`suspending`、`suspended` 或 `cancelling` 事务时，先撤销其开机任务和重启准备服务、恢复 COM 入口与卸载控制，再建立新事务。同一个包重新运行也重新暂存。`preparing` 仍校验安装器 PID/创建时间：其他仍存活的安装器拥有准备事务时拒绝替换，准备进程已退出时允许清理。进入 `validating`、`applying`、`verifying` 或回滚/恢复的事务阻止新安装。
 4. 完整解包新版到事务目录，校验清单、文件、空间和依赖。此时不执行暂存的 Core、TSF 或 Settings，不加载暂存 DLL 做注册。
-5. 记录原有用户和机器选择，但不调用 `pause-user`、`configure-user`、`rollback-user`、输入项启用/移除或服务重启。升级期间用户继续修改的偏好也必须保留，不能在重启后回写准备时的旧快照。
-6. 安装/验证固定维护入口及开机任务，建立受保护的本次开机标识，发布 `staged`。只有载荷完整、恢复入口可执行、任务可查询且计划已持久化，才能返回准备成功。
+5. 保留原有用户和机器选择。暂存不调用 `pause-user`、`configure-user`、`rollback-user` 或输入项启用/移除；升级期间用户继续修改的偏好不会由准备时的快照回写。
+6. 安装/验证固定维护入口、开机任务和重启准备服务，建立受保护的本次开机标识，发布 `staged`。只有载荷完整、恢复入口可执行、任务和服务注册成功且计划已持久化，才能返回准备成功。
 7. 显示待重启提示并返回 `3010`。推迟重启、再次打开 Settings、启动新应用或旧 Core 正常重启，均继续使用完整旧版。
 
-准备阶段可新增维护目录及卸载协调入口，但不更新 `DisplayVersion`、COM/profile、活动 helper 和原生 Inno 卸载数据。界面可单独显示待安装版本；已安装版本继续代表当前活动版本。
+准备阶段可新增维护目录及卸载协调入口，但不更新 `DisplayVersion`、COM/profile、活动 helper 和原生 Inno 卸载数据。暂停 COM 入口发生在立即重启确认或系统关机预通知时。界面可单独显示待安装版本；已安装版本继续代表当前活动版本。
 
 ### 7.1 Inno 集成
 
@@ -173,7 +175,7 @@ Task Scheduler 与登录程序的先后顺序仍是系统验收重点。旧映�
 - `Uninstallable` 和 `CreateUninstallRegKey` 使用 scripted boolean expression，仅首次安装返回 True，避免生成或合并卸载日志以及自动更新产品版本号。不是通过伪造另一个 AppId 隔离。
 - 从安装包临时提取原生维护程序，调用内部 `begin-stage` 预检并创建受保护事务目录。`[Files]` 的目标由脚本函数返回，升级时只指向该事务的 `payload`，首次安装才指向 `{app}`；两种目标不可混用。
 - 普通 `[Icons]`、`[Registry]`、运行库安装及用户 post-install 步骤增加首次安装条件。待升级卸载入口的必要改动由维护程序按日志单独管理。
-- 文件复制完成后调用内部 `seal-stage` 再次全量校验，发布任务、卸载控制入口和 `staged`；此时才返回准备成功。复制失败、取消或缺少 seal 时按 `preparing` 残留恢复。
+- 文件复制完成后调用内部 `seal-stage` 再次全量校验，发布任务、重启准备服务、卸载控制入口和 `staged`；此时才返回准备成功。复制失败、取消或缺少 seal 时按 `preparing` 残留恢复。
 - `DeinitializeSetup` 不能在延迟路径调用旧 `ResumeInstallation`，也不能清理已经 seal 的事务。Inno 对未完成安装的自动清理与维护程序显式清理必须幂等，且只影响本事务。
 
 Inno 支持上述两个设置使用脚本布尔表达式，见 [Uninstallable](https://jrsoftware.org/ishelp/topic_setup_uninstallable.htm) 和 [CreateUninstallRegKey](https://jrsoftware.org/ishelp/topic_setup_createuninstallregkey.htm)。仍需真实包验证：不会生成第二个产品卸载项、不会提前合并旧 `unins*.dat`、不会把事务目录当作活动安装目录。不能用 `PrepareToInstall` 返回错误字符串来表示暂存成功。
@@ -184,7 +186,19 @@ Inno 支持上述两个设置使用脚本布尔表达式，见 [Uninstallable](h
 
 ## 8. 重启后的提交
 
-### 8.1 任务与重启识别
+### 8.1 重启前暂停 COM 加载入口
+
+完成页选择立即重启并点击“完成”时，安装器同步调用 `suspend-upgrade`，成功后才继续 Inno 的重启流程；暂停失败时保留完成页并显示错误。选择稍后重启或静默暂存时保持旧版可用，由临时 `Fcitx5-UpgradeShutdown` 服务在 `SERVICE_CONTROL_PRESHUTDOWN` 通知中调用相同操作。
+
+服务仅在存在待升级事务时注册为 LocalSystem 自动启动服务；操作固定绑定安装根、受保护维护程序路径和事务 ID，DACL 仅允许 SYSTEM/Administrators 控制。它不加载 TSF DLL，不启动 Core/Settings。预关机预算为 60 秒；崩溃恢复最多重启两次。取消事务或完成提交/回滚后停止并删除服务。自动启动让未完成事务的观察和恢复不依赖交互用户登录。
+
+暂停先发布 `suspending`，持久保存 x64/x86 `InprocServer32` 快照到事务内的 `activation.json`，再删除两个注册表视图中的默认 DLL 路径并刷新注册表，最后关闭运行门控并发布 `suspended`。不调用 `DllUnregisterServer`，不删除 TSF profiles/categories、ThreadingModel 或用户输入项。已加载映像仍由重启释放；文件提交继续要求独占保护，COM 暂停不替代占用检查。
+
+若立即重启被应用取消，观察服务在暂停约 60 秒且 Windows 不处于关机状态时尝试 `resume-upgrade`，恢复旧版入口、运行许可及 `staged`；该操作只允许在准备时的同次开机执行。跨开机的提交由开机任务处理。取消事务、提交前校验/占用失败同样恢复入口；恢复必须完成两个视图后才能丢弃快照。提交前的完整注册回滚快照合并原 COM 入口，避免把暂停后的缺失路径误记为旧版注册。
+
+突然断电可能跳过预关机通知，此时保留既有开机占用保护和待重启结果。快速启动关机不等价于完整重启；完成升级仍要求 Windows 的“重启”。真实关机预通知、重启取消、快速登录以及 profiles/用户默认项保留需通过可重启 VM 验收。
+
+### 8.2 任务与重启识别
 
 任务使用 Task Scheduler COM API 注册，固定任务目录/名称，以 SYSTEM、非交互方式执行，BootTrigger 不配置人为延迟，也不依赖网络、空闲或交流电。启用有界重试和单实例运行；任务权限、超时及失败重试均在测试中核对。
 
@@ -194,17 +208,17 @@ Inno 支持上述两个设置使用脚本布尔表达式，见 [Uninstallable](h
 
 volatile 标识不使用墙上时间或 uptime 猜测重启。休眠、睡眠、注销和快速启动关机不承诺等价于完整重启，产品提示统一要求使用 Windows 的“重启”。注册表文档说明 volatile 数据在 hive 卸载时消失，并指出快速启动关机的区别；实际行为必须通过 VM 验证，见 [RegCreateKeyExW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexw)。
 
-### 8.2 取得提交条件
+### 8.3 取得提交条件
 
 1. 取得安装互斥，检查事务、版本、安装根身份、载荷摘要及第三方待重启操作。
 2. 将活动 `install-state` 原子写为 `maintenance` 并验证；写入失败立即退出。现有 Core/Settings 门控协助退出，但不假定 DLL 因此卸载，也不向用户服务写手动停止状态。
-3. 使用扩展后的 `inspect-locks` 检查所有相关 EXE/DLL，排除维护程序自身；按精确安装路径识别所有会话中的占用。对加载了本安装 DLL 的用户应用只报告，不操作其生命周期。
-4. 有界等待后仍有旧映像或阻止替换的引用，且未修改运行文件时，恢复旧版 `installed`，重新建立本次开机标识，回到 `staged`。本次开机内不继续反复中断旧服务。
-5. 对变更/移除的活动文件取得并持续持有提交保护，再复核映像与文件身份；保护取得不完整时释放全部保护并按上一步处理。
+3. 对新旧清单的活动文件逐一取得 `FileGuard` 独占写保护，拒绝旧映像或阻止替换的引用；不结束占用文件的用户应用。
+4. 保护取得不完整且尚未修改运行文件时，释放全部保护、恢复 COM 入口及旧版 `installed`，重新建立本次开机标识，回到 `staged` 并重新启用重启准备服务。本次开机内不继续反复中断旧服务。
+5. 持有整批文件保护后复核来源二进制摘要；摘要不符时同样恢复等待状态。后续备份和文件发布始终使用已取得的句柄。
 
-Restart Manager 提供占用信息；实际提交保护由 `FileGuard` 持有独占写句柄，并通过 `SetFileInformationByHandle` 处理旧对象。`test_upgrade_files` 分别覆盖已加载映像、并发加载、数据映射、句柄内重命名和最终路径发布。
+即时安装/卸载的 `inspect-locks` 使用 Restart Manager；延迟提交由 `FileGuard` 持有独占写句柄，并通过 `SetFileInformationByHandle` 处理旧对象。`test_upgrade_files` 分别覆盖已加载映像、并发加载、数据映射、句柄内重命名和最终路径发布。
 
-### 8.3 文件、注册与提交点
+### 8.4 文件、注册与提交点
 
 1. 在维护门控关闭且替换条件成立后，完成旧版受管文件备份和注册元数据快照。运行资源可能在准备到重启之间变化，因此旧版备份在此时生成；不备份或回滚用户数据。
 2. 使用同卷 `payload` 中已校验的文件作为源，inventory 记录整批替换/新增/移除意图。持有全部既有目标的独占写句柄，在 `retired` 准备并刷盘完整新文件，通过句柄将旧文件移入该目录，再把新文件发布到最终路径。新增目标使用 `CREATE_NEW`。保存/恢复文件 DACL，避免从暂存目录带入缺少 AppContainer 读取权限的 ACL。
@@ -240,8 +254,8 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 | --- | --- |
 | 解包、摘要、空间或任务注册失败 | 不发布 `staged`；撤销本次控制改动并清理，旧版照常运行 |
 | `staged` 时取消 | 取得安装互斥，禁用并确认任务无正在提交实例，再撤销计划/volatile 标识，清理本事务 |
-| 相同包再次运行 | 核验同一事务后复用暂存并返回 `3010`；不创建第二个任务 |
-| 另一个目标版本到来 | 初版要求先取消旧 `staged`，再准备新包；不静默覆盖目标 |
+| 相同包再次运行 | 校验新包后自动撤销未开始提交的旧事务，再建立独立的新事务 |
+| 另一个目标版本到来 | 校验新包后自动撤销未开始提交的旧事务；旧事务已进入提交/恢复时拒绝替换 |
 | 已进入 `validating` / `applying` | 新安装器、取消和卸载等待或明确报告忙；不并行改变运行树 |
 | 开机后仍有占用 | 未修改运行文件时恢复完整旧版，保留 `staged` 和错误信息，等待下一次明确重启 |
 | 文件/注册提交失败 | 保持维护状态，按日志恢复完整旧版及其注册；恢复成功才发布 `installed` |
@@ -270,6 +284,8 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 | 接口/模块 | 责任 |
 | --- | --- |
 | `begin-stage` / `seal-stage` | 管理员准备受保护目录，复制后全量校验，再注册控制入口/任务并发布 `staged` |
+| `suspend-upgrade` / `resume-upgrade` | 管理员或 SYSTEM 暂停 COM 加载入口；同次开机的重启取消可恢复入口和 `staged` |
+| `upgrade-shutdown-service` | SCM 启动的临时 SYSTEM 服务，等待关机预通知并处理立即重启取消 |
 | `query-upgrade` | 返回活动/目标版本、状态、错误码与是否需要重启，不泄露用户路径 |
 | `cancel-upgrade` | 管理员在可取消状态撤销任务和暂存，恢复安装控制入口 |
 | `complete-upgrade` | SYSTEM 开机提交；同次开机误触发只返回待重启 |
@@ -278,6 +294,7 @@ SYSTEM 下安装共享运行库不证明每个用户已具备 WinUI bootstrap �
 | `win32/setup/upgrade.*` | 计划、schema、状态机、日志及恢复策略 |
 | `win32/setup/upgrade_files.*` | 句柄保护、路径/ACL 验证、摘要、备份与文件发布 |
 | `win32/setup/upgrade_system.cpp` | 原生系统适配：Task Scheduler、开机标识、注册快照、依赖和安装控制入口 |
+| `win32/setup/upgrade_shutdown.cpp` | 临时重启准备服务、固定操作/身份校验、关机预通知和重启取消恢复 |
 | `win32/setup/CMakeLists.txt` | 独立维护目标，静态 CRT 与 PE imports 审计 |
 | `installer/fcitx5.iss`、打包脚本 | UI/分支、载荷清单、暂存退出码、旧安装兼容 |
 | `win32/ipc/installation.h` 与必要入口 | 保持等待阶段旧版可用；补齐提交期门控 |

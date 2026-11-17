@@ -1,7 +1,7 @@
 add_library(setup_upgrade_files STATIC upgrade_files.cpp)
 target_compile_definitions(setup_upgrade_files PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(setup_upgrade_files PUBLIC advapi32 bcrypt)
-add_library(setup_upgrade STATIC upgrade.cpp upgrade_system.cpp)
+add_library(setup_upgrade STATIC upgrade.cpp upgrade_system.cpp upgrade_shutdown.cpp)
 target_link_libraries(setup_upgrade PUBLIC setup_upgrade_files Boost::property_tree
     ole32 oleaut32 shell32 taskschd uuid)
 

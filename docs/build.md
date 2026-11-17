@@ -467,10 +467,13 @@ The script regression can run without system installation:
 ```powershell
 ./scripts/test-build-installer.ps1
 ./scripts/test-reboot-upgrade-package.ps1 -TsfBuild ./build/installer/tsf
+./scripts/test-installer-restart.ps1 -IsccPath <Inno-Setup-7/ISCC.exe>
 ```
 
-The second script compiles both default variants and an explicitly disabled package using fixture binaries;
-it never executes an installer or changes system registration.
+The package script compiles both default variants and an explicitly disabled package using fixture binaries.
+The restart script exercises the real finish-page callback with a fake helper,
+including immediate/later/silent choices and preparation failure. Neither script
+installs the product or requests a Windows restart.
 
 The GitHub Actions `installer-smoke-x64` job executes the no-runtime package on
 a fresh Windows runner with `/VERYSILENT /MACHINEONLY=1`, verifies the installed

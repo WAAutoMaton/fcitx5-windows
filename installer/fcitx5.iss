@@ -103,7 +103,6 @@ var
   StageUpgrade: Boolean;
   StageOwned: Boolean;
   StageSealed: Boolean;
-  AlreadyStaged: Boolean;
 
 procedure DetectMode;
 begin
@@ -122,13 +121,12 @@ end;
 
 function CopyRuntimeFiles: Boolean;
 begin
-  DetectMode;
-  Result := not AlreadyStaged;
+  Result := True;
 end;
 
 function CopyUpgradeDependencies: Boolean;
 begin
-  Result := StageUpgrade and not AlreadyStaged;
+  Result := StageUpgrade;
 end;
 
 function RuntimeDestination(Param: String): String;
@@ -209,10 +207,7 @@ begin
     Helper := ExpandConstant('{tmp}\Fcitx5Upgrade.exe');
     Code := RunHelper('begin-stage --manifest ' +
       AddQuotes(ExpandConstant('{tmp}\{#PackageName}.runtime.json')), False);
-    if Code = 3010 then begin
-      AlreadyStaged := True;
-      StageSealed := True;
-    end else if Code = 0 then
+    if Code = 0 then
       StageOwned := True
     else
       Result := Format('Cannot prepare the Fcitx5 upgrade (%d). The current version has not been replaced. Run the maintenance helper query-upgrade command for the current state.', [Code]);
@@ -268,12 +263,10 @@ var
 begin
   if CurStep = ssPostInstall then begin
     if StageUpgrade then begin
-      if not AlreadyStaged then begin
-        Code := RunHelper('seal-stage', False);
-        if Code <> 3010 then
-          RaiseException(Format('Cannot finish preparing the Fcitx5 upgrade (%d). The current version has not been replaced.', [Code]));
-        StageSealed := True;
-      end;
+      Code := RunHelper('seal-stage', False);
+      if Code <> 3010 then
+        RaiseException(Format('Cannot finish preparing the Fcitx5 upgrade (%d). The current version has not been replaced.', [Code]));
+      StageSealed := True;
       WizardForm.FinishedLabel.Caption := 'The Fcitx5 upgrade is ready. Restart Windows to complete it. You can continue using the current version until then.';
       exit;
     end;
@@ -335,6 +328,22 @@ function NeedRestart: Boolean;
 begin
   { Silent staging never initiates a reboot, even without /NORESTART. }
   Result := StageSealed and not WizardSilent;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Code: Integer;
+begin
+  Result := True;
+  if (CurPageID = wpFinished) and StageSealed and not WizardSilent and
+      WizardForm.YesRadio.Checked then begin
+    Helper := ExpandConstant('{app}\setup\maintenance-host\Fcitx5Upgrade.exe');
+    Code := RunHelper('suspend-upgrade', False);
+    if Code <> 0 then begin
+      Result := False;
+      MsgBox(Format('Cannot prepare Fcitx5 for restart (%d). Select restart later or retry. See the installer-helper log.', [Code]), mbError, MB_OK);
+    end;
+  end;
 end;
 
 function GetCustomSetupExitCode: Integer;

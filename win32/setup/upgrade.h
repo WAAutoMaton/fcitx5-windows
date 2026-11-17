@@ -31,10 +31,14 @@ class Machine {
   public:
     virtual ~Machine() = default;
     virtual void validate() = 0;
+    virtual void validateSuspension() { validate(); }
     virtual void gate(std::string_view state) = 0;
     virtual bool sameBoot() = 0;
     virtual void markBoot(bool present) = 0;
     virtual void task(bool enable, std::string_view id) = 0;
+    virtual void shutdownService(bool enable, std::string_view id) = 0;
+    virtual void suspendActivation(const fs::path &transaction) = 0;
+    virtual void resumeActivation(const fs::path &transaction) = 0;
     virtual void controls(bool install, const fs::path &transaction) = 0;
     virtual void snapshot(const fs::path &transaction) = 0;
     virtual void restore(const fs::path &transaction) = 0;
@@ -48,8 +52,11 @@ class Engine {
   public:
     Engine(fs::path root, Machine &machine,
            DWORD owner = GetCurrentProcessId());
-    DWORD begin(const fs::path &manifestPath);
+    DWORD begin(const fs::path &manifestPath,
+                const std::function<void()> &beforeCreate = {});
     DWORD seal();
+    DWORD suspend();
+    DWORD resume();
     DWORD cancel();
     DWORD complete(bool recover = false);
     DWORD cleanup();
@@ -58,10 +65,12 @@ class Engine {
     std::function<void(std::string_view)> checkpoint;
 
   private:
+    void replacePending(const fs::path &manifestPath);
     void state(std::string_view value, DWORD error = 0);
     void point(std::string_view value);
     DWORD rollback(DWORD error);
     void result(std::string_view value, DWORD error);
+    void defer(DWORD error);
     fs::path root_;
     fs::path transaction_;
     Machine &machine_;
@@ -76,5 +85,8 @@ DWORD runUpgrade(const fs::path &root, std::wstring_view command,
 std::vector<fs::path> ownedFiles(const fs::path &root);
 DWORD removeOwnedFiles(const fs::path &root,
                        const std::vector<fs::path> &files);
+void configureShutdownService(const fs::path &root, bool enable,
+                              std::string_view transaction);
+DWORD runShutdownService(const fs::path &root, std::string_view transaction);
 
 } // namespace fcitx::setup::upgrade
