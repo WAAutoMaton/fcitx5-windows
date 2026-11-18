@@ -44,7 +44,7 @@ ctest --test-dir ./build/installer/tsf --output-on-failure
 | --- | --- |
 | `installer/fcitx5.iss` / `DetectMode` | 在暂停用户服务和维护动作前区分首次安装与受管理升级 |
 | `PrepareToInstall` / `[Files]` | 升级调用 `begin-stage`，撤销未提交的旧事务后将当前包复制到 `setup/upgrades/current/payload` |
-| `CurStepChanged(ssPostInstall)` | 升级调用 `seal-stage` 并返回 `3010`；首次安装继续注册和用户配置 |
+| `NeedRestart` / `CurStepChanged(ssPostInstall)` | 升级在重启判断前调用 `seal-stage`；首次安装在 post-install 继续注册和用户配置 |
 | `win32/setup/upgrade.*` | 单一事务、状态/恢复、活动文件摘要及所有权 |
 | `win32/setup/upgrade_files.*` | 安装文件锁、句柄保护、备份、文件发布和安全检查 |
 | `win32/setup/upgrade_system.cpp` | 临时 SYSTEM 任务、重启标识、注册快照/恢复、运行库与卸载入口协调 |
@@ -175,12 +175,14 @@ Task Scheduler 与登录程序的先后顺序仍是系统验收重点。旧映�
 - `Uninstallable` 和 `CreateUninstallRegKey` 使用 scripted boolean expression，仅首次安装返回 True，避免生成或合并卸载日志以及自动更新产品版本号。不是通过伪造另一个 AppId 隔离。
 - 从安装包临时提取原生维护程序，调用内部 `begin-stage` 预检并创建受保护事务目录。`[Files]` 的目标由脚本函数返回，升级时只指向该事务的 `payload`，首次安装才指向 `{app}`；两种目标不可混用。
 - 普通 `[Icons]`、`[Registry]`、运行库安装及用户 post-install 步骤增加首次安装条件。待升级卸载入口的必要改动由维护程序按日志单独管理。
-- 文件复制完成后调用内部 `seal-stage` 再次全量校验，发布任务、重启准备服务、卸载控制入口和 `staged`；此时才返回准备成功。复制失败、取消或缺少 seal 时按 `preparing` 残留恢复。
+- 文件复制完成后，在 `NeedRestart` 中调用内部 `seal-stage` 再次全量校验，发布任务、重启准备服务、卸载控制入口和 `staged`；此时才返回准备成功。复制失败、取消或缺少 seal 时按 `preparing` 残留恢复。
 - `DeinitializeSetup` 不能在延迟路径调用旧 `ResumeInstallation`，也不能清理已经 seal 的事务。Inno 对未完成安装的自动清理与维护程序显式清理必须幂等，且只影响本事务。
 
 Inno 支持上述两个设置使用脚本布尔表达式，见 [Uninstallable](https://jrsoftware.org/ishelp/topic_setup_uninstallable.htm) 和 [CreateUninstallRegKey](https://jrsoftware.org/ishelp/topic_setup_createuninstallregkey.htm)。仍需真实包验证：不会生成第二个产品卸载项、不会提前合并旧 `unins*.dat`、不会把事务目录当作活动安装目录。不能用 `PrepareToInstall` 返回错误字符串来表示暂存成功。
 
 通过 `NeedRestart` 表达准备成功后的重启需求，并显式处理退出码：普通成功为 `0`，暂存成功为 `3010`，预检/准备失败保留非成功码。不能假定 Inno 默认在所有参数组合下返回 `3010`；需结合 `GetCustomSetupExitCode` 和 `/RESTARTEXITCODE=3010` 做真实包测试。
+
+Inno 在 `ssPostInstall` 之前调用 `NeedRestart`，封存与重启判断在该回调中顺序完成。封存只尝试一次，失败时完成页显示错误并返回非零退出码，退出时取消未封存的事务。完成页文案在 `CurPageChanged(wpFinished)` 设置，避免被 Inno 的默认文案覆盖。立即重启处理同时检查重启选项可见且选中；`/NORESTART` 隐藏选项时保持旧版入口可用。
 
 自动化统一使用 `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RESTARTEXITCODE=3010`。交互界面仅在用户明确选择立即重启后触发重启；维护程序自身不发起重启。见 [Inno 命令行参数](https://jrsoftware.org/ishelp/topic_setupcmdline.htm) 与 [脚本事件](https://jrsoftware.org/ishelp/topic_scriptevents.htm)。
 

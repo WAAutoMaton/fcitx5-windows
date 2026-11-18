@@ -103,6 +103,8 @@ var
   StageUpgrade: Boolean;
   StageOwned: Boolean;
   StageSealed: Boolean;
+  StageSealAttempted: Boolean;
+  StageSealError: Integer;
 
 procedure DetectMode;
 begin
@@ -258,18 +260,14 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+#if Int(BundleRuntimes)
 var
   Code: Integer;
+#endif
 begin
   if CurStep = ssPostInstall then begin
-    if StageUpgrade then begin
-      Code := RunHelper('seal-stage', False);
-      if Code <> 3010 then
-        RaiseException(Format('Cannot finish preparing the Fcitx5 upgrade (%d). The current version has not been replaced.', [Code]));
-      StageSealed := True;
-      WizardForm.FinishedLabel.Caption := 'The Fcitx5 upgrade is ready. Restart Windows to complete it. You can continue using the current version until then.';
+    if StageUpgrade then
       exit;
-    end;
     Helper := ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe');
     try
       RequireHelper('register-machine', False);
@@ -326,8 +324,29 @@ end;
 
 function NeedRestart: Boolean;
 begin
+  { Inno calls this after copying files and before ssPostInstall. It handles
+    callback exceptions without aborting, so retain failures for the finished
+    page and exit code; DeinitializeSetup cancels an unsealed transaction. }
+  if StageUpgrade and not StageSealAttempted then begin
+    StageSealAttempted := True;
+    StageSealError := RunHelper('seal-stage', False);
+    StageSealed := StageSealError = 3010;
+  end;
   { Silent staging never initiates a reboot, even without /NORESTART. }
   Result := StageSealed and not WizardSilent;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  { Inno sets its default finished label after ssPostInstall. }
+  if (CurPageID = wpFinished) and StageUpgrade then begin
+    if StageSealed then
+      WizardForm.FinishedLabel.Caption := 'The Fcitx5 upgrade is ready. Restart Windows to complete it. You can continue using the current version until then.'
+    else begin
+      WizardForm.FinishedHeadingLabel.Caption := 'Cannot prepare the Fcitx5 upgrade';
+      WizardForm.FinishedLabel.Caption := Format('Cannot finish preparing the Fcitx5 upgrade (%d). The current version has not been replaced. See the setup and installer-helper logs.', [StageSealError]);
+    end;
+  end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -336,7 +355,7 @@ var
 begin
   Result := True;
   if (CurPageID = wpFinished) and StageSealed and not WizardSilent and
-      WizardForm.YesRadio.Checked then begin
+      WizardForm.YesRadio.Visible and WizardForm.YesRadio.Checked then begin
     Helper := ExpandConstant('{app}\setup\maintenance-host\Fcitx5Upgrade.exe');
     Code := RunHelper('suspend-upgrade', False);
     if Code <> 0 then begin
@@ -348,7 +367,13 @@ end;
 
 function GetCustomSetupExitCode: Integer;
 begin
-  if StageSealed then Result := 3010 else Result := 0;
+  if StageSealed then
+    Result := 3010
+  else if StageSealAttempted then begin
+    Result := StageSealError;
+    if Result = 0 then Result := 1;
+  end else
+    Result := 0;
 end;
 
 function InitializeUninstall: Boolean;
