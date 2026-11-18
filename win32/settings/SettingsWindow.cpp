@@ -1168,36 +1168,32 @@ void SettingsWindow::openAddWindow() {
                   return left < right;
               });
     const auto languageName = [this](const std::string &code) {
-        if (translator_.language() == ipc::UiLanguage::SimplifiedChinese) {
-            if (code == "en") return std::wstring(L"英语");
-            if (code == "zh" || code == "zh_CN") return std::wstring(L"中文");
-            if (code == "zh_TW") return std::wstring(L"繁体中文");
-            if (code == "ja") return std::wstring(L"日语");
-            if (code == "ko") return std::wstring(L"韩语");
-            if (code == "ar") return std::wstring(L"阿拉伯语");
-            if (code == "fr") return std::wstring(L"法语");
-            if (code == "de") return std::wstring(L"德语");
-            if (code == "es") return std::wstring(L"西班牙语");
-            if (code == "ru") return std::wstring(L"俄语");
-        }
-        if (translator_.language() == ipc::UiLanguage::TraditionalChinese) {
-            if (code == "en") return std::wstring(L"英語");
-            if (code == "zh" || code == "zh_TW") return std::wstring(L"中文");
-            if (code == "zh_CN") return std::wstring(L"簡體中文");
-            if (code == "ja") return std::wstring(L"日語");
-            if (code == "ko") return std::wstring(L"韓語");
-        }
         static const std::map<std::string, const char *> names = {
-            {"ar", "Arabic"}, {"de", "German"}, {"el", "Greek"},
-            {"en", "English"}, {"es", "Spanish"}, {"fr", "French"},
-            {"he", "Hebrew"}, {"it", "Italian"}, {"ja", "Japanese"},
-            {"ko", "Korean"}, {"pt", "Portuguese"}, {"ru", "Russian"},
-            {"th", "Thai"}, {"tr", "Turkish"}, {"uk", "Ukrainian"},
-            {"vi", "Vietnamese"}, {"zh", "Chinese"},
-            {"zh_CN", "Chinese (Simplified)"},
-            {"zh_TW", "Chinese (Traditional)"}, {"und", "Other"}};
+            {"ar", win32::i18n::mark("settings", "Arabic")},
+            {"de", win32::i18n::mark("settings", "German")},
+            {"el", win32::i18n::mark("settings", "Greek")},
+            {"en", win32::i18n::mark("settings", "English")},
+            {"es", win32::i18n::mark("settings", "Spanish")},
+            {"fr", win32::i18n::mark("settings", "French")},
+            {"he", win32::i18n::mark("settings", "Hebrew")},
+            {"it", win32::i18n::mark("settings", "Italian")},
+            {"ja", win32::i18n::mark("settings", "Japanese")},
+            {"ko", win32::i18n::mark("settings", "Korean")},
+            {"pt", win32::i18n::mark("settings", "Portuguese")},
+            {"ru", win32::i18n::mark("settings", "Russian")},
+            {"th", win32::i18n::mark("settings", "Thai")},
+            {"tr", win32::i18n::mark("settings", "Turkish")},
+            {"uk", win32::i18n::mark("settings", "Ukrainian")},
+            {"vi", win32::i18n::mark("settings", "Vietnamese")},
+            {"wuu", win32::i18n::mark("settings", "Wu Chinese")},
+            {"zh", win32::i18n::mark("settings", "Chinese")},
+            {"zh_CN", win32::i18n::mark("settings", "Chinese (Simplified)")},
+            {"zh_HK", win32::i18n::mark("settings", "Chinese (Hong Kong)")},
+            {"zh_TW", win32::i18n::mark("settings", "Chinese (Traditional)")},
+            {"und", win32::i18n::mark("settings", "Other")}};
         const auto found = names.find(code);
-        return tr("settings", found == names.end() ? "Other" : found->second);
+        return found == names.end() ? std::wstring(to_hstring(code))
+                                   : tr("settings", found->second);
     };
     for (const auto &code : addLanguageCodes_) {
         ListViewItem item;

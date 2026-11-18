@@ -785,3 +785,91 @@ msgstr "正在读取输入法菜单…"
 msgctxt "menu"
 msgid "Unable to read input method menu"
 msgstr "读取输入法菜单失败"
+
+msgctxt "settings"
+msgid "Arabic"
+msgstr "阿拉伯语"
+
+msgctxt "settings"
+msgid "German"
+msgstr "德语"
+
+msgctxt "settings"
+msgid "Greek"
+msgstr "希腊语"
+
+msgctxt "settings"
+msgid "English"
+msgstr "英语"
+
+msgctxt "settings"
+msgid "Spanish"
+msgstr "西班牙语"
+
+msgctxt "settings"
+msgid "French"
+msgstr "法语"
+
+msgctxt "settings"
+msgid "Hebrew"
+msgstr "希伯来语"
+
+msgctxt "settings"
+msgid "Italian"
+msgstr "意大利语"
+
+msgctxt "settings"
+msgid "Japanese"
+msgstr "日语"
+
+msgctxt "settings"
+msgid "Korean"
+msgstr "韩语"
+
+msgctxt "settings"
+msgid "Portuguese"
+msgstr "葡萄牙语"
+
+msgctxt "settings"
+msgid "Russian"
+msgstr "俄语"
+
+msgctxt "settings"
+msgid "Thai"
+msgstr "泰语"
+
+msgctxt "settings"
+msgid "Turkish"
+msgstr "土耳其语"
+
+msgctxt "settings"
+msgid "Ukrainian"
+msgstr "乌克兰语"
+
+msgctxt "settings"
+msgid "Vietnamese"
+msgstr "越南语"
+
+msgctxt "settings"
+msgid "Chinese"
+msgstr "中文"
+
+msgctxt "settings"
+msgid "Chinese (Simplified)"
+msgstr "简体中文"
+
+msgctxt "settings"
+msgid "Chinese (Hong Kong)"
+msgstr "中文（香港）"
+
+msgctxt "settings"
+msgid "Chinese (Traditional)"
+msgstr "繁体中文"
+
+msgctxt "settings"
+msgid "Other"
+msgstr "其他"
+
+msgctxt "settings"
+msgid "Wu Chinese"
+msgstr "吴语"

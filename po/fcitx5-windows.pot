@@ -753,3 +753,91 @@ msgstr ""
 msgctxt "input-method"
 msgid "Wubi Pinyin"
 msgstr ""
+
+msgctxt "settings"
+msgid "Arabic"
+msgstr ""
+
+msgctxt "settings"
+msgid "German"
+msgstr ""
+
+msgctxt "settings"
+msgid "Greek"
+msgstr ""
+
+msgctxt "settings"
+msgid "English"
+msgstr ""
+
+msgctxt "settings"
+msgid "Spanish"
+msgstr ""
+
+msgctxt "settings"
+msgid "French"
+msgstr ""
+
+msgctxt "settings"
+msgid "Hebrew"
+msgstr ""
+
+msgctxt "settings"
+msgid "Italian"
+msgstr ""
+
+msgctxt "settings"
+msgid "Japanese"
+msgstr ""
+
+msgctxt "settings"
+msgid "Korean"
+msgstr ""
+
+msgctxt "settings"
+msgid "Portuguese"
+msgstr ""
+
+msgctxt "settings"
+msgid "Russian"
+msgstr ""
+
+msgctxt "settings"
+msgid "Thai"
+msgstr ""
+
+msgctxt "settings"
+msgid "Turkish"
+msgstr ""
+
+msgctxt "settings"
+msgid "Ukrainian"
+msgstr ""
+
+msgctxt "settings"
+msgid "Vietnamese"
+msgstr ""
+
+msgctxt "settings"
+msgid "Chinese"
+msgstr ""
+
+msgctxt "settings"
+msgid "Chinese (Simplified)"
+msgstr ""
+
+msgctxt "settings"
+msgid "Chinese (Hong Kong)"
+msgstr ""
+
+msgctxt "settings"
+msgid "Chinese (Traditional)"
+msgstr ""
+
+msgctxt "settings"
+msgid "Other"
+msgstr ""
+
+msgctxt "settings"
+msgid "Wu Chinese"
+msgstr ""
