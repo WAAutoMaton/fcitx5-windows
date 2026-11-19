@@ -26,7 +26,7 @@ Core 在独立进程中运行，TSF DLL 负责与应用程序集成，WinUI 设�
 
 ## 安装
 
-[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)流程提供四种 x64 安装包及其 SHA256 文件。安装器要求 Windows 10 1809（build 17763）或更新版本，Windows 10 系统验收待完成。
+[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)流程提供四种 x64 安装包及其 SHA256 文件。安装器要求 Windows 10 1809（build 17763）或更新版本。
 
 两种版本都包含 Core、x64/x86 TSF 和 Settings；`base` 的输入法插件为 fcitx5-chinese-addons，`full` 包含全部插件（目前为 fcitx5-chinese-addons、fcitx5-rime、fcitx5-table-extra、fcitx5-wenzhounese 和 fcitx5-zhuyin）。每种版本均提供两种运行库组合：
 
