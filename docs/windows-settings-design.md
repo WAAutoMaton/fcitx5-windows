@@ -6,7 +6,7 @@
 
 添加窗口保留语言代码的地区分组：`zh`、`zh_CN`、`zh_TW`、`zh_HK` 分别显示为“中文”“简体中文”“繁体中文”“中文（香港）”。语言名统一使用 UI 翻译资源；空语言代码归入“其他”，尚未映射名称的代码直接显示原代码。
 
-使用语言栏输入模式项提供右键菜单，包含“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。设置界面使用独立的 `Fcitx5Settings.exe`，采用 WinUI 3、C++/WinRT 和 XAML；通过用户/session 级 Named Pipe 与 Core 通信。当前目标是 Windows 11 和已验证的 AMD64 部署。
+使用语言栏输入模式项提供右键菜单，包含“输入法设置”“用户数据文件夹”“重启服务”“关闭服务”“关于”。设置界面使用独立的 `Fcitx5Settings.exe`，采用 WinUI 3、C++/WinRT 和 XAML；通过用户/session 级 Named Pipe 与 Core 通信。最低运行目标是 Windows 10 1809 x64（build 17763）。
 
 默认列表为英文键盘和拼音。用户可以添加已安装的 chinese-addons 输入法（五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风或自然码），删除和上下调整顺序，至少保留一个可用输入法。列表修改即时保存；页面选项在“应用”时保存，成功后窗口保持打开。切换页面时有未应用草稿会询问保存、放弃或取消；关闭窗口放弃未应用草稿。Core 是配置的唯一写入者和运行时状态的管理者。
 
@@ -37,7 +37,7 @@
 | Win32 / Common Controls + DWM | 主要依赖系统组件，部署较轻；现代控件外观与 DPI 布局需要更多手动工作 | 仅在禁止附带 UI 运行时时作为备选 |
 | WPF | 支持成熟的数据绑定和 DPI，但引入 .NET，Windows 11 风格需要额外选择与调整 | 本项目已有 C++，优先 WinUI 3 C++/WinRT |
 
-WinUI 3 是 Windows App SDK 的 UI 部分，与操作系统和 Windows SDK 分开发布。只支持 Windows 11 也不能假定目标机器安装了匹配版本的 Windows App SDK runtime。
+WinUI 3 是 Windows App SDK 的 UI 部分，与操作系统和 Windows SDK 分开发布。Windows 10 上 WinUI 3 的 Mica 背景使用主题纯色回退。参见 [Mica 材质说明](https://learn.microsoft.com/en-us/windows/apps/design/style/mica)。
 
 按用户选择采用 unpackaged + framework-dependent 文件夹部署。WinUI NuGet 固定为 `1.8.260803003`，运行时元数据固定为 `1.8.260921001`；需要当前用户安装 x64 Framework 和 DDLM 包 `8000.994.2142.0` 或更新兼容版本，以及 Visual C++ 运行库。应用启动时显式调用 bootstrap；缺少运行时显示错误，不自动安装。设置程序无需注册 MSIX。
 
@@ -246,4 +246,4 @@ Core 和 TSF 使用两套独立 CMake 工程；MSBuild 设置程序由统一脚�
 
 实际 Windows 11 验证：任务栏指示器右键出现单条“输入法设置”，左键和 Ctrl+Space 按设置顺序轮换，图标/标签及提示名称跟随当前输入法；重复点击设置只显示一个窗口；记事本、浏览器和至少一个复杂文本应用中方案立即生效；100%/150%/200% DPI 和跨屏拖动、深浅色、高对比度、文本缩放、Explorer 重启及 Core 断连。
 
-Windows 10、ARM64 TSF 和双拼自定义方案编辑尚待适配。完整默认测试列表及可复现的运行命令见 [TSF 测试](pinyin.md#build-and-test-tsf) 和 [构建与验证](build.md#validation)。快捷键、全局语言、插件和开发日志的 UI 自动化使用隔离 `-UiTest` Settings 与模拟 Core；安装版服务、真实菜单和跨宿主行为按上述 Windows 11 场景验收。
+Windows 10 1809 和 22H2 上的设置启动与窗口交互待实测。ARM64 TSF 和双拼自定义方案编辑尚待适配。快捷键、全局语言、插件和开发日志的 UI 自动化使用隔离 `-UiTest` Settings 与模拟 Core；安装版服务、真实菜单和跨宿主行为按上述场景验收。测试列表和命令见 [TSF 测试](pinyin.md#build-and-test-tsf) 和 [构建与验证](build.md#validation)。

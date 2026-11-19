@@ -4,7 +4,7 @@
 
 ## 当前交付与支持范围
 
-使用 Inno Setup 7 生成 Windows 11 x64 EXE，安装到 Program Files 下的 `Fcitx5`，包含独立的 x64/x86 TSF。MSI 和原生 ARM64 TSF 尚未提供，ARM64 不在当前 CI 构建矩阵中。
+使用 Inno Setup 7 生成 x64 EXE，安装到 Program Files 下的 `Fcitx5`，包含独立的 x64/x86 TSF。MSI 和原生 ARM64 TSF 尚未提供，ARM64 不在当前 CI 构建矩阵中。
 
 | CI 包名 | 运行库要求 |
 | --- | --- |
@@ -13,7 +13,9 @@
 
 四种包都包含完整 Core、x64/x86 TSF、Settings 和原生安装/升级 helper。`edition` 为 `base` 时输入法插件为 fcitx5-chinese-addons；`full` 自动包含 `plugins/` 下全部插件，目前额外提供 fcitx5-rime、fcitx5-table-extra、fcitx5-wenzhounese 和 fcitx5-zhuyin。table-extra 复用 base 的 `table` 引擎，提供 25 张码表；注音包含 libzhuyin、模型及依赖许可。额外插件部署到安装树 `plugins/<name>`，其文件进入安装/升级所有权清单，依赖与布局见 [Windows 插件](windows-plugins.md)。Settings 继续使用 framework-dependent Windows App SDK 1.8，要求当前用户有 x64 Framework/DDLM >= `8000.994.2142.0` 和 Visual C++ 运行库。不含运行库版本仍执行 Settings `--runtime-check`，缺少依赖时用户初始化不能成功完成。
 
-安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.22000` 和 `PrivilegesRequired=admin`，使用固定 AppId。不声明 Windows 10 或 ARM64 仿真安装支持。x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册；两者使用同一 CLSID/profile 和独立 registry view，详见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)。
+安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.17763` 和 `PrivilegesRequired=admin`，使用固定 AppId。最低安装版本是 Windows 10 1809 x64（build 17763），与 Settings 的目标和锁定的 Windows App Runtime 1.8.12 x64 MSIX 的 `TargetDeviceFamily MinVersion` 一致。Settings 构建需要 Windows SDK 10.0.22000.0 或更新版本。Windows 10 实机验收待完成。参见 [Windows App SDK 版本要求](https://learn.microsoft.com/en-us/windows/apps/get-started/versioning-overview#windows-app-sdk-versions)。
+
+x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册；两者使用同一 CLSID/profile 和独立 registry view。参见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)。
 
 ## 实现入口
 
@@ -140,6 +142,7 @@ TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.stat
 
 | 场景 | 待验证结果 |
 | --- | --- |
+| Windows 10 1809 和 22H2 x64 | 含运行库的 base/full 安装包完成依赖安装和双架构注册，Settings 可打开，真实应用可提交中文 |
 | 干净 Windows 11 x64，无开发工具/runtime | 含运行库包完成依赖、注册、用户启用；真实应用中文提交并打开 Settings |
 | 不含运行库包 | 已装依赖时成功，缺失依赖时准确报错并补偿 |
 | 普通管理员双击、标准用户由另一管理员代输 UAC | 原用户获得初始化，Core 保持普通权限；已提升终端及机器阶段分支明确 |

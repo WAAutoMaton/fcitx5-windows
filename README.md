@@ -53,7 +53,9 @@ and Nightly release workflow.
 ## Install
 
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
-workflow publishes four Windows 11 x64 installers and their SHA256 files.
+workflow publishes four x64 installers and their SHA256 files. Setup requires
+Windows 10 version 1809 (build 17763) or later. Windows 10 system validation is
+pending.
 Both editions include Core, x64/x86 TSF and Settings. Choose `base` for
 fcitx5-chinese-addons, or `full` for all bundled plugins
 (currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra,

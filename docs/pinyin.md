@@ -678,7 +678,7 @@ dispatch remains unverified.
 - The popup has keyboard-only selection; host candidate actions are implemented
   through UIElement/Behavior. Popup mouse interaction and an ordinary
   notification-area tray are not implemented.
-- Unified Windows 11 x64 installers provide base/full editions, each with or
+- Unified x64 installers provide base/full editions, each with or
   without bundled runtimes. CI runs machine-only install/registration/uninstall
   smoke tests for both no-runtime editions. Full user initialization, deferred
   upgrades and reboot cleanup still need system testing. See
