@@ -13,6 +13,8 @@
 
 namespace fcitx::win32::diagnostic {
 
+inline constexpr size_t maxEngineMessageBytes = 64U * 1024U;
+
 enum class Level : uint8_t { Debug, Info, Warning, Error };
 enum class State : uint8_t { Off, Starting, Recording, Unavailable };
 
@@ -62,6 +64,7 @@ class Logger {
     bool enabled() const noexcept;
     void event(Level level, std::string_view name,
                std::initializer_list<Field> fields = {}) noexcept;
+    void engineMessage(Level level, std::string_view message) noexcept;
     Status status() const noexcept;
     void maintain(bool createDirectory = false) noexcept;
 
@@ -75,6 +78,7 @@ class Logger {
 };
 
 bool ownedLogName(std::string_view name) noexcept;
+Logger &engineLogger();
 Logger &coreLogger();
 Logger &settingsLogger();
 Logger &tsfLogger();

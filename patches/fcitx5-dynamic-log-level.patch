@@ -1,0 +1,72 @@
+diff --git a/src/lib/fcitx-utils/log.cpp b/src/lib/fcitx-utils/log.cpp
+index 56fb7f6..d2bb6dc 100644
+--- a/src/lib/fcitx-utils/log.cpp
++++ b/src/lib/fcitx-utils/log.cpp
+@@ -6,6 +6,7 @@
+  */
+
+ #include "log.h"
++#include <atomic>
+ #include <charconv>
+ #include <chrono>
+ #include <cstdlib>
+@@ -83,12 +84,13 @@ public:
+     }
+
+     void applyRule(LogCategory *category) {
+-        category->resetLogLevel();
+-        for (auto &rule : rules_) {
+-            if (rule.first == "*" || rule.first == category->name()) {
+-                category->setLogLevel(rule.second);
++        for (auto rule = rules_.rbegin(); rule != rules_.rend(); ++rule) {
++            if (rule->first == "*" || rule->first == category->name()) {
++                category->setLogLevel(rule->second);
++                return;
+             }
+         }
++        category->resetLogLevel();
+     }
+
+ private:
+@@ -104,7 +106,7 @@ public:
+         : name_(name), level_(level), defaultLevel_(level) {}
+
+     std::string name_;
+-    LogLevel level_;
++    std::atomic<LogLevel> level_;
+     LogLevel defaultLevel_;
+ };
+
+@@ -118,15 +120,12 @@ LogCategory::~LogCategory() {
+ }
+
+ bool LogCategory::checkLogLevel(LogLevel l) const {
+-    FCITX_D();
+-    return l != LogLevel::NoLog &&
+-           static_cast<std::underlying_type_t<LogLevel>>(l) <=
+-               static_cast<std::underlying_type_t<LogLevel>>(d->level_);
++    return l != LogLevel::NoLog && l <= logLevel();
+ }
+
+ void LogCategory::resetLogLevel() {
+     FCITX_D();
+-    d->level_ = d->defaultLevel_;
++    d->level_.store(d->defaultLevel_, std::memory_order_relaxed);
+ }
+
+ void LogCategory::setLogLevel(std::underlying_type_t<LogLevel> l) {
+@@ -137,12 +136,12 @@ void LogCategory::setLogLevel(std::underlying_type_t<LogLevel> l) {
+
+ void LogCategory::setLogLevel(LogLevel l) {
+     FCITX_D();
+-    d->level_ = l;
++    d->level_.store(l, std::memory_order_relaxed);
+ }
+
+ LogLevel LogCategory::logLevel() const {
+     FCITX_D();
+-    return d->level_;
++    return d->level_.load(std::memory_order_relaxed);
+ }
+
+ const std::string &LogCategory::name() const {

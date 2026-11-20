@@ -78,12 +78,64 @@ int main() {
     }
 
     assert(diagnostic::ownedLogName("core-20261015.log.42"));
+    assert(diagnostic::ownedLogName("fcitx5-20261015.log"));
+    assert(diagnostic::ownedLogName("fcitx5-20261015.log.1"));
     assert(diagnostic::ownedLogName("tsf-123-20261015.log"));
     assert(diagnostic::ownedLogName("settings-123-20261015.log.1"));
     for (const auto name :
          {"core-other.log", "core-20261015.log.backup", "tsf-20261015.log",
-          "settings-x-20261015.log", "core-20261015.log.1.txt"})
+          "settings-x-20261015.log", "core-20261015.log.1.txt",
+          "fcitx5-2026101.log", "fcitx5-123-20261015.log"})
         assert(!diagnostic::ownedLogName(name));
+
+    options.directory = root / "engine";
+    options.directoryBytes = 512;
+    options.rotateBytes = 128;
+    options.clock = [] {
+        return std::chrono::sys_days(std::chrono::year(2026) /
+                                     std::chrono::November / 20);
+    };
+    std::filesystem::create_directories(options.directory);
+    const auto expiredEngine = options.directory / "fcitx5-20261112.log.1";
+    const auto expiredTsf = options.directory / "tsf-123-20261112.log";
+    const auto oldCore = options.directory / "core-20261119.log";
+    const auto foreignEngine = options.directory / "fcitx5-not-ours.log";
+    for (const auto &path : {expiredEngine, expiredTsf}) {
+        put(path);
+        std::filesystem::last_write_time(
+            path, std::filesystem::file_time_type::clock::now() - 8 * 24h);
+    }
+    put(oldCore, 480);
+    put(foreignEngine, 512);
+    std::filesystem::last_write_time(
+        oldCore, std::filesystem::file_time_type::clock::now() - 24h);
+    {
+        diagnostic::Logger detailed("core", {}, options);
+        diagnostic::Logger engine("fcitx5", {}, options);
+        assert(!detailed.enabled() && engine.enabled());
+        engine.maintain();
+        assert(engine.flush(5s));
+        assert(!std::filesystem::exists(expiredEngine));
+        assert(!std::filesystem::exists(expiredTsf));
+        assert(std::filesystem::exists(oldCore));
+        const std::string warning = "Wengine.cpp:42] Original engine warning\n";
+        const std::string error = "Eengine.cpp:45] Original engine error";
+        engine.engineMessage(diagnostic::Level::Warning, warning);
+        engine.engineMessage(diagnostic::Level::Error, error);
+        assert(engine.flush(5s));
+        assert(!std::filesystem::exists(oldCore));
+        assert(std::filesystem::exists(foreignEngine));
+        assert(engine.status().totalBytes <= options.directoryBytes);
+        const auto current = options.directory / "fcitx5-20261120.log";
+        assert(std::filesystem::exists(current));
+        assert(contents(options.directory) ==
+               "2026-11-20T00:00:00.000Z " + warning +
+                   "2026-11-20T00:00:00.000Z " + error + "\n");
+        engine.engineMessage(diagnostic::Level::Warning, warning);
+        assert(engine.flush(5s));
+        assert(std::filesystem::exists(current.wstring() + L".1"));
+    }
+    options = defaults;
 
     options.directory = root / "retention";
     std::filesystem::create_directories(options.directory);

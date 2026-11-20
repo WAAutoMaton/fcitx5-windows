@@ -99,6 +99,8 @@ const char *levelName(Level level) {
 bool ownedLogName(std::string_view name) noexcept {
     if (name.starts_with("core-")) {
         name.remove_prefix(5);
+    } else if (name.starts_with("fcitx5-")) {
+        name.remove_prefix(7);
     } else {
         if (name.starts_with("tsf-"))
             name.remove_prefix(4);
@@ -123,7 +125,7 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
         FILETIME time{};
         DWORD tid = 0;
         Level level = Level::Info;
-        std::string fields;
+        std::string payload;
     };
     struct Task {
         std::shared_ptr<Impl> state;
@@ -131,11 +133,18 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
     };
     Impl(std::string roleValue, std::string buildValue, Options optionsValue)
         : role(std::move(roleValue)), build(std::move(buildValue)),
-          options(std::move(optionsValue)), pid(GetCurrentProcessId()) {
-        if (role != "core" && role != "tsf" && role != "settings")
+          options(std::move(optionsValue)), pid(GetCurrentProcessId()),
+          engine(role == "fcitx5") {
+        if (!engine && role != "core" && role != "tsf" && role != "settings")
             throw std::invalid_argument("Invalid diagnostic role");
         prefix =
-            role + (role == "core" ? "-" : "-" + std::to_string(pid) + "-");
+            role +
+            (engine || role == "core" ? "-" : "-" + std::to_string(pid) + "-");
+        if (engine) {
+            enabled = true;
+            state = State::Starting;
+            return;
+        }
         FILETIME created{}, exited{}, kernel{}, user{};
         GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user);
         session = std::to_string(
@@ -216,9 +225,31 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
         Record record;
         record.time = now();
         record.tid = GetCurrentThreadId();
-        record.fields = ",\"event\":";
-        quoted(record.fields, event);
+        record.payload = ",\"event\":";
+        quoted(record.payload, event);
         return record;
+    }
+
+    bool acceptsRecords() noexcept {
+        if (!enabled)
+            return false;
+        if (state == State::Unavailable && GetTickCount64() < retryAfter) {
+            ++dropped;
+            return false;
+        }
+        return true;
+    }
+
+    void enqueueLocked(Record record) {
+        if (!enabled)
+            return;
+        if (queue.size() >= options.queueLimit) {
+            ++dropped;
+            return;
+        }
+        queue.push_back(std::move(record));
+        queued = queue.size();
+        scheduleLocked();
     }
 
     bool prepare(bool create) {
@@ -277,7 +308,7 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
             // Sharing violations are expected for other processes' active
             // files.
             ec.clear();
-            const bool own = name.starts_with(prefix);
+            const bool own = !engine && name.starts_with(prefix);
             files.push_back({entry.path(), modified, size, own});
             total += size;
             if (own)
@@ -294,8 +325,9 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
                 (total <= options.directoryBytes &&
                  (!entry.own || ownTotal <= options.processBytes)))
                 continue;
-            if (std::filesystem::remove(entry.path, ec)) {
-                ++deletedFiles;
+            const auto removed = std::filesystem::remove(entry.path, ec);
+            if (removed || !ec) {
+                deletedFiles += removed;
                 total -= entry.size;
                 if (entry.own)
                     ownTotal -= entry.size;
@@ -320,6 +352,7 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
 
     bool open(const std::string &day, size_t lineBytes) {
         const auto base = root / (prefix + day + ".log");
+        bool triedRotation = false;
         for (uint32_t index = 0; index < 100000; ++index) {
             auto path = base;
             if (index)
@@ -346,7 +379,8 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
                 static_cast<uint64_t>(size.QuadPart) + lineBytes >
                     options.rotateBytes) {
                 CloseHandle(handle);
-                if (index == 0) {
+                if (index == 0 && !triedRotation) {
+                    triedRotation = true;
                     std::error_code rotateError;
                     for (unsigned rotated = 8; rotated > 0; --rotated) {
                         const auto from =
@@ -378,7 +412,13 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
         return false;
     }
 
-    void write(const Record &record) {
+    std::string format(const Record &record) const {
+        if (engine) {
+            auto line = timeString(record.time) + " " + record.payload;
+            if (line.back() != '\n')
+                line += '\n';
+            return line;
+        }
         std::string line = "{\"time\":";
         quoted(line, timeString(record.time));
         line += ",\"level\":";
@@ -390,7 +430,12 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
         quoted(line, session);
         line += ",\"build\":";
         quoted(line, build);
-        line += record.fields + "}\n";
+        line += record.payload + "}\n";
+        return line;
+    }
+
+    void write(const Record &record) {
+        const auto line = format(record);
         const auto day = timeString(record.time, true);
         if (file != INVALID_HANDLE_VALUE &&
             (day != currentDay ||
@@ -459,13 +504,20 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
                 }
                 const auto lost = dropped.load();
                 if (enabled && lost != reportedDropped) {
-                    auto record = notice("log_queue_dropped");
+                    Record record;
+                    if (engine) {
+                        record.time = now();
+                        record.payload = "W Fcitx5 log messages dropped: " +
+                                         std::to_string(lost);
+                    } else {
+                        record = notice("log_queue_dropped");
+                        record.payload += ",\"count\":" + std::to_string(lost);
+                    }
                     record.level = Level::Warning;
-                    record.fields += ",\"count\":" + std::to_string(lost);
                     write(record);
                     reportedDropped = lost;
                 }
-                if (enabled) {
+                if (enabled && !engine) {
                     if (directoryCreated)
                         write(notice("log_directory_created"));
                     if (fileRotated)
@@ -475,19 +527,19 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
                     if (maintenance || directoryCreated || fileRotated ||
                         deletedFiles != reportedDeleted) {
                         auto record = notice("log_cleanup");
-                        record.fields += ",\"file_count\":" +
-                                         std::to_string(fileCount.load()) +
-                                         ",\"total_bytes\":" +
-                                         std::to_string(totalBytes.load()) +
-                                         ",\"deleted_files\":" +
-                                         std::to_string(deletedFiles);
+                        record.payload += ",\"file_count\":" +
+                                          std::to_string(fileCount.load()) +
+                                          ",\"total_bytes\":" +
+                                          std::to_string(totalBytes.load()) +
+                                          ",\"deleted_files\":" +
+                                          std::to_string(deletedFiles);
                         write(record);
                         reportedDeleted = deletedFiles;
                     }
                     if (reportFailure.exchange(false)) {
                         auto record = notice("log_failure");
                         record.level = Level::Warning;
-                        record.fields +=
+                        record.payload +=
                             ",\"error\":" + std::to_string(lastFailure.load());
                         write(record);
                     }
@@ -520,6 +572,7 @@ struct Logger::Impl : std::enable_shared_from_this<Impl> {
     std::string role, build, prefix, session;
     const Options options;
     const DWORD pid;
+    const bool engine;
     std::mutex mutex;
     std::condition_variable done;
     std::deque<Record> queue;
@@ -561,7 +614,8 @@ void Logger::setEnabled(bool value) noexcept {
     impl_->state = value ? State::Starting : State::Off;
     if (value) {
         impl_->error = 0;
-        event(Level::Info, "logging_enabled");
+        if (!impl_->engine)
+            event(Level::Info, "logging_enabled");
     }
 }
 
@@ -569,20 +623,15 @@ bool Logger::enabled() const noexcept { return impl_ && impl_->enabled; }
 
 void Logger::event(Level level, std::string_view name,
                    std::initializer_list<Field> fields) noexcept {
-    if (!impl_ || !impl_->enabled)
+    if (!impl_ || impl_->engine || !impl_->acceptsRecords())
         return;
-    if (impl_->state == State::Unavailable &&
-        GetTickCount64() < impl_->retryAfter) {
-        ++impl_->dropped;
-        return;
-    }
     try {
         Impl::Record record;
         record.time = impl_->now();
         record.tid = GetCurrentThreadId();
         record.level = level;
-        record.fields = ",\"event\":";
-        quoted(record.fields, name.substr(0, 96));
+        record.payload = ",\"event\":";
+        quoted(record.payload, name.substr(0, 96));
         for (const auto &[key, value] : fields) {
             const auto valueBytes = std::visit(
                 [](const auto &item) -> size_t {
@@ -593,36 +642,49 @@ void Logger::event(Level level, std::string_view name,
                         return 32;
                 },
                 value);
-            if (record.fields.size() + key.size() * 6 + valueBytes + 8 >
+            if (record.payload.size() + key.size() * 6 + valueBytes + 8 >
                 kMaxLine)
                 break;
-            record.fields += ',';
-            quoted(record.fields, key);
-            record.fields += ':';
+            record.payload += ',';
+            quoted(record.payload, key);
+            record.payload += ':';
             std::visit(
                 [&](const auto &item) {
                     using T = std::decay_t<decltype(item)>;
                     if constexpr (std::same_as<T, std::string_view>) {
-                        quoted(record.fields, item.substr(0, 256));
+                        quoted(record.payload, item.substr(0, 256));
                     } else {
                         char number[32]{};
                         const auto result = std::to_chars(
                             std::begin(number), std::end(number), item);
-                        record.fields.append(number, result.ptr);
+                        record.payload.append(number, result.ptr);
                     }
                 },
                 value);
         }
         std::unique_lock lock(impl_->mutex, std::try_to_lock);
-        if (!lock || impl_->queue.size() >= impl_->options.queueLimit) {
+        if (!lock) {
             ++impl_->dropped;
             return;
         }
-        if (!impl_->enabled)
-            return;
-        impl_->queue.push_back(std::move(record));
-        impl_->queued = impl_->queue.size();
-        impl_->scheduleLocked();
+        impl_->enqueueLocked(std::move(record));
+    } catch (...) {
+        ++impl_->dropped;
+    }
+}
+
+void Logger::engineMessage(Level level, std::string_view message) noexcept {
+    if (!impl_ || !impl_->engine || message.empty() || !impl_->acceptsRecords())
+        return;
+    try {
+        Impl::Record record;
+        record.time = impl_->now();
+        record.level = level;
+        record.payload = message.substr(0, maxEngineMessageBytes);
+        if (message.size() > maxEngineMessageBytes)
+            record.payload += " [truncated]";
+        std::lock_guard lock(impl_->mutex);
+        impl_->enqueueLocked(std::move(record));
     } catch (...) {
         ++impl_->dropped;
     }
@@ -672,6 +734,10 @@ bool Logger::flush(std::chrono::milliseconds timeout) noexcept {
     }
 }
 
+Logger &engineLogger() {
+    static Logger logger("fcitx5", {}, Options{.queueLimit = 256});
+    return logger;
+}
 Logger &coreLogger() {
     static Logger logger("core");
     return logger;

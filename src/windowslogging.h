@@ -6,8 +6,7 @@
 namespace fcitx::win32 {
 void applyDiagnosticLogging(bool enabled);
 
-// Upstream messages may contain addon data. Persist only their level/length;
-// Windows-specific events carry the audited diagnostic fields.
+// Collect the fragments of each upstream message until Fcitx flushes it.
 class CoreLogStream : private std::streambuf {
   public:
     CoreLogStream();

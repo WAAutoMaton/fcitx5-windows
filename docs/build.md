@@ -246,11 +246,15 @@ IPC v14. `windows-ui.conf` now uses version 3; versions 1/2 gain the default
 shortcuts, and version 1 loads with logging off. Migration happens on the next
 successful save. Language, logging and shortcuts share a revision.
 
-Logs are JSON Lines under `%LOCALAPPDATA%/Fcitx5/logs`, split by role and TSF or
-Settings PID. The files rotate at 8 MiB and UTC date changes, expire after 7
-days, and are bounded to 64 MiB per process and 512 MiB per directory. Active
-files in other processes are protected from deletion by Windows sharing rules;
-capacity cleanup retries on subsequent maintenance. Disabling retains history.
+Core writes Fcitx engine messages as plain text to
+`%LOCALAPPDATA%/Fcitx5/logs/fcitx5-YYYYMMDD.log`. The default threshold is
+`Info`. Enabling detailed logging raises it to `Debug` immediately.
+Detailed logs in the same directory use JSON Lines and are split by role and
+TSF or Settings PID. Both formats rotate at 8 MiB and UTC date changes and
+share 7-day retention and a 512 MiB directory budget. Detailed logs also have a
+64 MiB per-process budget. Core runs cleanup at startup and hourly, and writes
+also trigger cleanup. Windows sharing rules protect open files from deletion
+until subsequent maintenance.
 
 Settings records window open/close, close-button/service-stop requests, dispatcher
 return, runtime shutdown and a final `settings_exit` with a reason and exit code.
@@ -279,9 +283,10 @@ running Settings instance. Its fatal cases intentionally terminate test children
 Events contain diagnostic metadata, HRESULT/error codes, counts, lengths and
 geometry. TSF key results include scan codes, modifiers and consumption state,
 but not translated characters/Unicode. Input text, candidate contents, raw
-payloads, titles and user paths are excluded. Upstream Fcitx messages are
-represented only by severity and byte
-count; no addon Debug categories are enabled, and `key_trace` stays disabled.
+payloads, titles and user paths are excluded from structured events. The
+plain-text engine log includes upstream message contents, which can contain
+paths, keystrokes or other data reported by an addon. The `key_trace`
+category stays disabled in both modes.
 The background worker pins the DLL until its thread-pool callback returns.
 
 Run `test_diagnostic_log`, `test_protocol`, `test_i18n`, `test_candidate` and

@@ -144,6 +144,8 @@ conflicting changes. It does not reset submodules or create commits.
   `share`, `share/fcitx5` and `share/locale` directories. The patched Windows
   StandardPaths also reads Core's generated addon/data search prefixes for
   independent plugin packages; see [plugin discovery](windows-plugins.md#目录与发现).
+- `fcitx5-dynamic-log-level.patch` makes category thresholds atomic so Core can
+  switch engine logging between Info and Debug while it runs.
 - `libime-windows.patch`: imported executable paths include `.exe`; model path
   lists use `;` on Windows, preserving drive letters.
 - `chinese-addons-windows.patch`: dictionary loading accepts filesystem paths,

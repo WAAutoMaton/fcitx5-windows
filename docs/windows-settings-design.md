@@ -183,7 +183,7 @@ TSF 在非键盘输入法空闲时也将 OEM 标点键及 Shift+数字送到 Cor
 
 全局配置保存在 `conf/windows-ui.conf` v3，与 `windows.conf` 的输入设置 revision 独立。兼容读取 v1/v2，旧配置自动补齐默认快捷键；v1 的日志默认关闭，下次成功保存写入 v3。语言、详细日志和快捷键共享全局 revision，跨 tab 修改都计入草稿、重置和冲突检查。重置全局页恢复跟随系统、关闭日志并恢复默认快捷键，不立即保存。
 
-日志开关应用后 Core 和 Settings 立即更新，TSF 从下一次 Core 回复同步。开发者页显示本进程 logger 状态以及目录统计；打开目录不自动启用日志。日志位于 `%LOCALAPPDATA%/Fcitx5/logs`，按角色/PID 分文件并自动轮转和清理。具体格式、容量和隐私约束见 [开发日志设计](windows-developer-logging-design.md)。
+详细日志开关应用后 Core 和 Settings 立即更新，TSF 从下一次 Core 回复同步。开发者页显示本进程详细日志状态以及目录统计。引擎日志默认记录到 `Info`，开启详细日志后即时切换到 `Debug`。两种日志共同使用 `%LOCALAPPDATA%/Fcitx5/logs` 的 7 天保留期限和 512 MiB 容量。具体格式和字段见 [开发日志设计](windows-developer-logging-design.md)。
 
 启用详细日志后，Settings 记录窗口开关、关闭按钮/服务停止、dispatcher 返回、runtime shutdown 及带 reason/exit code 的 `settings_exit`。页面和操作通过 `operation_id` 关联 begin/stage/end；异常记录操作、类型和 HRESULT，不记录异常消息、用户路径、配置值或输入文本。XAML 未处理异常、异步 fail-fast 和 `std::terminate` 保持原有失败行为，致命路径尽力在 250 ms 内排空日志。原生访问违规、外部终止或 logger 故障可能没有退出事件，不能仅凭缺失事件认定崩溃。
 

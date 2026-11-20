@@ -4,7 +4,7 @@
 
 Core、TSF 和 Settings 已接入共享异步结构化日志，Settings 的全局页提供默认关闭的详细日志开关。当前 IPC 为 v14，`windows-ui.conf` 为 v3；日志包括 Settings 窗口/进程退出、操作阶段、异常，以及 Pipe 握手身份和 UAC 关系诊断。
 
-启用方式及构建/测试入口见 [build.md](build.md#developer-logging)。日志主要用于 TSF/IPC、候选位置与渲染、焦点、Core 状态及 Settings 故障；不录制输入内容。
+启用方式及构建/测试入口见 [build.md](build.md#developer-logging)。详细日志记录 TSF/IPC、候选位置与渲染、焦点、Core 状态及 Settings 故障的诊断元数据。Core 默认记录 Fcitx5 引擎的 `Info` 及更严重的消息，开启详细日志后记录到 `Debug`。
 
 ## 配置与生效
 
@@ -49,9 +49,10 @@ Settings 全局页的“常规”tab 包含语言，“开发者选项”包含�
 
 ## 格式与轮转
 
-文件为 JSON Lines，每条包含 `time`、`level`、`role`、`pid`、`tid`、`session`、`build`、`event` 和结构化字段。时间戳为 UTC ISO-8601；session 是进程创建时间标识，不是 Windows sessionId 或登录 LUID。
+详细日志使用 JSON Lines，每条包含 `time`、`level`、`role`、`pid`、`tid`、`session`、`build`、`event` 和结构化字段。时间戳为 UTC ISO-8601，session 用进程创建时间标识。引擎日志使用纯文本，每条消息以 UTC 时间戳开头。
 
 ```text
+%LOCALAPPDATA%/Fcitx5/logs/fcitx5-YYYYMMDD.log
 %LOCALAPPDATA%/Fcitx5/logs/core-YYYYMMDD.log
 %LOCALAPPDATA%/Fcitx5/logs/tsf-PID-YYYYMMDD.log
 %LOCALAPPDATA%/Fcitx5/logs/settings-PID-YYYYMMDD.log
@@ -61,12 +62,12 @@ Settings 全局页的“常规”tab 包含语言，“开发者选项”包含�
 | --- | --- |
 | 轮转 | UTC 日期变化或单文件达到 8 MiB；使用 .log.1 等后缀 |
 | 期限 | 按文件系统 last_write_time 清理超过 7 天的匹配日志 |
-| 容量 | 本进程角色/PID 前缀 64 MiB，目录 512 MiB；优先删除最旧文件 |
+| 容量 | 引擎日志和详细日志共享目录的 512 MiB 限额，优先删除最旧文件。详细日志另有每角色/PID 前缀 64 MiB 限额 |
 | 清理范围 | 仅匹配 Fcitx 自有日志命名的普通文件，不删除其他文件或跟随目录符号链接 |
 | 活跃文件 | 当前文件和其他进程受共享模式保护的文件保留；容量清理稍后重试，并非瞬时硬上限 |
 | 权限 | 使用当前用户 LocalAppData 目录继承的 ACL，不创建系统共享权限 |
 
-Core 文件按角色/日期命名，TSF 和 Settings 加 PID。多进程同日期或锁竞争可使用编号后缀。后台维护在启动、启用及后续工作中执行；所有进程停用时不承诺恰在第 7 天删除历史。
+引擎和 Core 详细日志按日期命名，TSF 和 Settings 加 PID。多进程同日期或锁竞争可使用编号后缀。Core 启动及运行期间每小时清理两种日志，写入也会触发清理。Core 停止期间到期的文件在下次清理时删除。
 
 Sandboxie/AppContainer 中的目录属于该进程的 LocalAppData 视图，可能重定向或不可写。输入入口不转存受限客户端日志，也不因此放宽宿主目录 ACL；实际日志位置和可收集性需在目标应用确认。
 
@@ -85,7 +86,7 @@ Sandboxie/AppContainer 中的目录属于该进程的 LocalAppData 视图，可�
 
 允许的字段是固定事件/操作名、错误码、计数、长度和几何等。TSF 的 `key_result` 还包含按下/释放、扫描码、修饰键和消费状态，不包含转换后的字符或 Unicode；扫描码仍会暴露键位活动。其他事件不记录 preedit、commit、候选正文/标签/注释、周边文本、密码、原始 payload、窗口标题、异常消息、配置值或用户路径。输入法 ID 等固定技术标识不作为用户文本输出。
 
-Core 的上游日志由 `src/windowslogging.cpp` 的自定义 streambuf 接入，只转换为严重度和 `message_bytes`，不复制原消息。规则固定为 `*=3,key_trace=0,notimedate`，不启用未审计 addon Debug 或 key_trace。详细开关关闭后，原有低等级 stderr 错误输出仍沿用既有路径。
+Core 通过 `src/windowslogging.cpp` 收集完整的上游消息。详细日志开关实时在 `*=4,key_trace=0` 和 `*=5,key_trace=0` 之间切换，`key_trace` 始终关闭。纯文本日志保留原文，其中可能包含 addon 输出的路径、按键或其他数据。单条消息超过 64 KiB 时截断并标记。详细日志用 `fcitx_log` 记录严重度和 `message_bytes`。详细日志关闭时，上游消息也会输出到 `stderr`。
 
 握手失败时 TSF 可能还未获得日志开关；此时通过限频的 `OutputDebugStringW` 输出固定阶段和错误码。`ipc_probe --diagnose` 可显式显示 SID/session、登录 LUID、elevation 与 linked 关系，这些身份值不写入持久日志。普通桌面与提权客户端的对照方法见 [UAC 诊断](windows-uac-ipc-design.md#诊断设计)。
 
@@ -106,7 +107,7 @@ Core 的上游日志由 `src/windowslogging.cpp` 的自定义 streambuf 接入�
 | --- | --- |
 | 单元/模拟 | test_diagnostic_log：轮转/期限/容量/丢弃/失败；test_i18n：v1/v2 迁移、日志字段和共享 revision；test_protocol：v14 编码和非法字段 |
 | TSF 免注册 | test_candidate、test_candidate_tsf：生产绘制/几何、UIElement、无 owner/layout、迟到 session 与日志元数据 |
-| 真实引擎/IPC | scripts/test-developer-logging.ps1：Core/TSF 开关同步、真实输入、断线与隐私检查 |
+| 真实引擎/IPC | scripts/test-developer-logging.ps1：引擎 Info/Debug 即时切换及重启恢复、Core/TSF 开关同步、真实输入、断线与隐私检查 |
 | WinUI | scripts/test-ui-localization.ps1 -TestLogging：开发者页、应用/重置/冲突、目录与关闭行为 |
 | Settings 退出 | scripts/test-settings-exit-logging.ps1：正常退出、可恢复 HRESULT、真实异步 fail-fast/std::terminate、隐私和日志关闭 |
 

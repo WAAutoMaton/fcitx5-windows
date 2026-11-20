@@ -17,6 +17,7 @@
 #include <fcitx/instance.h>
 #include <filesystem>
 #include <libintl.h>
+#include <optional>
 #include <stdexcept>
 #include <windows.h>
 
@@ -58,7 +59,6 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
     win32::ipc::GlobalSettings uiSettings;
     const bool settingsLoaded =
         win32::i18n::readSettings(uiSettingsFile, uiSettings);
-    win32::CoreLogStream logStream;
     win32::applyDiagnosticLogging(uiSettings.detailedLogging);
     win32::diagnostic::coreLogger().maintain();
     if (!settingsLoaded) {
@@ -124,6 +124,15 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
         *instance, *dispatcher, settingsFile, uiSettingsFile, activeLanguage,
         uiSettings.detailedLogging);
     pipeServer->start();
+    constexpr uint64_t logMaintenanceInterval = 60ULL * 60 * 1000000;
+    auto logMaintenance = instance->eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + logMaintenanceInterval, 0,
+        [](EventSourceTime *source, uint64_t) {
+            win32::diagnostic::engineLogger().maintain();
+            source->setNextInterval(logMaintenanceInterval);
+            source->setOneShot();
+            return true;
+        });
     auto shutdown = instance->eventLoop().addTimeEvent(
         CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 100000, 0,
         [&service](EventSourceTime *source, uint64_t) {
@@ -142,6 +151,7 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
     win32::diagnostic::coreLogger().event(win32::diagnostic::Level::Info,
                                           "core_stop");
     shutdown.reset();
+    logMaintenance.reset();
     pipeServer->stop();
     pipeServer.reset();
     dispatcher.reset();
@@ -152,6 +162,7 @@ void start(const ::fs::path &settingsFile, const ::fs::path &uiSettingsFile,
 } // namespace fcitx
 
 int main(int argc, char **argv) {
+    std::optional<fcitx::win32::CoreLogStream> logStream;
     try {
         fcitx::win32::ipc::requireHostServices();
         if (argc == 2 && std::string_view(argv[1]) == "--check-ui-test") {
@@ -228,6 +239,7 @@ int main(int argc, char **argv) {
         if (!service.acquire()) {
             return 0;
         }
+        logStream.emplace();
         fcitx::start(settingsFile, uiSettingsFile, service);
         return 0;
     } catch (const std::exception &error) {
