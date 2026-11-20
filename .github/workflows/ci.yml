@@ -18,6 +18,27 @@ jobs:
         with:
           submodules: recursive
 
+      - &install-tsf-llvm
+        name: Install LLVM for TSF
+        run: |
+          # MSVC 14.52 requires Clang 22 or newer. The runner ships LLVM 20.
+          $version = '22.1.8'
+          $archive = Join-Path $env:RUNNER_TEMP "LLVM-$version-win64.exe"
+          $llvmRoot = Join-Path $env:RUNNER_TEMP "llvm-$version"
+          $sha256 = '16e5709785fef73c854646241c4a92c5cd574318d1b33c63330dd7721903e55c'
+          curl.exe --fail --location --retry 3 --connect-timeout 30 --max-time 300 `
+            --silent --show-error --output $archive `
+            "https://github.com/llvm/llvm-project/releases/download/llvmorg-$version/LLVM-$version-win64.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM download failed.' }
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $sha256) {
+            throw 'LLVM installer checksum mismatch.'
+          }
+          7z.exe x -y "-o$llvmRoot" $archive 'bin/*' 'lib/clang/*'
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM extraction failed.' }
+          & "$llvmRoot/bin/clang++.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM compiler check failed.' }
+          Add-Content $env:GITHUB_ENV "FCITX5_CI_LLVM_ROOT=$llvmRoot"
+
       - name: Install Core dependencies
         run: |
           C:/msys64/usr/bin/pacman -Syu --noconfirm
@@ -39,7 +60,9 @@ jobs:
           Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
 
       - name: Build base Release runtime tree without tests
-        run: ./scripts/build-and-deploy.ps1 -Prefix ./dist/ci-runtime -BuildRoot ./build/ci-x64 -DataMode Prebuilt -ModernApps -SkipTests
+        run: |
+          ./scripts/build-and-deploy.ps1 -Prefix ./dist/ci-runtime -BuildRoot ./build/ci-x64 `
+            -LLVMRoot $env:FCITX5_CI_LLVM_ROOT -DataMode Prebuilt -ModernApps -SkipTests
 
       - name: Build full runtime with every plugin
         run: |
@@ -236,13 +259,16 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v6
+      - *install-tsf-llvm
       - name: Install portable headers and build tools
         run: |
           C:/msys64/usr/bin/pacman -Syu --noconfirm
           C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-clang-x86_64-boost mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-gettext-tools
           Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
       - name: Build and test independent x86 TSF
-        run: ./scripts/build-tsf.ps1 -Architecture x86 -BuildRoot ./build/ci-x86 -ModernApps
+        run: |
+          ./scripts/build-tsf.ps1 -Architecture x86 -BuildRoot ./build/ci-x86 `
+            -LLVMRoot $env:FCITX5_CI_LLVM_ROOT -ModernApps
       - uses: actions/download-artifact@v8
         with:
           name: Fcitx5-runtime-base-x64
