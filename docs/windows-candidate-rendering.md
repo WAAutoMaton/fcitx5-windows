@@ -42,7 +42,11 @@ restores the thread context. `show` accepts owner-space logical screen coordinat
 Per-Monitor-aware owners already use physical coordinates; other owners convert
 both corners with `LogicalToPhysicalPointForPerMonitorDPI`. This avoids rejecting
 valid text extents when modern hosts such as Windows Terminal use a visible,
-zero-sized input-site HWND. Conversion failures hide the popup and log the failed
+zero-sized input-site HWND. If an extent starts inside a child window but its
+end fails conversion, retry both corners using its top-level window on the same
+monitor with the same DPI awareness context. This handles extents that extend
+beyond a short edit control, such as Everything's search box.
+Unresolved conversion failures hide the popup and log the failed
 corner, owner awareness/DPI/client dimensions and anchor coordinates when detailed
 logging is enabled. A null owner assumes physical coordinates. A clipped
 composition falls back to the collapsed selection range. If that caret is also
@@ -135,6 +139,8 @@ thread-state restoration, focus, owner lifetime, empty/invalid input, work-area
 bounds, immediate paint, target-loss recovery and bounded repaint retries.
 Zero-sized per-monitor input sites are accepted without logical coordinate
 conversion; zero-sized owners requiring failed conversion remain hidden.
+The child edit test checks positioning after a two-pixel overflow and hiding
+when the extent also exceeds the top-level window.
 
 `test_candidate_tsf` uses a real TSF context backed by the shared in-memory text
 store, without Core, IPC or registration. It checks repeated TS_E_NOLAYOUT,

@@ -28,6 +28,27 @@ bool workArea(const RECT &anchor, RECT &work) {
     work = monitor.rcWork;
     return work.right > work.left && work.bottom > work.top;
 }
+
+bool convertAnchorWithRoot(HWND owner, DPI_AWARENESS_CONTEXT ownerContext,
+                           RECT &anchor) {
+    // A text extent can start inside a child edit and end outside it.
+    const auto root = GetAncestor(owner, GA_ROOT);
+    if (!root || root == owner ||
+        !AreDpiAwarenessContextsEqual(GetWindowDpiAwarenessContext(root),
+                                      ownerContext) ||
+        MonitorFromWindow(root, MONITOR_DEFAULTTONEAREST) !=
+            MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST)) {
+        return false;
+    }
+    POINT start{anchor.left, anchor.top};
+    POINT end{anchor.right, anchor.bottom};
+    if (!LogicalToPhysicalPointForPerMonitorDPI(root, &start) ||
+        !LogicalToPhysicalPointForPerMonitorDPI(root, &end)) {
+        return false;
+    }
+    anchor = {start.x, start.y, end.x, end.y};
+    return true;
+}
 } // namespace
 
 CandidateWindow::~CandidateWindow() {
@@ -283,9 +304,11 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
         hide();
         return;
     }
-    const auto ownerAwareness = owner ? GetAwarenessFromDpiAwarenessContext(
-                                            GetWindowDpiAwarenessContext(owner))
-                                      : DPI_AWARENESS_INVALID;
+    const auto ownerContext =
+        owner ? GetWindowDpiAwarenessContext(owner) : nullptr;
+    const auto ownerAwareness =
+        owner ? GetAwarenessFromDpiAwarenessContext(ownerContext)
+              : DPI_AWARENESS_INVALID;
     // Per-monitor-aware owners already use physical screen coordinates. An
     // input-site HWND can have a zero-sized client area and reject conversion.
     if (owner && ownerAwareness != DPI_AWARENESS_PER_MONITOR_AWARE) {
@@ -293,8 +316,11 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
         POINT end{anchor.right, anchor.bottom};
         const auto startConverted =
             LogicalToPhysicalPointForPerMonitorDPI(owner, &start);
-        if (!startConverted ||
-            !LogicalToPhysicalPointForPerMonitorDPI(owner, &end)) {
+        if (startConverted &&
+            LogicalToPhysicalPointForPerMonitorDPI(owner, &end)) {
+            anchor = {start.x, start.y, end.x, end.y};
+        } else if (!startConverted ||
+                   !convertAnchorWithRoot(owner, ownerContext, anchor)) {
             if (win32::diagnostic::tsfLogger().enabled()) {
                 RECT client{};
                 GetClientRect(owner, &client);
@@ -314,7 +340,6 @@ void CandidateWindow::show(const PipeClient::KeyReply &reply, HWND owner,
             hide();
             return;
         }
-        anchor = {start.x, start.y, end.x, end.y};
     }
     ScopedDpiAwareness scope(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     win32::diagnostic::tsfLogger().event(

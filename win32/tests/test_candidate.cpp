@@ -540,6 +540,57 @@ void inputSiteWindowTests() {
     assert(SetThreadDpiAwarenessContext(initial));
 }
 
+void childExtentWindowTest() {
+    const auto context = DPI_AWARENESS_CONTEXT_SYSTEM_AWARE;
+    const auto previous = SetThreadDpiAwarenessContext(context);
+    assert(previous);
+    const auto parent = CreateWindowExW(
+        0, L"STATIC", L"Candidate test parent", WS_OVERLAPPEDWINDOW, 100, 100,
+        600, 400, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    assert(parent);
+    ShowWindow(parent, SW_SHOWNOACTIVATE);
+    const auto owner = CreateWindowExW(
+        0, L"EDIT", nullptr, WS_CHILD | WS_VISIBLE, 20, 20, 300, 25, parent,
+        nullptr, GetModuleHandleW(nullptr), nullptr);
+    assert(owner && IsWindowVisible(owner));
+
+    POINT start{2, 0};
+    assert(ClientToScreen(owner, &start));
+    RECT anchor{start.x, start.y, start.x + 12, start.y + 25};
+    fcitx::CandidateWindow view;
+    const auto reply = fixture();
+    view.show(reply, owner, anchor);
+    assert(view.visible());
+
+    // Everything can report unclipped text two pixels below the edit window.
+    anchor.bottom += 2;
+    POINT childEnd{anchor.right, anchor.bottom};
+    assert(!LogicalToPhysicalPointForPerMonitorDPI(owner, &childEnd));
+    POINT physical{anchor.left, anchor.bottom};
+    assert(LogicalToPhysicalPointForPerMonitorDPI(parent, &physical));
+    view.show(reply, owner, anchor);
+    assert(view.visible());
+    assert(
+        AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), context));
+    const auto popup = Access::window(view);
+    assert(GetWindowLongPtrW(popup, GWLP_HWNDPARENT) ==
+           reinterpret_cast<LONG_PTR>(owner));
+    assert(SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+    RECT bounds{};
+    assert(GetWindowRect(popup, &bounds));
+    assert(bounds.left == physical.x && bounds.top == physical.y);
+    assert(SetThreadDpiAwarenessContext(context));
+
+    RECT parentBounds{};
+    assert(GetWindowRect(parent, &parentBounds));
+    anchor.bottom = parentBounds.bottom + 2;
+    view.show(reply, owner, anchor);
+    assert(!view.visible());
+    assert(DestroyWindow(parent));
+    assert(SetThreadDpiAwarenessContext(previous));
+}
+
 void preview(IWICImagingFactory *factory,
              const std::filesystem::path &directory) {
     const auto previous = SetThreadDpiAwarenessContext(
@@ -648,6 +699,7 @@ int main(int argc, char **argv) {
         windowTests();
         fallbackTests(factory);
         inputSiteWindowTests();
+        childExtentWindowTest();
         if (!directory.empty()) {
             preview(factory, directory);
         }
