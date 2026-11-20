@@ -208,7 +208,7 @@ and packaging instructions belong in each plugin's own repository.
 
 ## Status Menus
 
-IPC v14 carries the current context's Fcitx `StatusArea` / `Action/Menu` tree.
+IPC v15 carries the current context's Fcitx `StatusArea` / `Action/Menu` tree.
 Core, both TSF architectures and Settings must be built and deployed together.
 Desktop popups and system `ITfMenu` share frozen views; AppContainer input pipes
 reject menu queries and actions.
@@ -242,9 +242,10 @@ rendering and stale edit-session checks.
 In Settings, open **Global Settings > Developer options** and enable detailed
 logging, then apply. Core applies the change immediately; TSF learns the setting
 from its next Core reply. Core, TSF and Settings must be deployed together using
-IPC v14. `windows-ui.conf` now uses version 3; versions 1/2 gain the default
-shortcuts, and version 1 loads with logging off. Migration happens on the next
-successful save. Language, logging and shortcuts share a revision.
+IPC v15. `windows-ui.conf` v4 stores candidate layout along with language,
+logging and shortcuts under one revision. Versions 1–3 load with vertical
+layout, versions 1/2 gain the default shortcuts, and version 1 loads with
+logging off. Migration happens on the next successful save.
 
 Core writes Fcitx engine messages as plain text to
 `%LOCALAPPDATA%/Fcitx5/logs/fcitx5-YYYYMMDD.log`. The default threshold is
@@ -308,8 +309,8 @@ for the shared logger, privacy boundaries and Settings exit diagnostics.
 Global Settings → Shortcuts configures input-method cycling (Ctrl+Space by
 default) and direct selection of entries 1–5 (Ctrl+Alt+1…5). These settings use
 the existing multiline editor and recorder. Apply saves them; empty values
-disable an action. Core, TSF and Settings must be deployed together for IPC v14.
-The global file is now `windows-ui.conf` v3, with v1/v2 migration defaults.
+disable an action. Core, TSF and Settings must be deployed together for IPC v15.
+The global file is `windows-ui.conf` v4, with migration defaults for v1–v3.
 
 Engine key-list options have a record button alongside the editable text list.
 Recording changes the draft; use **Apply** to save it through Core. The UI keeps

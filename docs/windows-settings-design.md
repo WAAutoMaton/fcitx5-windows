@@ -1,6 +1,6 @@
 # Windows 输入法设置设计与实现
 
-当前协议为 v14。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页包含只读“词库”tab，全局页包含“常规”、“开发者选项”、只读“插件”和“快捷键”tab。点击添加按钮会打开独立的输入法选择窗口，左侧按语言列出分组，包含可添加的非键盘输入法的语言排在前面，只有键盘候选的语言排在后面，右侧显示对应候选；Core 同时发布多语言 Windows 键盘候选。插件页展示 Core 当前发现的 addon 信息和加载状态，并提供打开个人插件目录的按钮，不触发加载或卸载。插件目录与状态说明见 [windows-plugins.md](windows-plugins.md)。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
+当前协议为 v15。设置窗口使用左侧有序输入法列表、全局设置入口和右侧设置面板；拼音页包含只读“词库”tab，全局页包含“常规”、“开发者选项”、只读“插件”和“快捷键”tab。点击添加按钮会打开独立的输入法选择窗口，左侧按语言列出分组，包含可添加的非键盘输入法的语言排在前面，只有键盘候选的语言排在后面，右侧显示对应候选；Core 同时发布多语言 Windows 键盘候选。插件页展示 Core 当前发现的 addon 信息和加载状态，并提供打开个人插件目录的按钮，不触发加载或卸载。插件目录与状态说明见 [windows-plugins.md](windows-plugins.md)。词库目录、热重载和验证见 [pinyin.md](pinyin.md#third-party-dictionaries)。本文说明当前实现和仍需实测的范围。
 
 ## 当前方案
 
@@ -17,7 +17,7 @@
 - `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，显示当前输入法图标/标签和名称，左键轮换输入法；原生右键菜单与 `InitMenu` / `OnMenuSelect` 共用五项命令。
 - `win32/tsf/aboutwindow.cpp`：实现“关于”窗口，显示架构、构建信息、许可证链接和仓库主页。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询和后台服务/目录操作。
-- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v14 framing、输入法目录、选项描述、全局语言/日志/快捷键设置、词库和插件状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。日志设计见 [windows-developer-logging-design.md](windows-developer-logging-design.md)，Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
+- `win32/ipc/protocol.h`、`inputmethodprotocol.h`：v15 framing、输入法目录、选项描述、全局语言/日志/快捷键设置、词库和插件状态、宿主服务操作及运行时代次；全局请求与 context 请求分别校验。日志设计见 [windows-developer-logging-design.md](windows-developer-logging-design.md)，Sandboxie 宿主共享见 [windows-sandboxie-design.md](windows-sandboxie-design.md)，受限输入入口见 [windows-modern-apps-design.md](windows-modern-apps-design.md)。
 - `src/main.cpp`：初始化 Core、预热拼音并创建 Windows 设置管理器；完整内存输入法组由 `src/windowsinputmethods.cpp` 按已安装可用条目建立。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置保存、真实 profile 应用、中文 entry 切换与 context 同步。
 - `src/windowsinputmethods.cpp`：枚举输入法、声明共享面板、校验配置、列表轮换与删除保护。
@@ -129,7 +129,7 @@ HiDPI 使用 XAML 有效像素和独立进程的 Per-Monitor DPI awareness；窗
 
 ## IPC 与配置所有权
 
-当前 v14 协议包含输入法目录、有序选择、配置描述、全局语言/日志/快捷键设置、插件状态、宿主命令、候选动作及状态菜单，`KeyReply` 返回实际 entry、子模式显示信息、日志状态、候选代次和状态菜单 revision。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod`、候选动作及状态菜单请求则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求或状态菜单动作。
+当前 v15 协议包含输入法目录、有序选择、配置描述、全局语言/日志/快捷键设置、插件状态、宿主命令、候选动作及状态菜单，`KeyReply` 返回实际 entry、子模式显示信息、日志状态、候选代次和状态菜单 revision。必须同步构建 Core、TSF DLL 和设置程序。以下全局消息强制 `contextId=0`；`CycleInputMethod`、`SelectInputMethod`、候选动作及状态菜单请求则验证 context 归属和焦点。AppContainer 专用入口仅允许输入、只读全局状态及限流的 `OpenSettings`，不开放管理写请求或状态菜单动作。
 
 | 请求 | 内容 / 回复 |
 | --- | --- |
@@ -181,7 +181,9 @@ TSF 在非键盘输入法空闲时也将 OEM 标点键及 Shift+数字送到 Cor
 
 ## 开发日志与 Settings 退出诊断
 
-全局配置保存在 `conf/windows-ui.conf` v3，与 `windows.conf` 的输入设置 revision 独立。兼容读取 v1/v2，旧配置自动补齐默认快捷键；v1 的日志默认关闭，下次成功保存写入 v3。语言、详细日志和快捷键共享全局 revision，跨 tab 修改都计入草稿、重置和冲突检查。重置全局页恢复跟随系统、关闭日志并恢复默认快捷键，不立即保存。
+全局配置保存在 `conf/windows-ui.conf` v4，与 `windows.conf` 的输入设置 revision 独立。v1/v2 补齐默认快捷键，v1 默认关闭日志，v1–v3 默认竖排。下次成功保存写入 v4。语言、详细日志、快捷键和候选框布局共享全局 revision，跨 tab 修改都计入草稿、重置和冲突检查。重置全局页将这些选项恢复为默认草稿，点击应用后保存。
+
+“常规”页的“候选框布局”可选择竖排或横排。TSF 自绘候选窗从下一次 Core 状态回复应用布局，横排在宽度不足时换行。
 
 详细日志开关应用后 Core 和 Settings 立即更新，TSF 从下一次 Core 回复同步。开发者页显示本进程详细日志状态以及目录统计。引擎日志默认记录到 `Info`，开启详细日志后即时切换到 `Debug`。两种日志共同使用 `%LOCALAPPDATA%/Fcitx5/logs` 的 7 天保留期限和 512 MiB 容量。具体格式和字段见 [开发日志设计](windows-developer-logging-design.md)。
 

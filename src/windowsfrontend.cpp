@@ -326,8 +326,10 @@ WindowsPipeServer::WindowsPipeServer(Instance &instance,
       activeLanguage_(i18n::resolveLanguage(activeLanguage)),
       detailedLogging_(detailedLogging), settingsEpoch_(settings_.revision()) {
     ipc::GlobalSettings global;
-    if (i18n::readSettings(uiSettingsFile_, global))
+    if (i18n::readSettings(uiSettingsFile_, global)) {
         shortcuts_ = global.shortcuts;
+        candidateLayout_ = global.candidateLayout;
+    }
     // Windows owns method selection; upstream default hotkeys must not remain
     // active after the user replaces or clears the Windows shortcuts.
     RawConfig hotkeys;
@@ -345,6 +347,7 @@ ipc::KeyReply WindowsPipeServer::snapshot(WindowsInputContext &context,
     settings_.decorate(&context, reply);
     reply.settingsRevision = settingsEpoch_;
     reply.detailedLogging = detailedLogging_;
+    reply.candidateLayout = candidateLayout_;
     context.updateCandidateIdentity(reply);
     reply.statusMenuRevision =
         statusMenus_.at(context.id())->revision(reply.inputMethod);
@@ -705,6 +708,7 @@ void WindowsPipeServer::process(const ipc::Frame &request,
         }
         if (reply.error == ipc::SettingsError::None) {
             shortcuts_ = reply.settings.shortcuts;
+            candidateLayout_ = reply.settings.candidateLayout;
             detailedLogging_ = reply.settings.detailedLogging;
             applyDiagnosticLogging(detailedLogging_);
         }

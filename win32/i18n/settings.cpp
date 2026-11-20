@@ -19,6 +19,7 @@ struct Handle {
     }
 };
 constexpr const char *names[] = {"system", "zh-Hans", "zh-Hant", "en"};
+constexpr const char *candidateLayouts[] = {"vertical", "horizontal"};
 } // namespace
 
 UiLanguage matchLanguage(std::wstring_view name) {
@@ -120,9 +121,12 @@ bool readSettings(const std::filesystem::path &path,
         std::istringstream input(data);
         boost::property_tree::read_ini(input, tree);
         const auto version = tree.get<std::string>("General.Version");
-        if (tree.size() != (version == "3" ? 2 : 1) ||
-            (version != "1" && version != "2" && version != "3") ||
-            tree.get_child("General").size() != (version == "1" ? 3 : 4))
+        const bool hasShortcuts = version == "3" || version == "4";
+        const bool hasCandidateLayout = version == "4";
+        if (tree.size() != (hasShortcuts ? 2 : 1) ||
+            (!hasShortcuts && version != "1" && version != "2") ||
+            tree.get_child("General").size() !=
+                (version == "1" ? 3 : hasCandidateLayout ? 5 : 4))
             return false;
         const auto language = tree.get<std::string>("General.Language");
         const auto revision = tree.get<std::string>("General.Revision");
@@ -146,7 +150,7 @@ bool readSettings(const std::filesystem::path &path,
                 return false;
             parsed.detailedLogging = detailed == "true" || detailed == "True";
         }
-        if (version == "3") {
+        if (hasShortcuts) {
             if (tree.get_child("Shortcuts").size() != parsed.shortcuts.size())
                 return false;
             for (size_t i = 0; i < parsed.shortcuts.size(); ++i) {
@@ -157,6 +161,15 @@ bool readSettings(const std::filesystem::path &path,
             }
             if (!ipc::validShortcuts(parsed.shortcuts))
                 return false;
+        }
+        if (hasCandidateLayout) {
+            const auto layout = tree.get<std::string>("General.CandidateLayout");
+            const auto found = std::find(std::begin(candidateLayouts),
+                                         std::end(candidateLayouts), layout);
+            if (found == std::end(candidateLayouts))
+                return false;
+            parsed.candidateLayout = static_cast<ipc::CandidateLayout>(
+                found - std::begin(candidateLayouts));
         }
         settings = std::move(parsed);
         return true;
@@ -169,7 +182,8 @@ ipc::SettingsError saveSettings(const std::filesystem::path &path,
                                 const ipc::GlobalSettings &requested,
                                 ipc::GlobalSettings &actual) {
     if (!ipc::validLanguage(requested.language) || !requested.revision ||
-        !ipc::validShortcuts(requested.shortcuts))
+        !ipc::validShortcuts(requested.shortcuts) ||
+        !ipc::validCandidateLayout(requested.candidateLayout))
         return ipc::SettingsError::Invalid;
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
@@ -195,7 +209,8 @@ ipc::SettingsError saveSettings(const std::filesystem::path &path,
     actual = saved;
     const bool changed = saved.language != requested.language ||
                          saved.detailedLogging != requested.detailedLogging ||
-                         saved.shortcuts != requested.shortcuts;
+                         saved.shortcuts != requested.shortcuts ||
+                         saved.candidateLayout != requested.candidateLayout;
     if (changed && saved.revision != requested.revision)
         return ipc::SettingsError::Conflict;
     if (changed && saved.revision == std::numeric_limits<uint64_t>::max())
@@ -203,14 +218,17 @@ ipc::SettingsError saveSettings(const std::filesystem::path &path,
     saved.language = requested.language;
     saved.detailedLogging = requested.detailedLogging;
     saved.shortcuts = requested.shortcuts;
+    saved.candidateLayout = requested.candidateLayout;
     if (changed)
         ++saved.revision;
     boost::property_tree::ptree tree;
-    tree.put("General.Version", "3");
+    tree.put("General.Version", "4");
     tree.put("General.Language", names[static_cast<unsigned>(saved.language)]);
     tree.put("General.Revision", std::to_string(saved.revision));
     tree.put("General.DetailedLogging",
              saved.detailedLogging ? "true" : "false");
+    tree.put("General.CandidateLayout",
+             candidateLayouts[static_cast<unsigned>(saved.candidateLayout)]);
     for (size_t i = 0; i < saved.shortcuts.size(); ++i) {
         auto value = saved.shortcuts[i];
         std::replace(value.begin(), value.end(), '\n', ';');

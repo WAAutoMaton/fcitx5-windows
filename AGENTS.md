@@ -26,11 +26,11 @@
 - TSF 激活后可在后台启动相邻安装树中的 `bin/Fcitx5.exe`；部署树中的 Settings 位于 `settings/Fcitx5Settings.exe`。部署脚本不负责注册、注销或启动服务。
 - Core 主线程拥有核心状态；Pipe 服务线程通过 `EventDispatcher` 投递请求。TSF 的编辑操作必须在正确的 edit session 中执行，并校验原始 context、代次和快照，拒绝迟到请求写入新焦点。
 - IPC 使用当前用户/session 范围的 Named Pipe、ACL 和可取消 overlapped I/O。超时请求不重放，跨进程故障不提供 exactly-once 保证。
-- 当前 IPC 为 v14，包含只读插件查询、全局快捷键和 context 状态菜单查询/动作；桌面/Sandboxie Pipe 名保留历史 `v2` 前缀，AppContainer 使用专用 `-input` 入口，服务端验证实际 token 并限制消息/资源额度。AppContainer 输入入口拒绝状态菜单查询和动作。Sandboxie 和 AppContainer 不启动本地 Core/Settings；Core 与 Settings 拒绝受限或未知环境。Sandboxie 安全模式的匿名 token 兼容仅限既有用户 DACL 保护的管理入口，不扩展至受限输入入口。
+- 当前 IPC 为 v15，包含只读插件查询、全局快捷键和 context 状态菜单查询/动作；桌面/Sandboxie Pipe 名保留历史 `v2` 前缀，AppContainer 使用专用 `-input` 入口，服务端验证实际 token 并限制消息/资源额度。AppContainer 输入入口拒绝状态菜单查询和动作。Sandboxie 和 AppContainer 不启动本地 Core/Settings；Core 与 Settings 拒绝受限或未知环境。Sandboxie 安全模式的匿名 token 兼容仅限既有用户 DACL 保护的管理入口，不扩展至受限输入入口。
 - 桌面管理入口已接入同用户/session 的 UAC linked-token 登录匹配，`sameLogin()` 保持严格。提权或 elevation 查询失败的桌面 TSF 将服务操作交给已运行的宿主 Core，连接失败不回退到本地提权启动；Core 缺失或手动停止时，从普通桌面入口启动/重启。受限输入入口不采用 UAC 例外。
 - 候选 UIElement/Behavior 与 popup 定位分离；宿主接管显示或没有有效 HWND 时仍发布候选数据。候选动作绑定 context、稳定候选代次和索引，由 Core 引擎处理，TSF 不直接提交 getter 的文本。secure/COM-less、显式密码 scope、只读或禁用 context 透传不发送引擎输入。
 - 状态菜单通用桥接读取 Fcitx `StatusArea` / `Action/Menu`，桌面 `HMENU` 和系统托管 `ITfMenu` 每次打开使用冻结视图。动作绑定原 context、连接、输入法和菜单代次，在 Core 主线程调用插件，并通过 TSF edit session 应用回复；旧焦点或菜单失效后拒绝执行。Core 通用层不解析插件私有方案配置。Rime 的 F4 候选式方案选单与语言栏方案子菜单使用各自的候选和动作链路。
-- UI 语言使用 gettext + 各工具链独立构建的 Boost.Locale。`windows-ui.conf` v3 保存语言、默认关闭的详细日志开关和全局快捷键，共享独立 revision；兼容读取 v1/v2，补齐默认快捷键，v1 日志默认关闭。Core/Settings 语言重启服务后生效，日志开关即时同步。日志仅记录诊断元数据，按键结果可含扫描码、修饰键和消费状态，不记录按键字符/Unicode、输入/候选文本、payload、配置值、窗口标题或用户路径；上游 `key_trace` 保持关闭。
+- UI 语言使用 gettext + 各工具链独立构建的 Boost.Locale。`windows-ui.conf` v4 保存语言、默认关闭的详细日志开关、全局快捷键和候选框布局，共享独立 revision。v1/v2 补齐默认快捷键，v1 默认关闭日志，v1–v3 默认竖排。Core/Settings 语言重启服务后生效，日志开关即时同步。日志仅记录诊断元数据，按键结果可含扫描码、修饰键和消费状态，不记录按键字符/Unicode、输入/候选文本、payload、配置值、窗口标题或用户路径；上游 `key_trace` 保持关闭。
 - 服务互斥和手动停止状态按当前用户/session/login 维度管理；重启服务才解除停止状态。服务控制不得按进程名强制结束用户应用。
 - 全局快捷键支持轮换可用输入法（默认 Ctrl+Space）和直接切换列表第 1～5 项（默认 Ctrl+Alt+1～5），可录制、编辑或清空禁用。直接切换按原始位置，目标不存在或不可用时透传；语言栏左键继续轮换。Core 即时应用快捷键，TSF 激活/轮询更新缓存与 preserved keys。指示器显示当前输入法的图标/标签和名称。`GUID_COMPARTMENT_KEYBOARD_OPENCLOSE` 的布尔值由实际条目是否为键盘推导；独立系统开关在已选键盘/非键盘条目间切换。新焦点 context 与重连恢复当前条目，切换输入法取消旧预编辑。
 - Settings 使用独立添加窗口，按 IPC 输入法目录的 `language` 分组，将有可添加非键盘输入法的语言排在前面。`windowskeyboard` 发布多语言键盘候选，均为物理按键透传，不切换 Windows 键盘布局或自行实现字符映射；真实窗口交互和系统派发仍需验收。

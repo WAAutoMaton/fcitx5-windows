@@ -28,10 +28,14 @@ and selector. The tested VS15 heart is monochrome alongside a VS16 color heart;
 unsupported glyphs and sequences still depend on installed fonts and Windows.
 
 Measurement and drawing use the same layouts. Row height includes text height,
-vertical glyph overhang and padding, with a 32 DIP minimum. Columns align labels
-and comments; long text uses DirectWrite ellipsis. Comments keep natural width
-when possible, but receive at most 35% of remaining space when the row does not
-fit. Preferred width is bounded to 180-640 DIP and the monitor work area.
+vertical glyph overhang and padding, with a 32 DIP minimum. In the default
+vertical layout, columns align labels and comments. Under Global Settings →
+General, users can select Horizontal to place entries from left to right and
+wrap them onto additional rows when needed. Both layouts use DirectWrite
+ellipsis for long text. Comments that cannot fit receive at most 35% of the
+remaining width. Popup width is bounded to 180-640 DIP and the monitor work area.
+Core includes the saved layout in candidate snapshots so the TSF popup picks up
+changes on the next update.
 System colors supply text, background, selection and border. Theme/color changes
 invalidate the window; a dedicated Windows 11 dark theme remains pending.
 

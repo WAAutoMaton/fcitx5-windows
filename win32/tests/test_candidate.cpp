@@ -15,6 +15,9 @@ struct CandidateWindowTestAccess {
     static IDWriteTextLayout *text(const CandidateWindow &view, size_t index) {
         return view.rows_[index].text.layout;
     }
+    static D2D1_RECT_F bounds(const CandidateWindow &view, size_t index) {
+        return view.placements_[index].bounds;
+    }
     static void discardTarget(CandidateWindow &view) { view.discardTarget(); }
     static void factory(CandidateWindow &view, ID2D1Factory *factory) {
         view.drawingFactory_ = factory;
@@ -696,6 +699,28 @@ int main(int argc, char **argv) {
             std::filesystem::create_directories(directory);
         }
         renderTests(factory, directory);
+        {
+            fcitx::CandidateWindow view;
+            Reply reply;
+            reply.candidates = {{"a", "1", "a"}, {"b", "2", ""},
+                                {std::string(200, 'W'), "3", "long comment"}};
+            reply.selected = 1;
+            Access::prepare(view, reply, 96);
+            const auto first = Access::bounds(view, 0);
+            assert(Access::bounds(view, 1).top == first.bottom);
+            CComPtr<IDWriteTextLayout> text = Access::text(view, 0);
+            reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+            Access::prepare(view, reply, 96);
+            const auto left = Access::bounds(view, 0);
+            const auto right = Access::bounds(view, 1);
+            assert(right.top == left.top && right.left == left.right);
+            assert(Access::bounds(view, 2).top == left.bottom &&
+                   Access::bounds(view, 2).left == left.left);
+            assert(Access::text(view, 0) == text.p && Access::render(view, factory));
+            reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Vertical;
+            Access::prepare(view, reply, 96);
+            assert(Access::bounds(view, 1).top == first.bottom);
+        }
         windowTests();
         fallbackTests(factory);
         inputSiteWindowTests();

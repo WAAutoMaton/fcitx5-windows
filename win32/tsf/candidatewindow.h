@@ -36,11 +36,18 @@ class CandidateWindow {
         Text text;
         Text comment;
     };
+    struct Placement {
+        D2D1_RECT_F bounds;
+        float textLeft;
+        float commentLeft;
+    };
     static LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam,
                                        LPARAM lParam);
     bool initialize();
     bool createText(Text &text, IDWriteTextFormat *format);
     bool updateRows(const PipeClient::KeyReply &reply);
+    bool fitText(Row &row, Placement &placement, float labelWidth,
+                 float bodyWidth, float commentWidth);
     bool layout();
     void position();
     HRESULT createTarget(HDC dc);
@@ -51,14 +58,15 @@ class CandidateWindow {
     HWND window_ = nullptr;
     HINSTANCE module_ = nullptr;
     std::vector<Row> rows_;
+    std::vector<Placement> placements_;
+    win32::ipc::CandidateLayout candidateLayout_ =
+        win32::ipc::CandidateLayout::Vertical;
     uint32_t selected_ = UINT32_MAX;
     RECT anchor_{};
     UINT dpi_ = 96;
     float width_ = 180;
     float height_ = 0;
-    float rowHeight_ = 32;
-    float textLeft_ = 0;
-    float commentLeft_ = 0;
+    float layoutWidthLimit_ = 0;
     bool positioning_ = false;
     bool layoutDirty_ = true;
     bool useDcTarget_ = false;

@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Core、TSF 和 Settings 已接入共享异步结构化日志，Settings 的全局页提供默认关闭的详细日志开关。当前 IPC 为 v14，`windows-ui.conf` 为 v3；日志包括 Settings 窗口/进程退出、操作阶段、异常，以及 Pipe 握手身份和 UAC 关系诊断。
+Core、TSF 和 Settings 已接入共享异步结构化日志，Settings 的全局页提供默认关闭的详细日志开关。当前 IPC 为 v15，`windows-ui.conf` 为 v4。日志包括 Settings 窗口/进程退出、操作阶段、异常，以及 Pipe 握手身份和 UAC 关系诊断。
 
 启用方式及构建/测试入口见 [build.md](build.md#developer-logging)。详细日志记录 TSF/IPC、候选位置与渲染、焦点、Core 状态及 Settings 故障的诊断元数据。Core 默认记录 Fcitx5 引擎的 `Info` 及更严重的消息，开启详细日志后记录到 `Debug`。
 
@@ -26,7 +26,7 @@ DetailedLogging=false
 5=Control+Alt+5
 ```
 
-`windows-ui.conf` 位于 `%APPDATA%/Fcitx5/config/fcitx5/conf`。兼容读取 v1/v2 并补齐默认快捷键，v1 加载时 DetailedLogging=false，下次成功保存写 v3。语言、日志和快捷键共享全局 revision，与输入法/引擎设置独立；任一字段变化增加 revision，旧草稿不能覆盖新设置，保存超时不重放。
+`windows-ui.conf` 位于 `%APPDATA%/Fcitx5/config/fcitx5/conf`。v1 加载时 DetailedLogging=false，下次成功保存写入 v4。日志与其他全局设置共享 revision，与输入法/引擎设置独立。任一字段变化增加 revision，旧草稿不能覆盖新设置，保存超时不重放。
 
 | 设置 | 生效 |
 | --- | --- |
@@ -105,7 +105,7 @@ Core 通过 `src/windowslogging.cpp` 收集完整的上游消息。详细日志�
 
 | 层级 | 入口与覆盖 |
 | --- | --- |
-| 单元/模拟 | test_diagnostic_log：轮转/期限/容量/丢弃/失败；test_i18n：v1/v2 迁移、日志字段和共享 revision；test_protocol：v14 编码和非法字段 |
+| 单元/模拟 | test_diagnostic_log：轮转/期限/容量/丢弃/失败；test_i18n：v1/v2 迁移、日志字段和共享 revision；test_protocol：v15 编码和非法字段 |
 | TSF 免注册 | test_candidate、test_candidate_tsf：生产绘制/几何、UIElement、无 owner/layout、迟到 session 与日志元数据 |
 | 真实引擎/IPC | scripts/test-developer-logging.ps1：引擎 Info/Debug 即时切换及重启恢复、Core/TSF 开关同步、真实输入、断线与隐私检查 |
 | WinUI | scripts/test-ui-localization.ps1 -TestLogging：开发者页、应用/重置/冲突、目录与关闭行为 |

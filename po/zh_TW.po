@@ -873,3 +873,15 @@ msgstr "其他"
 msgctxt "settings"
 msgid "Wu Chinese"
 msgstr "吳語"
+
+msgctxt "settings"
+msgid "Candidate layout"
+msgstr "候選視窗配置"
+
+msgctxt "settings"
+msgid "Vertical"
+msgstr "直排"
+
+msgctxt "settings"
+msgid "Horizontal"
+msgstr "橫排"

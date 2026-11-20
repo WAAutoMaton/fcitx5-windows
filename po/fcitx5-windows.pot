@@ -841,3 +841,15 @@ msgstr ""
 msgctxt "settings"
 msgid "Wu Chinese"
 msgstr ""
+
+msgctxt "settings"
+msgid "Candidate layout"
+msgstr ""
+
+msgctxt "settings"
+msgid "Vertical"
+msgstr ""
+
+msgctxt "settings"
+msgid "Horizontal"
+msgstr ""

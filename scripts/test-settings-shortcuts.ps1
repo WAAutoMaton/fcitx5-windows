@@ -45,6 +45,13 @@ function Open-Shortcuts {
     (Find-Id 'ShortcutOptionsTab').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
     Wait-For { Find-Id 'GlobalShortcut/0' } 'Shortcut editors missing.'
 }
+function Select-GlobalTab([string]$Id) {
+    (Find-Id $Id).GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+}
+function Selected-CandidateLayout {
+    (Find-Id 'CandidateLayout').GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection() |
+        ForEach-Object { $_.Current.Name }
+}
 function Capture([string]$Name) {
     $bounds = $script:window.Current.BoundingRectangle
     $bitmap = [Drawing.Bitmap]::new([int]$bounds.Width, [int]$bounds.Height)
@@ -66,6 +73,14 @@ try {
         $script:window -and (Find-Id 'method:pinyin')
     } 'Settings did not become ready.'
     Open-Shortcuts
+    Select-GlobalTab 'GeneralOptions'
+    Wait-For { (Selected-CandidateLayout) -ceq 'Vertical' } 'Default candidate layout should be vertical.'
+    $layout = (Find-Id 'CandidateLayout').GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
+    $layout.Expand()
+    Wait-For { Find-Name 'Horizontal' } 'Horizontal candidate layout is missing.'
+    (Find-Name 'Horizontal').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    $layout.Collapse()
+    Select-GlobalTab 'ShortcutOptionsTab'
     foreach ($i in 0..5) {
         $expected = if ($i -eq 0) { 'Control+space' } else { "Control+Alt+$i" }
         if ((Value $i) -cne $expected) { throw "Wrong shortcut default: $i" }
@@ -82,6 +97,9 @@ try {
     Start-Sleep -Milliseconds 400
     Open-Shortcuts
     if ((Value 0) -cne "Control+Shift+J`nAlt+<59>" -or (Value 1) -cne 'Control+Alt+F2' -or (Value 5) -cne '') { throw 'Shortcut save/reload failed.' }
+    Select-GlobalTab 'GeneralOptions'
+    Wait-For { (Selected-CandidateLayout) -ceq 'Horizontal' } 'Candidate layout save/reload failed.'
+    Select-GlobalTab 'ShortcutOptionsTab'
     Set-Value 2 'Control+Shift+J'
     Invoke-Control (Find-Name 'Apply')
     if (!(Find-Name 'Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut.')) { throw 'Duplicate shortcut was accepted.' }
@@ -95,10 +113,12 @@ try {
     }
     Invoke-Control (Find-Name 'Apply')
     Capture 'global-shortcuts'
-    if ((Get-Content -Raw $file) -notmatch 'Version=3') { throw 'Global configuration did not migrate to v3.' }
+    $saved = Get-Content -Raw $file
+    if ($saved -notmatch 'Version=4') { throw 'Global configuration did not migrate to v4.' }
+    if ($saved -notmatch 'CandidateLayout=vertical') { throw 'Candidate layout reset failed.' }
     Invoke-Control (Find-Name 'Close')
     if (!$settings.WaitForExit(5000)) { throw 'Settings did not close.' }
-    Write-Output "PASS: global shortcut defaults, recorder open/cancel, editing, save/reload, disable, validation, reset and v2 migration. Physical key injection is covered separately by test-settings-keycapture.ps1. Logs: $LogDirectory"
+    Write-Output "PASS: global shortcuts, candidate layout, save/reload, validation, reset and v2 migration. Physical key injection is covered separately by test-settings-keycapture.ps1. Logs: $LogDirectory"
 } catch {
     if ($script:window) {
         Capture 'failure'

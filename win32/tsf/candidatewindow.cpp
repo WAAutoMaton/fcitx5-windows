@@ -155,7 +155,8 @@ bool CandidateWindow::createText(Text &text, IDWriteTextFormat *format) {
 
 bool CandidateWindow::updateRows(const PipeClient::KeyReply &reply) {
     std::vector<Row> rows(reply.candidates.size());
-    bool changed = rows.size() != rows_.size();
+    bool changed = rows.size() != rows_.size() ||
+                   reply.candidateLayout != candidateLayout_;
     for (size_t i = 0; i < rows.size(); ++i) {
         const auto &source = reply.candidates[i];
         auto &row = rows[i];
@@ -184,8 +185,32 @@ bool CandidateWindow::updateRows(const PipeClient::KeyReply &reply) {
         }
     }
     rows_ = std::move(rows);
+    candidateLayout_ = reply.candidateLayout;
     layoutDirty_ = layoutDirty_ || changed;
     return true;
+}
+
+bool CandidateWindow::fitText(Row &row, Placement &placement,
+                              float labelWidth, float bodyWidth,
+                              float commentWidth) {
+    const auto &bounds = placement.bounds;
+    const auto contentWidth = bounds.right - bounds.left - 2 * kPadding;
+    labelWidth = std::min(labelWidth, std::max(0.f, contentWidth - kGap - 1));
+    placement.textLeft =
+        bounds.left + kPadding + labelWidth + (labelWidth > 0 ? kGap : 0);
+    const auto remaining =
+        std::max(1.f, bounds.right - kPadding - placement.textLeft);
+    if (bodyWidth + kGap + commentWidth > remaining + .01f) {
+        commentWidth =
+            std::min(commentWidth, std::max(0.f, remaining * .35f - kGap));
+    }
+    bodyWidth =
+        std::max(1.f, remaining - (commentWidth > 0 ? kGap + commentWidth : 0));
+    placement.commentLeft = placement.textLeft + bodyWidth + kGap;
+    return SUCCEEDED(row.label.layout->SetMaxWidth(std::max(1.f, labelWidth))) &&
+           SUCCEEDED(row.text.layout->SetMaxWidth(bodyWidth)) &&
+           SUCCEEDED(
+               row.comment.layout->SetMaxWidth(std::max(1.f, commentWidth)));
 }
 
 bool CandidateWindow::layout() {
@@ -193,48 +218,72 @@ bool CandidateWindow::layout() {
     if (!workArea(anchor_, work)) {
         return false;
     }
-    const auto available = (work.right - work.left) * 96.f / dpi_;
+    const auto widthLimit =
+        std::min(640.f, (work.right - work.left) * 96.f / dpi_);
+    if (!layoutDirty_ && layoutWidthLimit_ == widthLimit) {
+        return true;
+    }
+    layoutDirty_ = true;
+    const auto preferredWidth = [](float label, float body, float comment) {
+        return 2 * kPadding + label + body + comment + (label > 0 ? kGap : 0) +
+               (comment > 0 ? kGap : 0);
+    };
+    const bool horizontal =
+        candidateLayout_ == win32::ipc::CandidateLayout::Horizontal;
     float labelWidth = 0;
     float bodyWidth = 0;
     float commentWidth = 0;
-    rowHeight_ = 32;
+    float rowHeight = 32;
     for (const auto &row : rows_) {
         labelWidth = std::max(labelWidth, row.label.width);
         bodyWidth = std::max(bodyWidth, row.text.width);
         commentWidth = std::max(commentWidth, row.comment.width);
-        rowHeight_ = std::max(
-            rowHeight_,
+        rowHeight = std::max(
+            rowHeight,
             std::max({row.label.height, row.text.height, row.comment.height}) +
                 12);
     }
     labelWidth = std::min(labelWidth, 80.f);
     commentWidth = std::min(commentWidth, 240.f);
-    const auto textLeft = kPadding + labelWidth + (labelWidth > 0 ? kGap : 0);
-    const auto preferred = textLeft + bodyWidth + kPadding +
-                           (commentWidth > 0 ? kGap + commentWidth : 0);
-    const auto width = std::min(available, std::clamp(preferred, 180.f, 640.f));
-    if (!layoutDirty_ && width_ == width) {
-        return true;
+    width_ = std::min(widthLimit, 180.f);
+    if (!horizontal) {
+        width_ = std::min(widthLimit,
+                          std::max(width_, preferredWidth(labelWidth, bodyWidth,
+                                                         commentWidth)));
     }
-    textLeft_ = textLeft;
-    width_ = width;
-    const auto remaining = std::max(1.f, width_ - textLeft_ - kPadding);
-    if (bodyWidth + kGap + commentWidth > remaining) {
-        commentWidth =
-            std::min(commentWidth, std::max(0.f, remaining * .35f - kGap));
-    }
-    bodyWidth =
-        std::max(1.f, remaining - (commentWidth > 0 ? kGap + commentWidth : 0));
-    commentLeft_ = textLeft_ + bodyWidth + kGap;
-    for (auto &row : rows_) {
-        if (FAILED(row.label.layout->SetMaxWidth(std::max(1.f, labelWidth))) ||
-            FAILED(row.text.layout->SetMaxWidth(bodyWidth)) ||
-            FAILED(
-                row.comment.layout->SetMaxWidth(std::max(1.f, commentWidth)))) {
+    placements_.resize(rows_.size());
+    float left = 0;
+    float top = kPadding;
+    for (size_t index = 0; index < rows_.size(); ++index) {
+        auto &row = rows_[index];
+        if (horizontal) {
+            labelWidth = std::min(row.label.width, 80.f);
+            bodyWidth = row.text.width;
+            commentWidth = std::min(row.comment.width, 240.f);
+        }
+        const auto width =
+            horizontal ? std::min(widthLimit, preferredWidth(
+                                                  labelWidth, bodyWidth,
+                                                  commentWidth))
+                       : width_;
+        if (left > 0 && left + width > widthLimit) {
+            left = 0;
+            top += rowHeight;
+        }
+        auto &placement = placements_[index];
+        placement.bounds = D2D1::RectF(left, top, left + width, top + rowHeight);
+        if (!fitText(row, placement, labelWidth, bodyWidth, commentWidth)) {
             return false;
         }
+        if (horizontal) {
+            left += width;
+            width_ = std::max(width_, left);
+        } else {
+            top += rowHeight;
+        }
     }
-    height_ = rows_.size() * rowHeight_ + 2 * kPadding;
+    height_ = top + kPadding + (horizontal && !rows_.empty() ? rowHeight : 0);
+    layoutWidthLimit_ = widthLimit;
     layoutDirty_ = false;
     return true;
 }
@@ -483,30 +532,32 @@ HRESULT CandidateWindow::draw(ID2D1RenderTarget *target,
     target->Clear(systemColor(COLOR_WINDOW));
     const auto size = target->GetSize();
     for (size_t index = 0; index < rows_.size(); ++index) {
-        const auto top = kPadding + index * rowHeight_;
+        const auto &placement = placements_[index];
+        const auto &bounds = placement.bounds;
+        const auto rowHeight = bounds.bottom - bounds.top;
         const bool selected = index == selected_;
         if (selected) {
             brush->SetColor(systemColor(COLOR_HIGHLIGHT));
-            target->FillRectangle(D2D1::RectF(kBorder, top,
-                                              size.width - kBorder,
-                                              top + rowHeight_),
+            target->FillRectangle(D2D1::RectF(bounds.left + kBorder, bounds.top,
+                                              bounds.right - kBorder,
+                                              bounds.bottom),
                                   brush);
         }
         const auto &row = rows_[index];
         auto draw = [&](const Text &text, float left, int color) {
-            if (text.value.empty() || left >= size.width - kPadding) {
+            if (text.value.empty() || left >= bounds.right - kPadding) {
                 return;
             }
             brush->SetColor(systemColor(color));
             target->DrawTextLayout(
-                D2D1::Point2F(left, top + (rowHeight_ - text.height) / 2 +
+                D2D1::Point2F(left, bounds.top + (rowHeight - text.height) / 2 +
                                         text.overhangTop),
                 text.layout, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
         };
         const auto color = selected ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT;
-        draw(row.label, kPadding, color);
-        draw(row.text, textLeft_, color);
-        draw(row.comment, commentLeft_,
+        draw(row.label, bounds.left + kPadding, color);
+        draw(row.text, placement.textLeft, color);
+        draw(row.comment, placement.commentLeft,
              selected ? COLOR_HIGHLIGHTTEXT : COLOR_GRAYTEXT);
     }
     brush->SetColor(systemColor(COLOR_3DSHADOW));

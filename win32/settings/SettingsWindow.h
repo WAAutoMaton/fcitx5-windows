@@ -85,7 +85,8 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     winrt::Microsoft::UI::Xaml::Controls::Primitives::ToggleButton
         globalButton_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TabView globalPanel_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::ComboBox language_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ComboBox language_{nullptr},
+        candidateLayout_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch detailedLogging_{
         nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock logStatus_{nullptr},

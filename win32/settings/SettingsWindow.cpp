@@ -274,6 +274,9 @@ void SettingsWindow::translateStatic() {
     root.FindName(L"LanguageLabel")
         .as<TextBlock>()
         .Text(tr("settings", "Language"));
+    root.FindName(L"CandidateLayoutLabel")
+        .as<TextBlock>()
+        .Text(tr("settings", "Candidate layout"));
     root.FindName(L"ShortcutsTab")
         .as<TabViewItem>()
         .Header(box_value(tr("settings", "Shortcuts")));
@@ -315,6 +318,8 @@ void SettingsWindow::translateStatic() {
     Automation::AutomationProperties::SetName(language_,
                                               tr("settings", "Language"));
     Automation::AutomationProperties::SetName(
+        candidateLayout_, tr("settings", "Candidate layout"));
+    Automation::AutomationProperties::SetName(
         globalButton_, tr("settings", "Global Settings"));
     const std::pair<const wchar_t *, const char *> buttons[] = {
         {L"ResetDefaults", win32::i18n::mark("settings", "Reset to Defaults")},
@@ -348,6 +353,11 @@ void SettingsWindow::translateStatic() {
     language_.Items().Append(box_value(L"\u7e41\u9ad4\u4e2d\u6587"));
     language_.Items().Append(box_value(L"English"));
     language_.SelectedIndex(static_cast<int>(global_.settings.language));
+    candidateLayout_.Items().Clear();
+    candidateLayout_.Items().Append(box_value(tr("settings", "Vertical")));
+    candidateLayout_.Items().Append(box_value(tr("settings", "Horizontal")));
+    candidateLayout_.SelectedIndex(
+        static_cast<int>(global_.settings.candidateLayout));
 }
 
 void SettingsWindow::renderGlobal() {
@@ -364,6 +374,8 @@ void SettingsWindow::renderGlobal() {
     globalPanel_.Visibility(Visibility::Visible);
     operation.stage("controls");
     language_.SelectedIndex(static_cast<int>(global_.settings.language));
+    candidateLayout_.SelectedIndex(
+        static_cast<int>(global_.settings.candidateLayout));
     detailedLogging_.IsOn(global_.settings.detailedLogging);
     renderShortcuts();
     win32::diagnostic::settingsLogger().setEnabled(
@@ -379,6 +391,8 @@ void SettingsWindow::renderGlobal() {
 ipc::GlobalSettings SettingsWindow::globalDraft() const {
     auto draft = global_.settings;
     draft.language = static_cast<ipc::UiLanguage>(language_.SelectedIndex());
+    draft.candidateLayout =
+        static_cast<ipc::CandidateLayout>(candidateLayout_.SelectedIndex());
     draft.detailedLogging = detailedLogging_.IsOn();
     for (size_t i = 0; i < shortcutEditors_.size(); ++i)
         if (shortcutEditors_[i])
@@ -519,6 +533,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
             if (connected && reply.error == ipc::SettingsError::None &&
                 (reply.settings.language != request.language ||
                  reply.settings.detailedLogging != request.detailedLogging ||
+                 reply.settings.candidateLayout != request.candidateLayout ||
                  reply.settings.shortcuts != request.shortcuts))
                 reply.error = ipc::SettingsError::Conflict;
         }
@@ -663,10 +678,13 @@ bool SettingsWindow::open() {
                                          LR"(
   <TabView x:Name="GlobalPanel" Grid.Row="1" Visibility="Collapsed" IsAddTabButtonVisible="False" CanDragTabs="False" CanReorderTabs="False">
     <TabViewItem x:Name="GeneralTab" Header="General" IsClosable="False" AutomationProperties.AutomationId="GeneralOptions">
-    <Grid ColumnSpacing="20">
+    <Grid ColumnSpacing="20" RowSpacing="12" VerticalAlignment="Top">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <TextBlock x:Name="LanguageLabel" Text="Language" VerticalAlignment="Center" TextWrapping="Wrap"/>
       <ComboBox x:Name="UiLanguage" Grid.Column="1" Width="230" AutomationProperties.AutomationId="UiLanguage"/>
+      <TextBlock x:Name="CandidateLayoutLabel" Grid.Row="1" VerticalAlignment="Center" TextWrapping="Wrap"/>
+      <ComboBox x:Name="CandidateLayout" Grid.Row="1" Grid.Column="1" Width="230" AutomationProperties.AutomationId="CandidateLayout"/>
     </Grid>
     </TabViewItem>
     <TabViewItem x:Name="DeveloperTab" Header="Developer options" IsClosable="False" AutomationProperties.AutomationId="DeveloperOptions">
@@ -733,6 +751,7 @@ bool SettingsWindow::open() {
         root.FindName(L"GlobalSettings").as<Primitives::ToggleButton>();
     globalPanel_ = root.FindName(L"GlobalPanel").as<TabView>();
     language_ = root.FindName(L"UiLanguage").as<ComboBox>();
+    candidateLayout_ = root.FindName(L"CandidateLayout").as<ComboBox>();
     detailedLogging_ = root.FindName(L"DetailedLogging").as<ToggleSwitch>();
     logDirectory_ = root.FindName(L"LogDirectory").as<TextBlock>();
     logStatus_ = root.FindName(L"LogStatus").as<TextBlock>();
@@ -755,6 +774,8 @@ bool SettingsWindow::open() {
     reset_.Click([this](auto &&, auto &&) {
         if (page_ == PageKind::Global) {
             language_.SelectedIndex(0);
+            candidateLayout_.SelectedIndex(
+                static_cast<int>(ipc::CandidateLayout::Vertical));
             detailedLogging_.IsOn(false);
             const auto defaults = ipc::defaultShortcuts();
             for (size_t i = 0; i < shortcutEditors_.size(); ++i)
@@ -872,6 +893,7 @@ void SettingsWindow::busy(bool enabled) {
     globalButton_.IsEnabled(!enabled && loaded_);
     language_.IsEnabled(!enabled && loaded_);
     detailedLogging_.IsEnabled(!enabled && loaded_);
+    candidateLayout_.IsEnabled(!enabled && loaded_);
     globalPanel_.IsEnabled(!enabled && loaded_);
     for (auto &editor : editors_) {
         editor.as<Control>().IsEnabled(!enabled && loaded_);

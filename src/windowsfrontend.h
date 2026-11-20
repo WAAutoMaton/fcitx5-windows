@@ -100,6 +100,7 @@ class WindowsPipeServer {
     ipc::UiLanguage activeLanguage_;
     bool detailedLogging_ = false;
     ipc::Shortcuts shortcuts_ = ipc::defaultShortcuts();
+    ipc::CandidateLayout candidateLayout_ = ipc::CandidateLayout::Vertical;
     uint64_t settingsEpoch_ = 1;
     ipc::HostCommands hostCommands_;
     std::atomic_bool stopping_ = false;

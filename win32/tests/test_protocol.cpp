@@ -10,7 +10,7 @@ int main() {
     wideIds.requestId = 0x8877665544332211ULL;
     wideIds.contextId = 0xffeeddccbbaa0099ULL;
     const std::vector<uint8_t> expected = {
-        0x58, 0x43, 0x57, 0x46, 14,   0,    8,    0,    0,    0,
+        0x58, 0x43, 0x57, 0x46, 15,   0,    8,    0,    0,    0,
         0,    0,    0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
         0x99, 0,    0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
     assert(encodeFrame(wideIds) == expected && expected.size() == kHeaderSize);
@@ -27,12 +27,16 @@ int main() {
     assert(globalSettingsRequest(MessageType::StopServices));
     assert(globalSettingsRequest(MessageType::GetGlobalSettings));
     assert(globalSettingsRequest(MessageType::SetGlobalSettings));
-    assert(kVersion == 14);
+    assert(kVersion == 15);
     GlobalSettings global{UiLanguage::TraditionalChinese, 42, true};
+    global.candidateLayout = CandidateLayout::Horizontal;
     GlobalSettings restoredGlobal;
     assert(decodeGlobalSettings(encodeGlobalSettings(global), restoredGlobal) &&
            restoredGlobal == global);
     auto globalPayload = encodeGlobalSettings(global);
+    globalPayload.back() = 2;
+    assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
+    globalPayload = encodeGlobalSettings(global);
     globalPayload[9] = 2;
     assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
     globalPayload = encodeGlobalSettings(global);
@@ -99,6 +103,7 @@ int main() {
     snapshot.revision = 42;
     snapshot.settingsRevision = 7;
     snapshot.detailedLogging = true;
+    snapshot.candidateLayout = CandidateLayout::Horizontal;
     snapshot.statusMenuRevision = 99;
     snapshot.inputMethodSubMode = "schema";
     snapshot.inputMethodSubModeLabel = "S";
@@ -109,6 +114,7 @@ int main() {
     auto payload = encodeKeyReply(snapshot);
     assert(decodeKeyReply(payload, reply));
     assert(reply.consumed && reply.detailedLogging &&
+           reply.candidateLayout == CandidateLayout::Horizontal &&
            reply.preedit == "nihao" && reply.preeditCursor == 5);
     assert(reply.revision == 42 && reply.settingsRevision == 7 &&
            reply.candidateGeneration == 11 && reply.statusMenuRevision == 99 &&
@@ -123,6 +129,9 @@ int main() {
                                truncated));
     }
     const auto emptyReply = encodeKeyReply(KeyReply{});
+    auto invalidLayout = emptyReply;
+    invalidLayout.back() = 2;
+    assert(!decodeKeyReply(invalidLayout, reply));
     auto invalidLogging = emptyReply;
     // Flags, nine string lengths, preedit cursor and two revisions.
     invalidLogging[2 + 9 * 4 + 4 + 2 * 8] = 2;

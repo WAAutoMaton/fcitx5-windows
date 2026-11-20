@@ -119,8 +119,9 @@ int main() {
     {
         std::ifstream input(file);
         const std::string contents{std::istreambuf_iterator<char>(input), {}};
-        assert(contents.find("Version=3") != std::string::npos);
+        assert(contents.find("Version=4") != std::string::npos);
         assert(contents.find("DetailedLogging=false") != std::string::npos);
+        assert(contents.find("CandidateLayout=vertical") != std::string::npos);
     }
     request.detailedLogging = true;
     assert(i18n::saveSettings(file, request, actual) ==
@@ -156,6 +157,25 @@ int main() {
     assert(i18n::readSettings(file, reloaded) && reloaded.revision == 23 &&
            reloaded.detailedLogging &&
            reloaded.shortcuts == ipc::defaultShortcuts());
+    assert(ipc::replaceFile(
+        file, "[General]\nVersion=3\nLanguage=en\nRevision=24\n"
+              "DetailedLogging=true\n[Shortcuts]\n0=Control+Shift+J\n"
+              "1=Control+Alt+1\n2=Control+Alt+2\n3=Control+Alt+3\n"
+              "4=Control+Alt+4\n5=\n"));
+    assert(i18n::readSettings(file, reloaded) && reloaded.revision == 24 &&
+           reloaded.candidateLayout == ipc::CandidateLayout::Vertical &&
+           reloaded.shortcuts[0] == "Control+Shift+J" &&
+           reloaded.shortcuts[5].empty());
+    request = reloaded;
+    request.candidateLayout = ipc::CandidateLayout::Horizontal;
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::None);
+    assert(i18n::readSettings(file, reloaded) && reloaded == actual &&
+           reloaded.revision == 25 && reloaded.shortcuts == request.shortcuts &&
+           reloaded.candidateLayout == request.candidateLayout);
+    request.candidateLayout = ipc::CandidateLayout::Vertical;
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::Conflict);
     assert(ipc::replaceFile(
         file,
         "[General]\nVersion=2\nLanguage=en\nRevision=1\nDetailedLogging=1\n"));

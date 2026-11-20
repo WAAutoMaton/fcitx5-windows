@@ -11,7 +11,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 14;
+constexpr uint16_t kVersion = 15;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -64,6 +64,11 @@ enum class MessageType : uint16_t {
 };
 
 enum class CandidateAction : uint8_t { Select, Finalize, Abort };
+enum class CandidateLayout : uint8_t { Vertical, Horizontal };
+
+constexpr bool validCandidateLayout(CandidateLayout layout) {
+    return layout <= CandidateLayout::Horizontal;
+}
 
 enum class PinyinScheme : uint8_t { Full = 0, Double = 1 };
 enum class ShuangpinProfile : uint8_t {
@@ -108,6 +113,7 @@ struct GlobalSettings {
     uint64_t revision = 1;
     bool detailedLogging = false;
     Shortcuts shortcuts = defaultShortcuts();
+    CandidateLayout candidateLayout = CandidateLayout::Vertical;
     bool operator==(const GlobalSettings &) const = default;
 };
 
@@ -241,6 +247,7 @@ struct KeyReply {
     bool hasPrev = false;
     bool hasNext = false;
     std::vector<Candidate> candidates;
+    CandidateLayout candidateLayout = CandidateLayout::Vertical;
 };
 
 struct Frame {
@@ -368,6 +375,7 @@ encodeGlobalSettings(const GlobalSettings &settings) {
     writer.u8(settings.detailedLogging);
     for (const auto &keys : settings.shortcuts)
         writer.string(keys);
+    writer.u8(static_cast<uint8_t>(settings.candidateLayout));
     return writer.take();
 }
 
@@ -388,6 +396,12 @@ inline bool readGlobalSettings(Reader &reader, GlobalSettings &settings) {
     for (auto &keys : result.shortcuts)
         if (!reader.string(keys, 512))
             return false;
+    uint8_t candidateLayout = 0;
+    if (!reader.u8(candidateLayout))
+        return false;
+    result.candidateLayout = static_cast<CandidateLayout>(candidateLayout);
+    if (!validCandidateLayout(result.candidateLayout))
+        return false;
     settings = std::move(result);
     return true;
 }
@@ -601,6 +615,7 @@ inline std::vector<uint8_t> encodeKeyReply(const KeyReply &reply) {
         writer.string(candidate.label);
         writer.string(candidate.comment);
     }
+    writer.u8(static_cast<uint8_t>(reply.candidateLayout));
     return writer.take();
 }
 
@@ -644,9 +659,13 @@ inline bool decodeKeyReply(const std::vector<uint8_t> &payload,
             return false;
         }
     }
-    if (reader.remaining() != 0) {
+    uint8_t candidateLayout = 0;
+    if (!reader.u8(candidateLayout) || reader.remaining()) {
         return false;
     }
+    result.candidateLayout = static_cast<CandidateLayout>(candidateLayout);
+    if (!validCandidateLayout(result.candidateLayout))
+        return false;
     reply = std::move(result);
     return true;
 }
