@@ -22,3 +22,6 @@
 [submodule "plugins/fcitx5-zhuyin"]
 	path = plugins/fcitx5-zhuyin
 	url = https://github.com/fcitx/fcitx5-zhuyin
+[submodule "plugins/fcitx5-mozc"]
+	path = plugins/fcitx5-mozc
+	url = https://github.com/fcitx-contrib/fcitx5-mozc

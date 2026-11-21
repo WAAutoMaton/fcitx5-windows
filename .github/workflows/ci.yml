@@ -101,6 +101,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Bundled Zhuyin probe failed.' }
             & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default zhuyin --absent
             if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains Zhuyin.' }
+            & ./dist/ci-runtime-full/bin/addon_probe.exe "$PWD/dist/ci-runtime-full" --default mozc nihon --preedit
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled Mozc probe failed.' }
+            & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default mozc --absent
+            if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains Mozc.' }
             $env:PATH = "$PWD/dist/ci-runtime-full/bin;$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/bin;$env:PATH"
             & ./build/ci-x64/plugins/zhuyin-deps/zhuyin_model_probe.exe "$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/share/fcitx5/zhuyin"
             if ($LASTEXITCODE -ne 0) { throw 'Zhuyin model save/reload probe failed.' }
@@ -381,6 +385,14 @@ jobs:
               'table.conf', 'easysymbols.txt')) {
             $expected += "$zhuyin/share/fcitx5/zhuyin/$name"
           }
+          $mozc = 'plugins/fcitx5-mozc'
+          $expected += @("$mozc/lib/fcitx5/libmozc.dll",
+            "$mozc/share/fcitx5/addon/mozc.conf", "$mozc/share/fcitx5/inputmethod/mozc.conf",
+            "$mozc/licenses/LICENSE", "$mozc/licenses/mozc/LICENSE",
+            "$mozc/licenses/abseil-cpp/LICENSE", "$mozc/licenses/protobuf/LICENSE",
+            "$mozc/share/locale/ja/LC_MESSAGES/fcitx5-mozc.mo",
+            "$mozc/share/locale/zh_CN/LC_MESSAGES/fcitx5-mozc.mo",
+            "$mozc/share/locale/zh_TW/LC_MESSAGES/fcitx5-mozc.mo")
           foreach ($path in $expected) {
             $count = @($manifest.files | Where-Object path -eq $path).Count
             $required = if ('${{ matrix.edition }}' -eq 'full') { 1 } else { 0 }

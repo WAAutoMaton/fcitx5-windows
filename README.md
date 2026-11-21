@@ -7,9 +7,9 @@ process, x64 and x86 TSF DLLs integrate with applications, and a WinUI 3
 settings app manages input methods and engine options.
 
 The `base` edition provides Pinyin, Shuangpin and the `fcitx5-chinese-addons`
-table input methods; the `full` edition adds Rime, Wenzhounese, Zhuyin and
-`fcitx5-table-extra`. Unified x64 installers are published by the CI and Nightly
-release workflow.
+table input methods; the `full` edition adds Mozc (Japanese), Rime, Wenzhounese,
+Zhuyin and `fcitx5-table-extra`. Unified x64 installers are published by the CI
+and Nightly release workflow.
 
 ## Features
 
@@ -19,8 +19,9 @@ release workflow.
   - Base table methods: Wubi, Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan,
     Wanfeng and Ziranma (available when their engine and table data are
     installed).
-  - Full edition extras: Rime, Wenzhounese, Zhuyin and 25 additional tables
-    (including Wubi98, Zhengma, Boshiamy, Cangjie5 and Jyutping Table).
+  - Full edition extras: Mozc (Japanese), Rime, Wenzhounese, Zhuyin and 25
+    additional tables (including Wubi98, Zhengma, Boshiamy, Cangjie5 and
+    Jyutping Table).
   - Multilingual keyboard entries that pass keys through using the active
     Windows keyboard layout.
 - **Candidate window**:
@@ -66,8 +67,8 @@ publishes four x64 installers and their SHA256 checksums for Windows 10 version
 Settings:
 
 - `base`: bundles `fcitx5-chinese-addons`.
-- `full`: bundles `fcitx5-chinese-addons`, `fcitx5-rime`, `fcitx5-table-extra`,
-  `fcitx5-wenzhounese` and `fcitx5-zhuyin`.
+- `full`: bundles `fcitx5-chinese-addons`, `fcitx5-mozc`, `fcitx5-rime`,
+  `fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`.
 
 Each edition comes in two runtime variants:
 

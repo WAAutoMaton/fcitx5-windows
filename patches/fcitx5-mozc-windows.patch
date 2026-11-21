@@ -1,0 +1,689 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d546c8f..b11bcef 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -8,20 +8,30 @@ option(BUILD_MOZC_ADDON "Build Mozc Fcitx5 Addon" ON)
+ 
+ include(GNUInstallDirs)
+ set(CMAKE_CXX_STANDARD 20)
+-add_compile_options(-fPIC)
++if (NOT WIN32)
++    add_compile_options(-fPIC)
++endif()
++
++find_package(Python3 REQUIRED COMPONENTS Interpreter)
+ 
+ set(MOZC_SRC_DIR "${PROJECT_SOURCE_DIR}/mozc/src")
+ 
+ if (NOT DEFINED MOZC_TARGET)
++    set(ABSL_PROPAGATE_CXX_STD ON)
+     add_subdirectory(abseil-cpp)
+     # Not installing as we'll regenerate libabsl.a
+ 
+     set(protobuf_INSTALL OFF)
+     set(protobuf_BUILD_TESTS OFF)
+     set(protobuf_BUILD_LIBUPB OFF) # No binary for iOS.
++    if (WIN32)
++        set(protobuf_WITH_ZLIB OFF)
++    endif()
+     add_subdirectory("protobuf")
+-    install(TARGETS utf8_validity DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+-    install(TARGETS libprotobuf DESTINATION "${CMAKE_INSTALL_LIBDIR}")
++    if (NOT WIN32)
++        install(TARGETS utf8_validity DESTINATION "${CMAKE_INSTALL_LIBDIR}")
++        install(TARGETS libprotobuf DESTINATION "${CMAKE_INSTALL_LIBDIR}")
++    endif()
+ 
+     include(cmake/protobuf.cmake)
+     include(cmake/base.cmake)
+diff --git a/cmake/base.cmake b/cmake/base.cmake
+index 2246dbc..585e091 100644
+--- a/cmake/base.cmake
++++ b/cmake/base.cmake
+@@ -1,4 +1,5 @@
+ # Generate config_file_stream_data.inc
++file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/base")
+ set(config_file_stream_data_inc "${PROJECT_BINARY_DIR}/base/config_file_stream_data.inc")
+ 
+ set(keymap_files
+@@ -40,7 +41,7 @@ list(TRANSFORM composition_table PREPEND "preedit/")
+ 
+ add_custom_command(
+     OUTPUT "${config_file_stream_data_inc}"
+-    COMMAND python "${MOZC_SRC_DIR}/base/gen_config_file_stream_data.py" --output "${config_file_stream_data_inc}" ${composition_table} ${keymap_files}
++    COMMAND "${Python3_EXECUTABLE}" "${MOZC_SRC_DIR}/base/gen_config_file_stream_data.py" --output "${config_file_stream_data_inc}" ${composition_table} ${keymap_files}
+     WORKING_DIRECTORY "${MOZC_SRC_DIR}/data"
+     COMMENT "Generating config_file_stream_data.inc"
+ )
+@@ -49,10 +50,16 @@ add_custom_target(gen_config_file_stream_data DEPENDS "${config_file_stream_data
+ 
+ # Generate version_def.h
+ set(version_def_h "${PROJECT_BINARY_DIR}/base/version_def.h")
++if (WIN32)
++    set(MOZC_VERSION_TARGET_PLATFORM "Windows")
++else()
++    set(MOZC_VERSION_TARGET_PLATFORM "Mac")
++endif()
+ 
+ add_custom_command(
+     OUTPUT "${version_def_h}"
+-    COMMAND "${PROJECT_SOURCE_DIR}/scripts/gen_version_def.sh" "${PROJECT_BINARY_DIR}/base/mozc_version.txt" "${version_def_h}"
++    COMMAND "${Python3_EXECUTABLE}" build_tools/mozc_version.py --template_path version.bzl --target_platform=${MOZC_VERSION_TARGET_PLATFORM} --output "${PROJECT_BINARY_DIR}/base/mozc_version.txt"
++    COMMAND "${CMAKE_COMMAND}" -E env PYTHONPATH=. "${Python3_EXECUTABLE}" build_tools/replace_version.py --version_file "${PROJECT_BINARY_DIR}/base/mozc_version.txt" --branding Mozc --input base/version_def_template.h --output "${version_def_h}"
+     WORKING_DIRECTORY "${MOZC_SRC_DIR}"
+     COMMENT "Generating version_def.h"
+ )
+@@ -102,4 +109,9 @@ if (APPLE)
+     list(APPEND MOZC_BASE_SRCS
+         "${PROJECT_SOURCE_DIR}/src/mac_util.mm"
+     )
++elseif (WIN32)
++    list(APPEND MOZC_BASE_SRCS
++        "${MOZC_SRC_DIR}/base/win32/wide_char.cc"
++        "${PROJECT_SOURCE_DIR}/src/win32_compat.cc"
++    )
+ endif()
+diff --git a/cmake/dictionary.cmake b/cmake/dictionary.cmake
+index c1184bf..a2421e1 100644
+--- a/cmake/dictionary.cmake
++++ b/cmake/dictionary.cmake
+@@ -1,22 +1,25 @@
+ # Generate pos_matcher_impl.inc
++file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/dictionary")
+ set(pos_matcher_impl_inc "${PROJECT_BINARY_DIR}/dictionary/pos_matcher_impl.inc")
+ 
+ add_custom_command(
+     OUTPUT "${pos_matcher_impl_inc}"
+-    COMMAND "${PROJECT_SOURCE_DIR}/scripts/gen_pos_matcher_code.sh" "${pos_matcher_impl_inc}"
++    COMMAND "${CMAKE_COMMAND}" -E env PYTHONPATH=. "${Python3_EXECUTABLE}" dictionary/gen_pos_matcher_code.py --pos_matcher_rule_file=data/rules/pos_matcher_rule.def --output_pos_matcher_h=${pos_matcher_impl_inc}
+     WORKING_DIRECTORY "${MOZC_SRC_DIR}"
+     COMMENT "Generating pos_matcher_impl.inc"
+ )
+ 
+ add_custom_target(gen_pos_matcher_impl_inc DEPENDS "${pos_matcher_impl_inc}")
+-install(FILES "${pos_matcher_impl_inc}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/mozc/dictionary")
++if (NOT WIN32)
++    install(FILES "${pos_matcher_impl_inc}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/mozc/dictionary")
++endif()
+ 
+ # Generate pos_map.inc
+ set(pos_map_inc "${PROJECT_BINARY_DIR}/dictionary/pos_map.inc")
+ 
+ add_custom_command(
+     OUTPUT "${pos_map_inc}"
+-    COMMAND "${PROJECT_SOURCE_DIR}/scripts/gen_pos_map.sh" "${pos_map_inc}"
++    COMMAND "${CMAKE_COMMAND}" -E env PYTHONPATH=. "${Python3_EXECUTABLE}" dictionary/gen_pos_map.py --user_pos_file data/rules/user_pos.def --third_party_pos_map_file data/rules/third_party_pos_map.def --output "${pos_map_inc}"
+     WORKING_DIRECTORY "${MOZC_SRC_DIR}"
+     COMMENT "Generating pos_map.inc"
+ )
+@@ -28,7 +31,7 @@ set(pos_cost_map_inc "${PROJECT_BINARY_DIR}/dictionary/pos_cost_map.inc")
+ 
+ add_custom_command(
+     OUTPUT "${pos_cost_map_inc}"
+-    COMMAND "${PROJECT_SOURCE_DIR}/scripts/gen_pos_cost_map.sh" "${pos_cost_map_inc}"
++    COMMAND "${CMAKE_COMMAND}" -E env PYTHONPATH=. "${Python3_EXECUTABLE}" dictionary/gen_pos_cost_map.py --user_pos_file data/rules/user_pos.def --output "${pos_cost_map_inc}"
+     WORKING_DIRECTORY "${MOZC_SRC_DIR}"
+     COMMENT "Generating pos_cost_map.inc"
+ )
+diff --git a/cmake/mozc-static.cmake b/cmake/mozc-static.cmake
+index ed79ece..87ca697 100644
+--- a/cmake/mozc-static.cmake
++++ b/cmake/mozc-static.cmake
+@@ -22,6 +22,24 @@ target_include_directories(mozc-static PRIVATE
+     "${PROJECT_BINARY_DIR}"
+ )
+ 
++if (WIN32)
++    target_include_directories(mozc-static PUBLIC
++        "${PROJECT_SOURCE_DIR}/src/win32_compat"
++    )
++    target_compile_definitions(mozc-static PRIVATE
++        NOMINMAX
++        UNICODE
++        _UNICODE
++    )
++    target_link_libraries(mozc-static PUBLIC
++        advapi32
++        bcrypt
++        crypt32
++        imm32
++        shell32
++    )
++endif()
++
+ # Mozc requires char to be unsigned, as it's used as array index.
+ target_compile_options(mozc-static PRIVATE -funsigned-char)
+ 
+@@ -36,4 +54,6 @@ target_compile_definitions(mozc-static PUBLIC
+ 
+ add_dependencies(mozc-static gen)
+ 
+-install(TARGETS mozc-static DESTINATION "${CMAKE_INSTALL_LIBDIR}")
++if (NOT WIN32)
++    install(TARGETS mozc-static DESTINATION "${CMAKE_INSTALL_LIBDIR}")
++endif()
+diff --git a/cmake/protobuf.cmake b/cmake/protobuf.cmake
+index 0089e28..cdf9f9f 100644
+--- a/cmake/protobuf.cmake
++++ b/cmake/protobuf.cmake
+@@ -40,5 +40,7 @@ foreach(PROTO_SRC ${PROTO_SRCS})
+         add_dependencies(${target_name} protoc)
+     endif()
+     add_dependencies(gen ${target_name})
+-    install(FILES "${proto_h}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/mozc/${PROTO_DIR}")
++    if (NOT WIN32)
++        install(FILES "${proto_h}" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/mozc/${PROTO_DIR}")
++    endif()
+ endforeach()
+diff --git a/src/process.cc b/src/process.cc
+index 38370c4..1e5d151 100644
+--- a/src/process.cc
++++ b/src/process.cc
+@@ -1,7 +1,9 @@
+ #include "base/process.h"
+ 
+ namespace mozc {
+-bool Process::OpenBrowser(absl::string_view url) {}
+-bool Process::SpawnMozcProcess(absl::string_view filename,
+-                               absl::string_view arg, size_t *pid) {}
++bool Process::OpenBrowser(absl::string_view /*url*/) { return false; }
++bool Process::SpawnMozcProcess(absl::string_view /*filename*/,
++                               absl::string_view /*arg*/, size_t * /*pid*/) {
++  return false;
++}
+ } // namespace mozc
+diff --git a/src/unix/fcitx5/CMakeLists.txt b/src/unix/fcitx5/CMakeLists.txt
+index de446b4..dc878cf 100644
+--- a/src/unix/fcitx5/CMakeLists.txt
++++ b/src/unix/fcitx5/CMakeLists.txt
+@@ -30,6 +30,15 @@ elseif (APPLE AND NOT IOS)
+         "/Library/Input Methods/Fcitx5.app/Contents/include"
+         "/Library/Input Methods/Fcitx5.app/Contents/include/Fcitx5/Module"
+     )
++elseif (WIN32)
++    target_include_directories(mozc PRIVATE
++        "${FCITX_SYS_INSTALL_PREFIX}/include"
++        "${FCITX_SYS_INSTALL_PREFIX}/include/Fcitx5/Module"
++    )
++    target_compile_definitions(mozc PRIVATE
++        NOMINMAX
++        NOGDI
++    )
+ endif()
+ 
+ target_link_libraries(mozc
+@@ -37,7 +46,14 @@ target_link_libraries(mozc
+     ${MOZC_TARGET}
+ )
+ 
+-install(TARGETS mozc DESTINATION "${CMAKE_INSTALL_LIBDIR}/fcitx5")
++if (WIN32)
++    install(TARGETS mozc
++        RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}/fcitx5"
++        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/fcitx5"
++    )
++else()
++    install(TARGETS mozc DESTINATION "${CMAKE_INSTALL_LIBDIR}/fcitx5")
++endif()
+ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/mozc.conf" DESTINATION "${FCITX_INSTALL_PKGDATADIR}/inputmethod" COMPONENT config)
+ configure_file("${PROJECT_SOURCE_DIR}/patches/mozc-addon.conf.in" mozc-addon.conf)
+ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mozc-addon.conf" RENAME mozc.conf DESTINATION "${FCITX_INSTALL_PKGDATADIR}/addon" COMPONENT config)
+diff --git a/src/unix/fcitx5/mozc_client_interface.h b/src/unix/fcitx5/mozc_client_interface.h
+index 3a885be..44e95a8 100644
+--- a/src/unix/fcitx5/mozc_client_interface.h
++++ b/src/unix/fcitx5/mozc_client_interface.h
+@@ -39,6 +39,7 @@ class MozcClientInterface {
+ };
+ 
+ std::unique_ptr<MozcClientInterface> createClient();
++void shutdownClient();
+ 
+ }  // namespace fcitx
+ #endif
+diff --git a/src/unix/fcitx5/mozc_direct_client.cc b/src/unix/fcitx5/mozc_direct_client.cc
+index 624bc16..8ae7e08 100644
+--- a/src/unix/fcitx5/mozc_direct_client.cc
++++ b/src/unix/fcitx5/mozc_direct_client.cc
+@@ -5,10 +5,12 @@
+ #include <cstddef>
+ #include <cstdint>
+ #include <memory>
++#include <mutex>
+ #include <string>
+ #include <string_view>
+ #include <utility>
+ 
++#include "absl/base/no_destructor.h"
+ #include "absl/log/check.h"
+ #include "absl/log/log.h"
+ #include "config/config_handler.h"
+@@ -33,10 +35,23 @@ std::unique_ptr<mozc::SessionHandler> CreateSessionHandler() {
+   return result;
+ }
+ 
++struct SessionHandlerState {
++  std::mutex mutex;
++  std::unique_ptr<mozc::SessionHandler> handler;
++};
++
++SessionHandlerState& GetSessionHandlerState() {
++  static absl::NoDestructor<SessionHandlerState> state;
++  return *state;
++}
++
+ mozc::SessionHandler* GetSessionHandler() {
+-  static std::unique_ptr<mozc::SessionHandler> g_session_handler =
+-      CreateSessionHandler();
+-  return g_session_handler.get();
++  auto& state = GetSessionHandlerState();
++  std::lock_guard<std::mutex> lock(state.mutex);
++  if (!state.handler) {
++    state.handler = CreateSessionHandler();
++  }
++  return state.handler.get();
+ }
+ 
+ }  // namespace
+@@ -277,4 +292,14 @@ std::unique_ptr<MozcClientInterface> createClient() {
+   return std::make_unique<MozcDirectClient>();
+ }
+ 
++void shutdownClient() {
++  std::unique_ptr<mozc::SessionHandler> handler;
++  {
++    auto& state = GetSessionHandlerState();
++    std::lock_guard<std::mutex> lock(state.mutex);
++    handler = std::move(state.handler);
++  }
++  handler.reset();
++}
++
+ }  // namespace fcitx
+diff --git a/src/unix/fcitx5/mozc_engine.cc b/src/unix/fcitx5/mozc_engine.cc
+index 8bf1f44..83cd7d3 100644
+--- a/src/unix/fcitx5/mozc_engine.cc
++++ b/src/unix/fcitx5/mozc_engine.cc
+@@ -21,9 +21,11 @@
+ 
+ #include <fcitx-config/iniparser.h>
+ #include <fcitx-config/rawconfig.h>
++#include <fcitx-utils/fs.h>
+ #include <fcitx-utils/log.h>
+ #include <fcitx-utils/macros.h>
+ #include <fcitx-utils/semver.h>
++#include <fcitx-utils/standardpaths.h>
+ #include <fcitx-utils/stringutils.h>
+ #include <fcitx/action.h>
+ #include <fcitx/addoninstance.h>
+@@ -37,11 +39,18 @@
+ #include <fcitx/userinterfacemanager.h>
+ 
+ #include <cstddef>
++#include <filesystem>
+ #include <memory>
++#include <mutex>
+ #include <string>
+ 
++#ifdef _WIN32
++#include <windows.h>
++#endif
++
+ #include "base/init_mozc.h"
+ #include "base/process.h"
++#include "base/system_util.h"
+ #include "protocol/commands.pb.h"
+ #include "unix/fcitx5/i18nwrapper.h"
+ #include "unix/fcitx5/mozc_client_interface.h"
+@@ -130,11 +139,34 @@ static_assert(mozc::commands::NUM_OF_COMPOSITIONS == kNumCompositionModes,
+               "number of modes must match");
+ 
+ Instance* Init(Instance* instance) {
+-  int argc = 1;
+-  char argv0[] = "fcitx_mozc";
+-  char* _argv[] = {argv0};
+-  char** argv = _argv;
+-  mozc::InitMozc(argv[0], &argc, &argv);
++  static std::once_flag initFlag;
++  std::call_once(initFlag, []() {
++#ifdef _WIN32
++    const auto userRoot =
++        StandardPaths::global().userDirectory(StandardPathsType::PkgData);
++    if (!userRoot.empty()) {
++      const auto userDir = userRoot / "mozc";
++      if (!fs::makePath(userDir) && !std::filesystem::is_directory(userDir)) {
++        FCITX_WARN() << "Failed to create Mozc user directory: " << userDir;
++      }
++      const auto utf8 = userDir.generic_u8string();
++      mozc::SystemUtil::SetUserProfileDirectory(
++          std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size()));
++    } else {
++      // Avoid touching the real user profile when user paths are disabled.
++      mozc::SystemUtil::SetUserProfileDirectory("NUL");
++    }
++    const auto previousFilter = ::SetUnhandledExceptionFilter(nullptr);
++#endif
++    int argc = 1;
++    char argv0[] = "fcitx_mozc";
++    char* _argv[] = {argv0};
++    char** argv = _argv;
++    mozc::InitMozc(argv[0], &argc, &argv);
++#ifdef _WIN32
++    ::SetUnhandledExceptionFilter(previousFilter);
++#endif
++  });
+   return instance;
+ }
+ 
+@@ -165,6 +197,7 @@ MozcEngine::MozcEngine(Instance* instance)
+     i++;
+   }
+ 
++#ifndef _WIN32
+   separatorAction_.setSeparator(true);
+   instance_->userInterfaceManager().registerAction("mozc-separator",
+                                                    &separatorAction_);
+@@ -213,6 +246,7 @@ MozcEngine::MozcEngine(Instance* instance)
+   toolMenu_.addAction(&dictionaryToolAction_);
+   toolMenu_.addAction(&addWordAction_);
+   toolMenu_.addAction(&aboutAction_);
++#endif
+ 
+   toolAction_.setMenu(&toolMenu_);
+ 
+@@ -226,7 +260,17 @@ MozcEngine::MozcEngine(Instance* instance)
+   reloadConfig();
+ }
+ 
+-MozcEngine::~MozcEngine() {}
++MozcEngine::~MozcEngine() {
++  instance_->inputContextManager().foreach ([this](InputContext* ic) {
++    if (auto* state = this->mozcState(ic)) {
++      state->ReleaseClient();
++    }
++    return true;
++  });
++  pool_.reset();
++  client_.reset();
++  shutdownClient();
++}
+ 
+ void MozcEngine::setConfig(const RawConfig& config) {
+   config_.load(config, true);
+diff --git a/src/unix/fcitx5/mozc_engine.h b/src/unix/fcitx5/mozc_engine.h
+index c931ba4..0b6f310 100644
+--- a/src/unix/fcitx5/mozc_engine.h
++++ b/src/unix/fcitx5/mozc_engine.h
+@@ -72,11 +72,14 @@ FCITX_CONFIG_ENUM_NAME_WITH_I18N(CompositionMode, N_("Direct"), N_("Hiragana"),
+                                  N_("Full ASCII"), N_("Half Katakana"));
+ 
+ FCITX_CONFIGURATION(
+-    MozcEngineConfig, const std::string toolPath_ = mozc::FileUtil::JoinPath(
+-                          mozc::SystemUtil::GetServerDirectory(), "mozc_tool");
++    MozcEngineConfig,
++#ifndef _WIN32
++    const std::string toolPath_ = mozc::FileUtil::JoinPath(
++        mozc::SystemUtil::GetServerDirectory(), "mozc_tool");
+     std::string toolCommand(const char* arg) {
+       return stringutils::concat(toolPath_, " ", arg);
+     }
++#endif
+ 
+     OptionWithAnnotation<CompositionMode, CompositionModeI18NAnnotation>
+         initialMode{this, "InitialMode", _("Initial Mode"),
+@@ -97,6 +100,7 @@ FCITX_CONFIGURATION(
+     Option<Key> expand{this, "ExpandKey", _("Hotkey to expand usage"),
+                        Key("Control+Alt+H")};
+ 
++#ifndef _WIN32
+     ExternalOption configTool{this, "ConfigTool", _("Configuration Tool"),
+                               toolCommand("--mode=config_dialog")};
+     ExternalOption dictTool{this, "Dictionary Tool", _("Dictionary Tool"),
+@@ -104,7 +108,9 @@ FCITX_CONFIGURATION(
+     ExternalOption addTool{this, "Add Word", _("Add Word"),
+                            toolCommand("--mode=word_register_dialog")};
+     ExternalOption aboutTool{this, "About Mozc", _("About Mozc"),
+-                             toolCommand("--mode=about_dialog")};);
++                             toolCommand("--mode=about_dialog")};
++#endif
++);
+ 
+ class MozcModeSubAction : public SimpleAction {
+  public:
+@@ -165,9 +171,11 @@ class MozcEngine final : public InputMethodEngineV2 {
+   std::vector<std::unique_ptr<MozcModeSubAction>> modeActions_;
+   std::unique_ptr<HandlerTableEntry<EventHandler>> globalConfigReloadHandle_;
+ 
++#ifndef _WIN32
+   SimpleAction configToolAction_, dictionaryToolAction_, addWordAction_,
+       aboutAction_;
+   SimpleAction separatorAction_;
++#endif
+   Menu toolMenu_;
+   MozcEngineConfig config_;
+   bool deactivating_ = false;
+diff --git a/src/unix/fcitx5/mozc_engine_factory.cc b/src/unix/fcitx5/mozc_engine_factory.cc
+index 7b51b3d..7bd076d 100644
+--- a/src/unix/fcitx5/mozc_engine_factory.cc
++++ b/src/unix/fcitx5/mozc_engine_factory.cc
+@@ -18,11 +18,14 @@
+  */
+ #include <fcitx-utils/fs.h>
+ #include <fcitx-utils/misc.h>
++#include <fcitx-utils/standardpaths.h>
+ #include <fcitx-utils/stringutils.h>
+ #include <fcitx/addonfactory.h>
+ #include <fcitx/addoninstance.h>
+ 
+ #include <cstdlib>
++#include <filesystem>
++#include <string>
+ #include <string_view>
+ 
+ #include "base/system_util.h"
+@@ -33,6 +36,20 @@ namespace fcitx {
+ class MozcEngineFactory : public AddonFactory {
+  public:
+   AddonInstance* create(AddonManager* manager) override {
++#ifdef _WIN32
++    const auto addonConf = StandardPaths::global().locate(
++        StandardPathsType::Data, "fcitx5/addon/mozc.conf");
++    if (!addonConf.empty()) {
++      const auto localeDir =
++          addonConf.parent_path().parent_path().parent_path() / "locale";
++      if (std::filesystem::is_directory(localeDir)) {
++        const auto utf8 = localeDir.generic_u8string();
++        const std::string localePath(reinterpret_cast<const char*>(utf8.data()),
++                                     utf8.size());
++        registerDomain("fcitx5-mozc", localePath.c_str());
++      }
++    }
++#else
+     // We don't have a direct way to detect, so we simply try.
+     auto baseDirectory = makeUniqueCPtr(
+         realpath(mozc::SystemUtil::GetServerDirectory().data(), nullptr));
+@@ -61,14 +78,17 @@ class MozcEngineFactory : public AddonFactory {
+       }
+       numberOfSlash -= 1;
+     }
++#endif
+     return new MozcEngine(manager->instance());
+   }
+ 
+  private:
++#ifndef _WIN32
+   UniqueCPtr<char> cdUp(const char* path) {
+     return makeUniqueCPtr(
+         realpath(stringutils::joinPath(path, "..").data(), nullptr));
+   }
++#endif
+ };
+ }  // namespace fcitx
+ 
+diff --git a/src/win32_compat.cc b/src/win32_compat.cc
+new file mode 100644
+index 0000000..7f3a252
+--- /dev/null
++++ b/src/win32_compat.cc
+@@ -0,0 +1,74 @@
++#ifdef _WIN32
++
++#include <windows.h>
++#include <sddl.h>
++#include <shlobj.h>
++
++#include <optional>
++#include <string>
++#include <string_view>
++
++#include "absl/base/no_destructor.h"
++#include "base/win32/wide_char.h"
++#include "base/win32/win_sandbox.h"
++#include "base/win32/win_util.h"
++
++namespace mozc {
++namespace {
++
++std::optional<std::string> GetFolderUtf8(int csidl) {
++  wchar_t path[MAX_PATH] = {};
++  if (FAILED(::SHGetFolderPathW(nullptr, csidl, nullptr, SHGFP_TYPE_CURRENT,
++                                path))) {
++    return std::nullopt;
++  }
++  return win32::WideToUtf8(path);
++}
++
++}  // namespace
++
++const std::optional<std::wstring>& WinUtil::GetSystem32Path() {
++  static const absl::NoDestructor<std::optional<std::wstring>> kSystem32Path(
++      []() -> std::optional<std::wstring> {
++        wchar_t path[MAX_PATH] = {};
++        const UINT len = ::GetSystemDirectoryW(path, MAX_PATH);
++        if (len == 0 || len >= MAX_PATH) {
++          return std::nullopt;
++        }
++        return std::wstring(path, len);
++      }());
++  return *kSystem32Path;
++}
++
++const std::optional<std::string>& WinUtil::GetProgramFilesX86Path() {
++  static const absl::NoDestructor<std::optional<std::string>> kProgramFilesPath(
++      GetFolderUtf8(CSIDL_PROGRAM_FILESX86));
++  return *kProgramFilesPath;
++}
++
++const std::optional<std::string>& WinUtil::GetLocalAppDataPath() {
++  static const absl::NoDestructor<std::optional<std::string>> kLocalAppDataPath(
++      GetFolderUtf8(CSIDL_LOCAL_APPDATA));
++  return *kLocalAppDataPath;
++}
++
++wil::unique_hlocal_security_descriptor WinSandbox::MakeSecurityDescriptor(
++    ObjectSecurityType /*shareble_object_type*/) {
++  PSECURITY_DESCRIPTOR sd = nullptr;
++  // Grant access to SYSTEM, Administrators, and the current object owner.
++  if (!::ConvertStringSecurityDescriptorToSecurityDescriptorW(
++          L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)", SDDL_REVISION_1, &sd,
++          nullptr)) {
++    return nullptr;
++  }
++  return wil::unique_hlocal_security_descriptor(sd);
++}
++
++bool WinSandbox::EnsureAllApplicationPackagesPermisssion(
++    std::wstring_view /*file_name*/, AppContainerVisibilityType /*type*/) {
++  return true;
++}
++
++}  // namespace mozc
++
++#endif  // _WIN32
+diff --git a/src/win32_compat/wil/resource.h b/src/win32_compat/wil/resource.h
+new file mode 100644
+index 0000000..a18fdf6
+--- /dev/null
++++ b/src/win32_compat/wil/resource.h
+@@ -0,0 +1,82 @@
++#ifndef FCITX5_MOZC_WIN32_COMPAT_WIL_RESOURCE_H_
++#define FCITX5_MOZC_WIN32_COMPAT_WIL_RESOURCE_H_
++
++#include <windows.h>
++
++#include <cstddef>
++#include <utility>
++
++namespace wil {
++
++template <typename HandleT, bool AllowInvalidHandleValue, typename CloseFn,
++          CloseFn Close>
++class unique_win32_handle {
++ public:
++  constexpr unique_win32_handle() noexcept = default;
++  constexpr unique_win32_handle(std::nullptr_t) noexcept {}
++  explicit unique_win32_handle(HandleT handle) noexcept : handle_(handle) {}
++
++  unique_win32_handle(const unique_win32_handle&) = delete;
++  unique_win32_handle& operator=(const unique_win32_handle&) = delete;
++
++  unique_win32_handle(unique_win32_handle&& other) noexcept
++      : handle_(other.release()) {}
++
++  unique_win32_handle& operator=(unique_win32_handle&& other) noexcept {
++    if (this != &other) {
++      reset(other.release());
++    }
++    return *this;
++  }
++
++  unique_win32_handle& operator=(std::nullptr_t) noexcept {
++    reset();
++    return *this;
++  }
++
++  ~unique_win32_handle() { reset(); }
++
++  HandleT get() const noexcept { return handle_; }
++
++  bool is_valid() const noexcept {
++    if (handle_ == nullptr) {
++      return false;
++    }
++    if constexpr (!AllowInvalidHandleValue) {
++      return handle_ != INVALID_HANDLE_VALUE;
++    }
++    return true;
++  }
++
++  explicit operator bool() const noexcept { return is_valid(); }
++
++  HandleT release() noexcept {
++    HandleT old = handle_;
++    handle_ = nullptr;
++    return old;
++  }
++
++  void reset(HandleT handle = nullptr) noexcept {
++    if (is_valid()) {
++      Close(handle_);
++    }
++    handle_ = handle;
++  }
++
++ private:
++  HandleT handle_ = nullptr;
++};
++
++using unique_handle =
++    unique_win32_handle<HANDLE, false, decltype(&::CloseHandle), &::CloseHandle>;
++using unique_hfile =
++    unique_win32_handle<HANDLE, false, decltype(&::CloseHandle), &::CloseHandle>;
++using unique_process_handle =
++    unique_win32_handle<HANDLE, false, decltype(&::CloseHandle), &::CloseHandle>;
++using unique_hlocal_security_descriptor =
++    unique_win32_handle<PSECURITY_DESCRIPTOR, true, decltype(&::LocalFree),
++                        &::LocalFree>;
++
++}  // namespace wil
++
++#endif  // FCITX5_MOZC_WIN32_COMPAT_WIL_RESOURCE_H_

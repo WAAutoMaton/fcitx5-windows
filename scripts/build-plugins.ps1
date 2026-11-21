@@ -12,6 +12,7 @@ param(
     [string]$BuildRoot = '',
     [string]$MSYS2Root = 'C:/msys64',
     [string]$DependencyPrefix = '',
+    [string]$MozcData = '',
     [ValidateRange(1, 256)][int]$Jobs = 6
 )
 
@@ -21,7 +22,7 @@ if (!$BuildRoot) { $BuildRoot = "$root/build/plugins" }
 if (!$DependencyPrefix -and (Test-Path -LiteralPath "$root/build/deps/clang64")) {
     $DependencyPrefix = "$root/build/deps/clang64"
 }
-foreach ($name in @('CorePrefix', 'Prefix', 'BuildRoot', 'MSYS2Root', 'DependencyPrefix')) {
+foreach ($name in @('CorePrefix', 'Prefix', 'BuildRoot', 'MSYS2Root', 'DependencyPrefix', 'MozcData')) {
     $value = Get-Variable -Name $name -ValueOnly
     if ($value) {
         Set-Variable -Name $name -Value ($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($value).Replace('\', '/')) -WhatIf:$false
@@ -44,6 +45,86 @@ function Invoke-PluginCommand([string]$Executable, [string[]]$Arguments) {
     if ($status -ne 0) { throw "$Executable failed ($status): $($Arguments -join ' ')" }
 }
 
+function Resolve-PythonExecutable([string]$Sysroot) {
+    foreach ($candidate in @('python', 'python3')) {
+        foreach ($cmd in @(Get-Command $candidate -CommandType Application -All -ErrorAction SilentlyContinue)) {
+            if ($cmd.Source -notlike '*\WindowsApps\*') { return $cmd.Source }
+        }
+    }
+    foreach ($fallback in @("$Sysroot/bin/python.exe", "$Sysroot/bin/python3.exe")) {
+        if (Test-Path -LiteralPath $fallback -PathType Leaf) { return $fallback }
+    }
+    throw 'Python 3 is required to build fcitx5-mozc.'
+}
+
+function Test-MozcDataHeader([string]$Path) {
+    $expected = [byte[]]@(0xEF, 0x4D, 0x4F, 0x5A, 0x43, 0x0D, 0x0A)
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        if ($stream.Length -lt $expected.Length) { return $false }
+        $buffer = New-Object byte[] $expected.Length
+        $read = $stream.Read($buffer, 0, $expected.Length)
+        if ($read -ne $expected.Length) { return $false }
+        for ($i = 0; $i -lt $expected.Length; $i++) {
+            if ($buffer[$i] -ne $expected[$i]) { return $false }
+        }
+        return $true
+    } finally { $stream.Dispose() }
+}
+
+function Assert-MozcDataValid([string]$Path, [string]$ExpectedHash) {
+    if (!(Test-MozcDataHeader $Path)) {
+        throw "Invalid Mozc data header: $Path"
+    }
+    if ($ExpectedHash) {
+        $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $ExpectedHash) {
+            throw "MozcData SHA256 mismatch for '$Path': expected $ExpectedHash, got $actual"
+        }
+    }
+}
+
+function Resolve-MozcDataFile([string]$Root, [string]$ExplicitPath) {
+    $lockPath = "$Root/cmake/pinyin-lock.json"
+    if (!(Test-Path -LiteralPath $lockPath -PathType Leaf)) {
+        throw "Missing Mozc data lock file: $lockPath"
+    }
+    $spec = (Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json).mozcData
+    if (!$spec -or !$spec.file -or !$spec.url) {
+        throw "Missing mozcData metadata in $lockPath"
+    }
+    $expectedHash = if ($spec.PSObject.Properties['sha256'] -and $spec.sha256) {
+        $spec.sha256.ToLowerInvariant()
+    } else { '' }
+    if ($ExplicitPath) {
+        if (!(Test-Path -LiteralPath $ExplicitPath -PathType Leaf)) {
+            throw "MozcData file was not found: $ExplicitPath"
+        }
+        Assert-MozcDataValid $ExplicitPath $expectedHash
+        return $ExplicitPath
+    }
+    $cacheDir = "$Root/build/mozc-data"
+    $cached = "$cacheDir/$($spec.file)"
+    if ((Test-Path -LiteralPath $cached -PathType Leaf) -and (Test-MozcDataHeader $cached)) {
+        if (!$expectedHash -or
+            ((Get-FileHash -LiteralPath $cached -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expectedHash)) {
+            return $cached
+        }
+    }
+    New-Item -ItemType Directory -Force $cacheDir | Out-Null
+    $temp = "$cached.tmp.$([guid]::NewGuid().ToString('N'))"
+    try {
+        Invoke-PluginCommand 'curl.exe' @('--fail', '--location', '--retry', '3',
+            '--connect-timeout', '30', '--max-time', '600', '--silent', '--show-error',
+            '--output', $temp, $spec.url)
+        Assert-MozcDataValid $temp $expectedHash
+        Move-Item -LiteralPath $temp -Destination $cached -Force
+    } finally {
+        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+    }
+    return $cached
+}
+
 $oldPath = $env:PATH
 $oldRoot = $env:MSYS2_ROOT
 $oldPkgConfig = $env:PKG_CONFIG_PATH
@@ -63,6 +144,22 @@ try {
         $stage = "$build/prefix"
         $pluginDependencies = $DependencyPrefix
         $pluginOptions = @()
+        if ($plugin.Name -eq 'fcitx5-mozc') {
+            $embedScript = "$($plugin.FullName)/mozc/src/build_tools/embed_file.py"
+            if (!(Test-Path -LiteralPath $embedScript -PathType Leaf)) {
+                throw 'fcitx5-mozc nested submodules are not initialized. Run git submodule update --init --recursive.'
+            }
+            $mozcDataFile = Resolve-MozcDataFile $root $MozcData
+            $mozcDataInc = "$build/data_manager/oss/mozc_data.inc"
+            New-Item -ItemType Directory -Force (Split-Path $mozcDataInc -Parent) | Out-Null
+            $needsEmbed = !(Test-Path -LiteralPath $mozcDataInc -PathType Leaf) -or
+                ((Get-Item -LiteralPath $mozcDataInc).Length -eq 0) -or
+                ((Get-Item -LiteralPath $mozcDataInc).LastWriteTimeUtc -lt (Get-Item -LiteralPath $mozcDataFile).LastWriteTimeUtc)
+            if ($needsEmbed) {
+                $python = Resolve-PythonExecutable $sysroot
+                Invoke-PluginCommand $python @($embedScript, '--input', $mozcDataFile, '--name', 'kOssMozcDataSet', '--output', $mozcDataInc)
+            }
+        }
         if ($plugin.Name -eq 'fcitx5-zhuyin') {
             $dependencyBuild = "$BuildRoot/zhuyin-deps"
             $zhuyinPrefix = "$dependencyBuild/prefix"
@@ -119,6 +216,16 @@ try {
         if ($licenses.Count) {
             New-Item -ItemType Directory -Force "$destination/licenses" | Out-Null
             $licenses | Copy-Item -Destination "$destination/licenses" -Recurse -Force
+        }
+        if ($plugin.Name -eq 'fcitx5-mozc') {
+            foreach ($submodule in @('mozc', 'abseil-cpp', 'protobuf')) {
+                $license = "$($plugin.FullName)/$submodule/LICENSE"
+                if (!(Test-Path -LiteralPath $license -PathType Leaf)) {
+                    throw "Missing fcitx5-mozc dependency license: $submodule/LICENSE"
+                }
+                New-Item -ItemType Directory -Force "$destination/licenses/$submodule" | Out-Null
+                Copy-Item -LiteralPath $license -Destination "$destination/licenses/$submodule/LICENSE" -Force
+            }
         }
         if ($plugin.Name -eq 'fcitx5-zhuyin') {
             New-Item -ItemType Directory -Force "$destination/bin", "$destination/licenses" | Out-Null

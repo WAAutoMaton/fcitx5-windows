@@ -115,6 +115,35 @@ try {
     if (!$zhuyinConfigure.Count) {
         throw 'Zhuyin did not use the native Berkeley DB backend.'
     }
+    New-Item -ItemType Directory -Force "$temporary/cmake", "$temporary/plugins/fcitx5-mozc" | Out-Null
+    [IO.File]::WriteAllText("$temporary/plugins/fcitx5-mozc/CMakeLists.txt", 'fixture')
+    [IO.File]::WriteAllText("$temporary/plugins/fcitx5-mozc/LICENSE", 'mozc addon license')
+    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'nested submodules are not initialized'
+    New-Item -ItemType Directory -Force "$temporary/plugins/fcitx5-mozc/mozc/src/build_tools",
+        "$temporary/plugins/fcitx5-mozc/abseil-cpp", "$temporary/plugins/fcitx5-mozc/protobuf" | Out-Null
+    Copy-Item -LiteralPath "$root/plugins/fcitx5-mozc/mozc/src/build_tools/embed_file.py" `
+        -Destination "$temporary/plugins/fcitx5-mozc/mozc/src/build_tools/embed_file.py" -Force
+    foreach ($sub in @('mozc', 'abseil-cpp', 'protobuf')) {
+        [IO.File]::WriteAllText("$temporary/plugins/fcitx5-mozc/$sub/LICENSE", "$sub license")
+    }
+    $mozcFixtureData = "$temporary/mozc-fixture.data"
+    $mozcMagic = [byte[]]@(0xEF, 0x4D, 0x4F, 0x5A, 0x43, 0x0D, 0x0A)
+    [IO.File]::WriteAllBytes($mozcFixtureData, ($mozcMagic + [Text.Encoding]::ASCII.GetBytes('FIXTURE')))
+    [IO.File]::WriteAllText("$temporary/cmake/pinyin-lock.json",
+        (@{ mozcData = @{ file = 'mozc.data'; url = 'https://example.invalid/mozc.data' } } | ConvertTo-Json -Depth 4))
+    $badMozcData = "$temporary/mozc-bad.data"
+    [IO.File]::WriteAllBytes($badMozcData, [Text.Encoding]::ASCII.GetBytes('WRONG'))
+    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 -MozcData $badMozcData } 'Invalid Mozc data header'
+    & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 -MozcData $mozcFixtureData | Out-Null
+    $generatedInc = "$buildRoot/fcitx5-mozc/data_manager/oss/mozc_data.inc"
+    if (!(Test-Path -LiteralPath $generatedInc -PathType Leaf) -or
+        ([IO.File]::ReadAllText($generatedInc) -notlike '*kOssMozcDataSet*')) {
+        throw 'Mozc data header was not generated from mozc.data.'
+    }
+    foreach ($relative in @('licenses/LICENSE', 'licenses/mozc/LICENSE', 'licenses/abseil-cpp/LICENSE', 'licenses/protobuf/LICENSE')) {
+        if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-mozc/$relative")) { throw "Missing Mozc dependency output: $relative" }
+    }
+    Remove-Item -LiteralPath "$temporary/plugins/fcitx5-mozc" -Recurse -Force
     $testState.FailLfs = $true
     Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'git failed (1)'
     $testState.FailLfs = $false

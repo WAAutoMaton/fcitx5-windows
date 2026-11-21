@@ -128,9 +128,10 @@ For individual Core, TSF and Settings builds, see
 ## Independent Input-Method Plugins
 
 Bundled plugin submodules live under `plugins/`: `fcitx5-chinese-addons`,
-`fcitx5-rime`, `fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`.
-`fcitx5-chinese-addons` is built by `build-pinyin.ps1` as part of `base`. To
-build and deploy every additional plugin against the same build's SDK:
+`fcitx5-mozc`, `fcitx5-rime`, `fcitx5-table-extra`, `fcitx5-wenzhounese` and
+`fcitx5-zhuyin`. `fcitx5-chinese-addons` is built by `build-pinyin.ps1` as part
+of `base`. To build and deploy every additional plugin against the same build's
+SDK:
 
 ```powershell
 ./scripts/build-plugins.ps1 -CorePrefix ./build/all/prefix -Prefix ./dist/pinyin
@@ -140,11 +141,18 @@ build and deploy every additional plugin against the same build's SDK:
 `git lfs pull`, builds each CMake project with
 `cmake/windows-addon-toolchain.cmake`, audits private DLL imports, copies needed
 shared runtime DLLs and installs into `Prefix/plugins/<name>`. It also supports
-`-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-Jobs` and `-WhatIf`. Apply
-pinned Windows patches (`scripts/apply-pinyin-patches.ps1`) before standalone
-plugin builds.
+`-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-MozcData`, `-Jobs` and
+`-WhatIf`. Apply pinned Windows patches (`scripts/apply-pinyin-patches.ps1`)
+before standalone plugin builds.
 
 Plugin specifics:
+
+- **`fcitx5-mozc`**: requires Python 3 and initialized nested submodules
+  (`mozc`, `abseil-cpp`, `protobuf`). Downloads `mozc.data` into
+  `build/mozc-data` (or uses `-MozcData`), checks its dataset magic header
+  (plus SHA256 when configured), generates `mozc_data.inc` via `embed_file.py`
+  and builds the self-contained in-process `libmozc.dll` with bundled
+  dependency licenses.
 
 - **`fcitx5-table-extra`**: resource-only package reusing the base `table`
   engine. The SDK's native `libime_tabledict.exe` compiles all 25 tables
