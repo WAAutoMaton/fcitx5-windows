@@ -1,59 +1,57 @@
 # Build, Deployment and Validation
 
-The recommended AMD64 Release workflow is shown in the
-[README](../README.md#build-and-deploy). This guide covers prerequisites,
-custom build paths, installer packaging, validation and input-method registration.
+For the quick-start AMD64 Release workflow, see
+[Build and Deploy in the README](../README.md#build-and-deploy). This guide
+covers prerequisites, build options, plugin builds, installer packaging, CI,
+validation and development registration.
 
 ## Installer Packages
 
-The CI/Nightly workflow packages four x64 installers for Windows 10 version 1809
-(build 17763) or later, with `base`/`full` editions and optional bundled Visual C++
-and Windows App Runtime installers.
-`base` contains fcitx5-chinese-addons; `full` contains every plugin under `plugins/`,
-currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra,
-fcitx5-wenzhounese and fcitx5-zhuyin. See
-[Install in the README](../README.md#install) for package selection and removal,
-and [installer implementation](windows-installer-design.md) for current behavior
-and unverified system-installation scenarios. The build/deploy and registration
-scripts in this guide remain separate development tools.
+The CI/Nightly workflow publishes four x64 installers for Windows 10 version
+1809 (build 17763) or later: `base` (`fcitx5-chinese-addons`) and `full` (all
+bundled plugins under `plugins/`: `fcitx5-chinese-addons`, `fcitx5-rime`,
+`fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`), each with or
+without bundled Visual C++ and Windows App Runtime installers. See
+[Install in the README](../README.md#install) and
+[installer implementation](windows-installer-design.md).
 
 ## Prerequisites
 
-Install the following before running the build scripts:
+Install the following before running the build scripts (scripts assume these
+tools and runtimes are already installed):
 
 | Component | Requirements |
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
-| Core/input methods | MSYS2 clang64 Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; the pinned libime/fcitx5-chinese-addons data supplies Pinyin, Shuangpin and table methods |
-| Full plugin edition | Git LFS; matching clang64 `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` packages for Rime; clang64 `glib2` and `db` packages for Zhuyin |
-| TSF | Standalone LLVM Clang/clang++/llvm-rc, Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
+| Core / input methods | MSYS2 `clang64` Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; pinned libime/`fcitx5-chinese-addons` data supplies Pinyin, Shuangpin and base table methods |
+| Full plugin edition | Git LFS; matching `clang64` `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` for Rime; `clang64` `glib2` and `db` for Zhuyin |
+| TSF | Standalone LLVM (`clang`, `clang++`, `llvm-rc`; LLVM 22+ required with MSVC 14.52+, CI pins `22.1.8`), Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
-| UI localization | Boost 1.92 portable headers, gettext tools; the SHA256-pinned Boost.Locale 1.92 source archive is downloaded by CMake |
+| UI localization | Boost 1.92 portable headers, gettext tools; CMake downloads the SHA256-pinned Boost.Locale 1.92 source archive |
 
-The default tool locations are `C:/msys64` and `C:/Program Files/LLVM`.
-`cmake`, `git` and `magick` must be available in `PATH`. The unified script uses
-MSYS2's Ninja and initializes the Visual Studio x64 development environment
-itself, so a normal PowerShell terminal is sufficient.
+Default tool locations are `C:/msys64` and `C:/Program Files/LLVM`, with
+`cmake`, `git` and `magick` in `PATH`. The unified script uses MSYS2's Ninja
+and initializes the Visual Studio development environment automatically, so a
+normal PowerShell terminal is sufficient.
 
-Core uses the MSYS2 Windows GNU runtime; TSF uses the Windows SDK/ATL toolchain.
-The standalone `win32` project uses static MSVC CRT (`/MT`, `/MTd` for Debug)
-throughout the TIP, i18n/Boost.Locale libraries, Setup Helper and test hosts.
-Settings builds its own i18n library with its existing dynamic CRT configuration.
-TSF deployment checks normal and delayed PE imports using `llvm-readobj` and
-rejects dynamic MSVC/UCRT dependencies even when `-SkipTests` is supplied.
-Boost/iostreams and zstd must match the clang64 target/runtime. These environments
-are separate and cannot be substituted for each other. Scripts do not install
-or upgrade tools or system runtimes.
+Toolchain and CRT separation:
 
-Each toolchain compiles Boost.Locale's message/encoding components separately.
-Native builds copy only the portable `boost` headers into their own include
-directory; they do not include GNU toolchain headers or link MSYS2 Boost DLLs.
-ICU and Boost.Thread binaries are not needed for this message-only integration.
-Custom headers can be supplied with `-DNATIVE_BOOST_HEADERS=<include directory>`
-or `build-settings.ps1 -BoostHeaders <include directory>`; version mismatches fail
-configuration. An offline Boost.Locale checkout can be supplied with
-`-BoostSource <source directory>` to the build scripts.
+- **Core** uses the MSYS2 Windows GNU runtime; Boost/iostreams and zstd must
+  match `clang64`.
+- **TSF (`win32`)** uses standalone LLVM + Windows SDK/ATL with static MSVC CRT
+  (`/MT`, `/MTd` for Debug) across the TIP, i18n/Boost.Locale libraries, Setup
+  Helper, Upgrade Helper and test hosts. Deployment audits both normal and
+  delayed PE imports via `llvm-readobj` and rejects dynamic MSVC/UCRT
+  dependencies (even with `-SkipTests`).
+- **Settings (`win32/settings`)** builds its own MSVC i18n library with dynamic
+  CRT.
+- **Boost.Locale**: Each toolchain compiles the message/encoding components
+  separately without ICU or Boost.Thread. Native builds copy only portable
+  `boost` headers into their own build directory. Supply custom headers via
+  `-DNATIVE_BOOST_HEADERS=<include dir>` or
+  `build-settings.ps1 -BoostHeaders <include dir>`, or an offline Boost.Locale
+  checkout via `-BoostSource <source dir>`.
 
 ## Unified Build Options
 
@@ -63,376 +61,257 @@ Run from the repository root:
 ./scripts/build-and-deploy.ps1
 ```
 
-The script initializes pinned submodules, applies compatibility patches and
-builds Core/libime/fcitx5-chinese-addons, TSF and WinUI Settings. The resulting runtime
-contains Pinyin, Shuangpin and the available fcitx5-chinese-addons table entries
-(Wubi, Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan, Wanfeng and Ziranma).
-It stages the complete
-runtime under `build/all/prefix`, runs the default TSF CTest suite, then
-copies the runtime to `dist/pinyin`. Repeating the command uses incremental builds.
-It does not register/unregister TSF, stop applications or start services.
-After migrating an existing checkout to the `plugins/` source layout, use a new
-`-BuildRoot` for fcitx5-chinese-addons because CMake caches retain the old source path.
+The script initializes pinned submodules, applies Windows patches, builds AMD64
+Release Core/libime/`fcitx5-chinese-addons`, x64/x86 TSF DLLs, setup/upgrade
+helpers and WinUI Settings, stages the runtime under `build/all/prefix`, runs
+the default TSF CTest suites and copies the runtime to `dist/pinyin`. Re-running
+performs incremental builds.
 
 | Option | Default / Behavior |
 | --- | --- |
-| `-Prefix` | `dist/pinyin`; target runtime tree, must be inside the repository |
-| `-BuildRoot` | `build/all`; Core/libime/addons/TSF build and staging parent inside the repository; must not overlap `-Prefix` |
+| `-Prefix` | `dist/pinyin`; target runtime tree inside the repository |
+| `-BuildRoot` | `build/all`; build and staging parent inside the repository (must not overlap `-Prefix`) |
 | `-MSYS2Root` | `C:/msys64` |
 | `-LLVMRoot` | `C:/Program Files/LLVM`; standalone LLVM with `clang`, `clang++`, `llvm-rc` |
-| `-DependencyPrefix` | Optional matching clang64 Boost/zstd prefix; uses `build/deps/clang64` if present |
-| `-BoostSource` | Optional local Boost.Locale 1.92 source directory for offline builds; shared source, separate build caches |
-| `-DataMode` | `Prebuilt`; `Source` generates data locally and takes more time/memory |
-| `-DataArchive` | Optional local prebuilt archive, checked against the locked SHA256 |
-| `-Jobs` | `6`; parallel jobs for CMake builds |
-| `-SkipTests` | Skip default CTest tests |
-| `-ModernApps` | Explicitly declare immersive/UIElement TSF categories for system acceptance; no registration or signing |
-| `-TsfArchitectures` | `x64,x86`; independent frontend builds sharing the x64 Core/Settings; `x64` alone is a development-only option |
-| `-WhatIf` | Preview without builds, submodule initialization or file copies |
+| `-DependencyPrefix` | Optional matching `clang64` Boost/zstd prefix; auto-uses `build/deps/clang64` if present |
+| `-BoostSource` | Optional local Boost.Locale 1.92 source directory for offline builds |
+| `-DataMode` | `Prebuilt`; `Source` generates data locally (requires more time/memory; not validated end to end locally) |
+| `-DataArchive` | Optional local prebuilt archive verified against the locked SHA256 |
+| `-Jobs` | `6`; parallel CMake build jobs |
+| `-SkipTests` | Skip default CTest execution |
+| `-ModernApps` | Declare `UIELEMENTENABLED` and `IMMERSIVESUPPORT` TSF categories |
+| `-TsfArchitectures` | `x64,x86`; independent frontends sharing x64 Core/Settings (`x64`-only is development-only) |
+| `-WhatIf` | Preview actions without modifying files or submodules |
 
-Default paths are resolved relative to the repository; explicit relative paths
-are resolved from the current working directory. For an isolated deployment:
+Default paths resolve relative to the repository; explicit relative paths
+resolve from the current directory:
 
 ```powershell
 ./scripts/build-and-deploy.ps1 -Prefix ./dist/next
 ./scripts/build-and-deploy.ps1 -WhatIf
 ```
 
-TSF uses `BuildRoot/tsf` for x64 and `BuildRoot/tsf-x86` for x86. Standalone
-frontend builds initialize the matching VS environment and reject a build tree
-with a different architecture:
+### Independent TSF and Settings Builds
+
+TSF builds into `BuildRoot/tsf` (x64) and `BuildRoot/tsf-x86` (x86) using
+`cmake/tsf-x64.cmake` and `cmake/tsf-x86.cmake`. Standalone frontend builds
+initialize the matching VS environment and reject mismatched cache architectures:
 
 ```powershell
 ./scripts/build-tsf.ps1 -Architecture x86 -BuildRoot ./build/tsf-x86 -ModernApps
 ./scripts/build-tsf.ps1 -Architecture x64 -BuildRoot ./build/tsf-x64 -ModernApps
 ```
 
-The toolchains are `cmake/tsf-x86.cmake` and `cmake/tsf-x64.cmake`. CTest uses
-the current target DLL/probes for each tree. Deployment audits the PE machine
-and normal/delayed CRT imports before copying either frontend. The single
-runtime tree contains `tsf/fcitx5-x86_64.dll` and `tsf/x86/fcitx5-x86.dll`.
-Both resolve Core, Settings, translations and installation state from the same
-root; x86 does not require an x86 Core or an additional VC++ runtime.
-Installer packaging requires both DLLs with matching PE machines and includes
-both in the file/hash/upgrade ownership manifest. Individual development
-registration commands accept `-DllPath` and select `System32`/`SysWOW64`
-`regsvr32` from the PE machine. Registration remains an explicit system action.
+Deployment audits PE machine types and normal/delayed CRT imports before copying
+`tsf/fcitx5-x86_64.dll` and `tsf/x86/fcitx5-x86.dll` into the shared runtime
+tree. Both frontends locate Core, Settings, translations and install state from
+the same root.
 
-`test-pinyin.ps1 -Architecture x86` runs the x86 probes against an isolated
-x64 Core when no user Core is running. `-PeerTsfBuild <x64 tree>` also runs
-concurrent x86/x64 Pipe clients and verifies peer disconnect isolation. These
-are automated checks using unregistered TSF contexts. Real x86 application
-acceptance is described in [x86 TSF support](windows-x86-tsf-design.md).
+The unified build places Settings' MSVC i18n build and MSBuild artifacts under
+`BuildRoot/settings` before staging. Standalone `build-settings.ps1` defaults to
+`win32/build/settings` and also accepts `-BuildRoot`.
 
-The unified build places Settings' independent MSVC translation-library build,
-MSBuild output and object files under `BuildRoot/settings`, then stages them.
-Standalone `build-settings.ps1` defaults to `win32/build/settings` and also accepts
-`-BuildRoot`. NuGet restore metadata stays in its existing project cache.
+### Translations and Prebuilt Data
 
-Windows translations are authored in `po/zh_CN.po` and `po/zh_TW.po` and compiled
-to `share/locale/<language>/LC_MESSAGES/fcitx5-windows.mo`; English falls back to
-source strings. Run `scripts/update-translations.ps1` when adding messages, or
-use `-ExtractOnly` to update just the POT. Normal builds do not rewrite PO/POT.
-The isolated runtime also includes `licenses/Boost-1.92-LICENSE.txt`.
+Windows UI translations live in `po/zh_CN.po` and `po/zh_TW.po` and compile to
+`share/locale/<lang>/LC_MESSAGES/fcitx5-windows.mo` (English uses source
+strings). Run `scripts/update-translations.ps1` when adding messages (or
+`-ExtractOnly` for POT only). The runtime includes `licenses/Boost-1.92-LICENSE.txt`.
 
-Precompiled data is shared in `build/pinyin-data`. Before downloading, the script
-also checks local `libime*.pkg.tar.zst` archives in `build/deps` and
-`build/pinyin-data`, including `build/deps/libime-data.pkg.tar.zst`. Only an
-archive matching the locked SHA256 is reused. A valid `-DataArchive` fills the
-same standard cache; archive reuse requires the locked SHA256. Source-data
-generation has not been validated end to end locally.
+Precompiled dictionary/model data is cached in `build/pinyin-data`. Before
+downloading, the script checks local `libime*.pkg.tar.zst` files in `build/deps`
+and `build/pinyin-data` against the locked SHA256 in `cmake/pinyin-lock.json`.
 
-For individual Core, TSF and Settings builds, see the
-[input-method integration guide](pinyin.md#build-and-deploy-core). A plain root
-CMake build does not build/deploy libime, fcitx5-chinese-addons, TSF, Settings or input
-method data.
+For individual Core, TSF and Settings builds, see
+[input-method integration](pinyin.md#build-and-deploy-core).
 
 ## Independent Input-Method Plugins
 
-Plugin source submodules live in `plugins/fcitx5-chinese-addons`, `plugins/fcitx5-wenzhounese`,
-`plugins/fcitx5-table-extra`, `plugins/fcitx5-rime` and `plugins/fcitx5-zhuyin`.
-fcitx5-chinese-addons is built by
-`build-pinyin.ps1` as part of the base runtime. To extend an existing base runtime
-with every additional plugin using the same build's SDK:
+Bundled plugin submodules live under `plugins/`: `fcitx5-chinese-addons`,
+`fcitx5-rime`, `fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`.
+`fcitx5-chinese-addons` is built by `build-pinyin.ps1` as part of `base`. To
+build and deploy every additional plugin against the same build's SDK:
 
 ```powershell
 ./scripts/build-plugins.ps1 -CorePrefix ./build/all/prefix -Prefix ./dist/pinyin
 ```
 
-The script discovers direct plugin directories automatically, builds each with
-the generic Windows addon toolchain and installs its runtime files and licenses
-under `Prefix/plugins/<name>`. New plugins must provide a CMake project compatible
-with that toolchain and install their runtime files into `bin`, `lib` and `share`.
-Missing/uninitialized projects fail the build. Private DLL dependencies are
-audited and additional shared runtime DLLs are copied from the matching SDK or
-dependency prefix. `-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-Jobs` and
-`-WhatIf` are also supported. CI copies the base tree before extending it, keeps
-the SDK at its original location and packages both editions independently.
+`build-plugins.ps1` discovers direct plugin directories under `plugins/`, runs
+`git lfs pull`, builds each CMake project with
+`cmake/windows-addon-toolchain.cmake`, audits private DLL imports, copies needed
+shared runtime DLLs and installs into `Prefix/plugins/<name>`. It also supports
+`-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-Jobs` and `-WhatIf`. Apply
+pinned Windows patches (`scripts/apply-pinyin-patches.ps1`) before standalone
+plugin builds.
 
-The script runs `git lfs pull` for each additional plugin. Rime also requires
-the matching MSYS2 librime and schema data packages; it copies shared schemas
-from `clang64/share/rime-data` (or `clang64/share/rime/data`) into the plugin's
-`share/rime-data`. Apply the pinned Windows patches before standalone plugin
-builds. `scripts/test-build-plugins.ps1` covers discovery, package layout and
-dependency-copy behavior using fixture projects.
+Plugin specifics:
 
-fcitx5-table-extra is a resource package using the base runtime's `table` engine.
-The SDK's native `libime_tabledict.exe` compiles all 25 tables, including Wubi98,
-Zhengma, Boshiamy, Cangjie5 and Jyutping Table. Its input-method descriptions,
-compiled dictionaries, icons and licenses are installed under
-`plugins/fcitx5-table-extra`; no additional engine DLL is required. CI verifies
-candidate commits for Wubi98, Cangjie5 and Jyutping Table, their absence from base,
-and all table descriptions, dictionaries and the license in both full installer
-variants' file manifests.
+- **`fcitx5-table-extra`**: resource-only package reusing the base `table`
+  engine. The SDK's native `libime_tabledict.exe` compiles all 25 tables
+  (including Wubi98, Zhengma, Boshiamy, Cangjie5 and Jyutping Table) into
+  `plugins/fcitx5-table-extra`.
+- **`fcitx5-rime`**: requires matching `clang64` librime and schema packages;
+  copies `share/rime-data` and `opencc` data into `plugins/fcitx5-rime/share/rime-data`.
+- **`fcitx5-zhuyin`**: requires `clang64` GLib (`glib2`) and Berkeley DB (`db`).
+  `cmake/zhuyin-deps` builds libzhuyin and three native data generators from
+  SHA256-pinned libpinyin 2.10.3 sources (`patches/libpinyin-windows.patch`),
+  compiles the pinned model archive into `plugins/fcitx5-zhuyin/share/fcitx5/zhuyin`
+  and copies required GLib/Berkeley DB DLLs and dependency licenses.
 
-fcitx5-zhuyin requires clang64 GLib and Berkeley DB (`mingw-w64-clang-x86_64-glib2`
-and `mingw-w64-clang-x86_64-db`). The plugin builder uses
-`cmake/zhuyin-deps` to build libzhuyin and its three native data generators from
-SHA256-pinned libpinyin 2.10.3 sources. The compatibility patch handles Windows
-binary file I/O, file synchronization, replacement of saved models, `size_t`
-formats and `getline`.
-The upstream SHA256-pinned model archive is compiled into the plugin's
-`share/fcitx5/zhuyin` directory. The package includes the engine, libzhuyin,
-translations, icons and dependency licenses; the PE audit copies required
-GLib/Berkeley DB DLLs into the runtime tree. The plugin patch also adapts
-filesystem paths, reports missing `table.conf` or failed model initialization
-and supports probes with user paths disabled. CI verifies a Standard Zhuyin
-`su3` candidate selection and Enter commit, repeated model saves and reloads,
-its absence from base and the full installer payload.
-
-Additional input methods can use the existing shared-library addon loader and
-the SDK from the installed Core/libime staging prefix. See
-[Windows plugins](windows-plugins.md) for the directory layout, ABI requirements,
-the generic addon toolchain and the isolated addon probe. Plugin-specific build
-and packaging instructions belong in each plugin's own repository.
+See [Windows plugins](windows-plugins.md) for layout, ABI rules, SDK details and
+the isolated `addon_probe` tool. `scripts/test-build-plugins.ps1` verifies
+discovery, layout and dependency copying using fixture projects.
 
 ## Status Menus
 
-IPC v15 carries the current context's Fcitx `StatusArea` / `Action/Menu` tree.
-Core, both TSF architectures and Settings must be built and deployed together.
+IPC v15 carries the focused context's Fcitx `StatusArea` / `Action/Menu` tree.
 Desktop popups and system `ITfMenu` share frozen views; AppContainer input pipes
 reject menu queries and actions.
 
-Build Core and TSF/probes with `-DCMAKE_CXX_FLAGS=-DFCITX5_UI_TEST` into separate
-test trees. Stage Pinyin and the Rime plugin with its matching librime DLLs,
-`share/rime-data` and `share/rime-data/opencc`, then run:
+To run isolated status-menu integration tests, build Core and TSF/probes with
+`-DCMAKE_CXX_FLAGS=-DFCITX5_UI_TEST` in separate test trees, stage Pinyin and
+Rime (with matching librime DLLs, `share/rime-data` and `opencc`), and run:
 
 ```powershell
 ./scripts/test-status-menu.ps1 -Prefix ./build/menu/prefix -TsfBuild ./build/menu/tsf -PeerTsfBuild ./build/menu/tsf-x86 -Rime
 ```
 
-The runner sets `FCITX5_TEST_USER_ROOT` to a unique repository directory. Test
-builds redirect Windows Fcitx user paths there, and Core checks the effective
-PkgData directory before loading engines. Production builds ignore this variable.
-The Rime fixture deploys `luna_pinyin` and `luna_pinyin_simp`, checks their menu
-states, cancels the previous preedit, verifies traditional/simplified commits
-and opens the F4 candidate menu. Pinyin verifies a second plugin's real action.
-The optional peer runs the same checks and concurrent x86/x64 connection probes.
-The runner starts only its isolated Core and ends that exact process; it does
-not register TSF. Real language-bar dispatch, popup owner/focus, application
-coverage and physical DPI still require system acceptance.
+The runner redirects Windows Fcitx user paths to an isolated
+`FCITX5_TEST_USER_ROOT` (ignored by production builds), deploys `luna_pinyin`
+and `luna_pinyin_simp` in that temporary directory, verifies menu states,
+preedit cancellation, traditional/simplified commits, F4 candidate menus and
+real Pinyin actions. Passing `-PeerTsfBuild` adds cross-architecture concurrent
+Pipe checks.
 
-The root project exposes `-DENABLE_WINDOWS_STATUS_MENU_TESTS=ON` and the
-`test_windowsstatusmenu` target for synthetic tree, lifetime and exception tests.
-The independent TSF CTest suite includes protocol, frozen-view, native menu
-rendering and stale edit-session checks.
+Unit tests: enable `-DENABLE_WINDOWS_STATUS_MENU_TESTS=ON` in the root project
+to build `test_windowsstatusmenu`; default TSF CTest includes `test_statusmenu`
+and `test_langbar`.
 
 ## Developer Logging
 
-In Settings, open **Global Settings > Developer options** and enable detailed
-logging, then apply. Core applies the change immediately; TSF learns the setting
-from its next Core reply. Core, TSF and Settings must be deployed together using
-IPC v15. `windows-ui.conf` v4 stores candidate layout along with language,
-logging and shortcuts under one revision. Versions 1–3 load with vertical
-layout, versions 1/2 gain the default shortcuts, and version 1 loads with
-logging off. Migration happens on the next successful save.
+Open **Global Settings > Developer options** to toggle detailed logging (applies
+immediately in Core/Settings; TSF syncs on the next Core reply). All global
+preferences—UI language, detailed logging, shortcuts and candidate layout—are
+stored in `conf/windows-ui.conf` v4 under one revision (v1–v3 migrate to v4 on
+the next save).
 
-Core writes Fcitx engine messages as plain text to
-`%LOCALAPPDATA%/Fcitx5/logs/fcitx5-YYYYMMDD.log`. The default threshold is
-`Info`. Enabling detailed logging raises it to `Debug` immediately.
-Detailed logs in the same directory use JSON Lines and are split by role and
-TSF or Settings PID. Both formats rotate at 8 MiB and UTC date changes and
-share 7-day retention and a 512 MiB directory budget. Detailed logs also have a
-64 MiB per-process budget. Core runs cleanup at startup and hourly, and writes
-also trigger cleanup. Windows sharing rules protect open files from deletion
-until subsequent maintenance.
+Log files live in `%LOCALAPPDATA%/Fcitx5/logs`:
 
-Settings records window open/close, close-button/service-stop requests, dispatcher
-return, runtime shutdown and a final `settings_exit` with a reason and exit code.
-Page rendering and user operations have begin/stage/end events correlated by
-`operation_id`. `settings_exception` includes the operation, exception kind,
-numeric HRESULT (when available) and whether the exception is fatal. XAML
-unhandled exceptions and `std::terminate` are also recorded. Exception messages,
-configuration values and input text are excluded. These events require detailed
-logging to be enabled; disabling it also disables exit diagnostics.
+- **Engine log (`fcitx5-YYYYMMDD.log`)**: always persisted as plain text.
+  Threshold is `Info` by default and switches immediately to `Debug` when
+  detailed logging is enabled (`key_trace` stays disabled). Preserves upstream
+  addon message text.
+- **Detailed structured logs (`core-YYYYMMDD.log`, `tsf-PID-YYYYMMDD.log`,
+  `settings-PID-YYYYMMDD.log`)**: JSON Lines recorded only when detailed logging
+  is enabled. Contains diagnostic metadata, HRESULTs, counts, lengths and
+  geometry (TSF key results include scan codes, modifiers and consumption state,
+  excluding translated characters/Unicode). Excludes input text, candidates,
+  payloads, window titles and user paths.
 
-Fatal C++/WinRT callback errors attempt to drain the log queue for 250 ms before
-preserving the existing fail-fast behavior. These are best-effort diagnostics:
-native access violations, stack/heap corruption, external termination, and a
-blocked/unavailable logger can leave no final event. A missing `settings_exit`
-is a reason to inspect Windows Application Error/WER records, not proof of a
-crash. `settings_window_closed` followed by `settings_exit` distinguishes a
-completed shutdown from a failure during teardown.
+Both formats rotate at 8 MiB and UTC day changes, with 7-day retention and a
+shared 512 MiB directory budget (detailed logs also enforce a 64 MiB per-process
+budget). Core runs cleanup at startup and hourly, and writes trigger cleanup;
+open files stay protected until later maintenance.
 
-Build isolated Settings with `scripts/build-settings.ps1 -UiTest -BuildRoot <build>`
-and run `scripts/test-settings-exit-logging.ps1 -SettingsBuild <build>/Release`
-to check normal exits, recoverable HRESULTs, real async fail-fast and
-`std::terminate`, privacy and logging-off behavior. This test uses dedicated
-child processes and log directories without connecting to Core or stopping any
-running Settings instance. Its fatal cases intentionally terminate test children.
+When detailed logging is enabled, Settings records window/process exit events
+(`settings_exit`), operation stages correlated by `operation_id`, and exception
+metadata (`settings_exception`, XAML unhandled exceptions, `std::terminate`)
+without exception messages or config values. Fatal C++/WinRT callback paths
+attempt a 250 ms queue drain before preserving fail-fast termination. If a crash
+leaves no final event (e.g., access violation or external termination), check
+Windows Application Error/WER records.
 
-Events contain diagnostic metadata, HRESULT/error codes, counts, lengths and
-geometry. TSF key results include scan codes, modifiers and consumption state,
-but not translated characters/Unicode. Input text, candidate contents, raw
-payloads, titles and user paths are excluded from structured events. The
-plain-text engine log includes upstream message contents, which can contain
-paths, keystrokes or other data reported by an addon. The `key_trace`
-category stays disabled in both modes.
-The background worker pins the DLL until its thread-pool callback returns.
+Verification commands:
 
-Run `test_diagnostic_log`, `test_protocol`, `test_i18n`, `test_candidate` and
-`test_candidate_tsf` with CTest. For integration, compile Core, TSF and probes with
-`-DCMAKE_CXX_FLAGS=-DFCITX5_UI_TEST`, and Settings with `build-settings.ps1 -UiTest`.
-Use `scripts/test-developer-logging.ps1 -Prefix <isolated-prefix> -TsfBuild <build>`
-for real engine/IPC and unregistered TSF checks, and
-`scripts/test-ui-localization.ps1 -SettingsBuild <build> -TsfBuild <build> -TestLogging`
-for the developer page. These runners set `FCITX5_DIAGNOSTIC_TEST_DIRECTORY` to
-an isolated directory; production builds ignore that variable. These runners
-exercise real engine IPC and unregistered TSF contexts; WinUI coverage uses
-the isolated Settings build.
+- Default CTest: `test_diagnostic_log`, `test_protocol`, `test_i18n`,
+  `test_candidate`, `test_candidate_tsf`.
+- Engine/IPC/TSF logging (requires `FCITX5_UI_TEST` Core/TSF builds):
+  `./scripts/test-developer-logging.ps1 -Prefix <isolated-prefix> -TsfBuild <build>`
+- Developer options UI (requires `-UiTest` Settings build):
+  `./scripts/test-ui-localization.ps1 -SettingsBuild <build> -TsfBuild <build> -TestLogging`
+- Settings exit/exception logging (requires `-UiTest` Settings build):
+  `./scripts/test-settings-exit-logging.ps1 -SettingsBuild <build>/Release`
 
-See [developer logging design and event scope](windows-developer-logging-design.md)
-for the shared logger, privacy boundaries and Settings exit diagnostics.
+These runners set `FCITX5_DIAGNOSTIC_TEST_DIRECTORY` (ignored by production
+builds). See [developer logging design](windows-developer-logging-design.md).
 
 ## Settings Shortcut Recording
 
-Global Settings → Shortcuts configures input-method cycling (Ctrl+Space by
-default) and direct selection of entries 1–5 (Ctrl+Alt+1…5). These settings use
-the existing multiline editor and recorder. Apply saves them; empty values
-disable an action. Core, TSF and Settings must be deployed together for IPC v15.
-The global file is `windows-ui.conf` v4, with migration defaults for v1–v3.
-
-Engine key-list options have a record button alongside the editable text list.
-Recording changes the draft; use **Apply** to save it through Core. The UI keeps
-manual input for unsupported keys and layouts. See
+**Global Settings > Shortcuts** configures input-method cycling (`Ctrl+Space`)
+and direct selection of entries 1–5 (`Ctrl+Alt+1…5`). Engine key-list options
+also provide a record button alongside multiline manual editing. See
 [shortcut behavior](windows-settings-design.md#快捷键录制).
 
-Build Settings with `scripts/build-settings.ps1 -UiTest -BuildRoot <build>` and
-the TSF `ui_fixture` target, then run on an interactive desktop:
+Build isolated Settings with `scripts/build-settings.ps1 -UiTest -BuildRoot <build>`
+and TSF's `ui_fixture` target, then run on an interactive desktop:
 
 ```powershell
 ./scripts/test-settings-keycapture.ps1 -SettingsExe <build>/Release/Fcitx5Settings.exe -FixtureExe <tsf-build>/tests/ui_fixture.exe
+./scripts/test-settings-shortcuts.ps1 -SettingsExe <build>/Release/Fcitx5Settings.exe -FixtureExe <tsf-build>/tests/ui_fixture.exe
 ```
 
-The runner uses isolated test endpoints and configuration and sends synthetic
-keyboard input to the recorder. It does not register TSF or change the user's
-engine settings. `test_keycapture` covers key conversion without WinUI; neither
-test establishes support for every keyboard layout or IME interaction.
+`test-settings-keycapture.ps1` sends synthetic keyboard input to the recorder;
+`test-settings-shortcuts.ps1` validates global shortcut defaults, validation,
+persistence, v2→v4 migration and candidate layout switching. `test_keycapture`
+runs in default CTest without WinUI.
 
 ## Modern App Acceptance
 
-The runtime implementation is described in
-[windows-modern-apps-design.md](windows-modern-apps-design.md). A modern acceptance
-build uses `build-and-deploy.ps1 -ModernApps` with an isolated prefix/build root.
-CI/Nightly explicitly enables this option for the shared runtime and both
-installer variants, so installation declares `UIELEMENTENABLED` and
-`IMMERSIVESUPPORT`. Local builds keep the categories disabled unless the option
-is supplied. Changing a build option or replacing the DLL does not update
-existing category registration; install the updated package or explicitly
-re-register the updated DLL. Re-registration, signing, package installation and
-login startup remain explicit operations.
+See [windows-modern-apps-design.md](windows-modern-apps-design.md) for the
+runtime architecture. CI/Nightly enables `-ModernApps` (`UIELEMENTENABLED` and
+`IMMERSIVESUPPORT`); local builds enable these categories only when `-ModernApps`
+is passed. Changing categories requires installing the updated package or
+re-registering the DLL.
 
-The installer smoke test requires both modern categories in both registry
-indexes, the installed COM DLL path/threading model, and an enabled language
-profile referencing the installed icon. Missing declarations block Nightly
-publication even if the unregistered probes pass. These checks establish
-registration only: CI does not currently sign the TSF DLL or validate Windows
-dispatch into a real modern application. A signed deployment and interactive
-system acceptance are still required to establish modern-app compatibility.
+The installer smoke test checks both modern categories in both registry indexes,
+COM DLL path/threading model and the enabled language profile; missing
+declarations block Nightly publication. Code signing and interactive testing in
+signed/installed modern apps remain pending.
 
-For transport diagnostics, build `appcontainer_probe` and pass an existing
-AppContainer profile/package family name:
+- **AppContainer transport diagnostics** (pass an existing AppContainer profile
+  or package family name):
 
-```powershell
-./build/modern-apps/tsf/tests/appcontainer_probe.exe Microsoft.WindowsCalculator_8wekyb3d8bbwe
-```
+  ```powershell
+  ./build/modern-apps/tsf/tests/appcontainer_probe.exe Microsoft.WindowsCalculator_8wekyb3d8bbwe
+  ```
 
-The probe launches real x64 restricted tokens using the existing profile without
-creating or altering a profile. It compares global and `LOCAL\` names, desktop
-and restricted roundtrips, peer identity, message mode, deadlines and cancellation.
-Only isolated diagnostic pipes are created; no Core or TIP registration is used.
-Local-name results are diagnostic; the global authenticated path must pass.
+- **Restricted engine & TSF integration** (requires `FCITX5_UI_TEST` Core and
+  TSF builds with staged data):
 
-For engine/TSF integration while a production Core is running, compile both Core
-and the independent TSF/probe project with `-DCMAKE_CXX_FLAGS=-DFCITX5_UI_TEST`.
-Stage the real engines/data in the test prefix, then run:
+  ```powershell
+  ./scripts/test-modern-apps.ps1 -Prefix ./build/modern-apps/prefix -TsfBuild ./build/modern-apps/tsf -AppContainerProfile Microsoft.WindowsCalculator_8wekyb3d8bbwe
+  ```
 
-```powershell
-./scripts/test-modern-apps.ps1 -Prefix ./build/modern-apps/prefix -TsfBuild ./build/modern-apps/tsf -AppContainerProfile Microsoft.WindowsCalculator_8wekyb3d8bbwe
-```
+- **Unsigned UWP acceptance fixture** (TextBox, RichEditBox and PasswordBox):
 
-The runner checks the isolated-build markers before starting Core, uses temporary
-configuration/data directories, and releases only the process it created. It
-tests restricted Pinyin input, actual TSF edit sessions, host-rendered candidate
-elements and queued selection/finalize/abort, password scope, denied management
-operations, reconnect, and the desktop IPC/settings/TSF probes. This is an
-unregistered fixture, not Windows system dispatch into an installed UWP app.
-
-In the initialized Windows SDK/ATL environment, create the unsigned UWP fixture:
-
-```powershell
-cmake -S win32 -B build/modern-apps/tsf -DENABLE_UWP_FIXTURE=ON
-cmake --build build/modern-apps/tsf --target uwp_fixture_package
-```
-
-The `.appx` under `tests/uwp-fixture` contains native UWP TextBox, RichEditBox and
-PasswordBox controls with no broad capabilities or full-trust manifest entry.
-It is not signed, installed or activated by the build. After explicit package/TIP
-installation, verify Win+Space selection, keyboard and host candidate actions,
-focus, suspension/resume and Core stop/restart in this fixture and system Settings.
-Signed, protected installation acceptance remains separate from unsigned tests.
+  ```powershell
+  cmake -S win32 -B build/modern-apps/tsf -DENABLE_UWP_FIXTURE=ON
+  cmake --build build/modern-apps/tsf --target uwp_fixture_package
+  ```
 
 ## CI Build and Artifact Flow
 
-The workflow builds each x64 component once in Release. Build and validation
-run in separate jobs:
+CI builds each x64 component once in Release and runs validation and packaging
+in parallel jobs (`.github/workflows/ci.yml`):
 
 | Job | Responsibility |
 | --- | --- |
-| `build-x64` | Build base with `-ModernApps -SkipTests`, copy it and build all additional plugins using the same SDK; verify Wenzhounese, table-extra and Zhuyin commits and upload base/full runtime trees, portable TSF tests/probes and standalone Settings |
-| `test-x64` | Download the x64 runtime and tests; run build/deploy/plugin-script and mocked registration-check regressions, the existing icon checksum, Pinyin/TSF/settings probes, input-method list/Wubi regressions, relocated engine translations, default CTest and dictionary integration checks |
-| `test-x86` | Build/test x86 in an independent VS/LLVM tree; run x86 Pinyin/TSF probes and concurrent x86/x64 Pipe clients against the shared x64 Core |
-| `package-installer-x64` | Use a 2×2 matrix of base/full and runtime/no-runtime; download the matching runtime tree, run packaging regressions and build one installer per job |
-| `installer-smoke-x64` | Test each edition's no-runtime installer with a silent machine-only install, modern TSF registration checks, uninstall and registration cleanup |
-| `release` | Wait for the x64 build, tests, packaging and installer smoke test to succeed, then publish the installers and SHA256 files |
+| `build-x64` | Install pinned LLVM `22.1.8` and MSYS2 deps; build `base` with `-ModernApps -SkipTests`; copy and build all additional plugins for `full`; verify Wenzhounese, `table-extra` (Wubi98/Cangjie5/Jyutping Table) and Zhuyin commits plus Zhuyin model save/reload (`zhuyin_model_probe`); upload base/full runtimes, portable TSF tests/probes and standalone Settings |
+| `test-x64` | Download `base` runtime and portable tests; run `test-build-and-deploy.ps1`, `test-build-plugins.ps1`, `test-installer-registration.ps1`, icon MD5 check, `test-pinyin.ps1` (including CTest), `test-inputmethods.ps1`, `test-engine-localization.ps1` and `test-dictionaries.ps1` |
+| `test-x86` | Install pinned LLVM `22.1.8`; build/test independent x86 TSF; run x86 Pinyin/TSF probes with concurrent x86/x64 Pipe clients (`-PeerTsfBuild`) and dual-arch deployment checks (`test-deploy-tsf.ps1`) |
+| `package-installer-x64` | 2×2 matrix (`base`/`full` × `runtime`/`no-runtime`); run `test-build-installer.ps1`, `test-installer-wizard.ps1` and `test-installer-restart.ps1`; build installer; verify `table-extra` and Zhuyin manifests in `full` / absence in `base` |
+| `installer-smoke-x64` | Run silent machine-only install, modern TSF registration checks, uninstall and cleanup for both `base` and `full` no-runtime installers |
+| `release` | After all jobs succeed on `master` (unless commit message contains `!release`), replace the `latest` prerelease with the four installers and their SHA256 files |
 
-`test-x64` and `package-installer-x64` both depend only on `build-x64`, so they
-can start in parallel as soon as that job finishes. Packaging can succeed even
-if tests fail, but Nightly publication remains blocked. The standalone Debug
-TSF build is no longer part of this workflow.
-
-Nightly publication uses GitHub CLI with job-scoped `contents: write` permission.
-Release jobs run one at a time, replace the previous `latest` prerelease and its
-assets, and move the tag to the workflow commit. Only the four x64 installers
-(base/full, each with and without bundled runtimes) and their SHA256 files are published, with
-generated release notes. Missing asset patterns stop publication before the
-previous release is changed. Core developer archives are no longer packaged
-or uploaded by CI.
-
-The portable test bundle includes test executables, probes, the actual TSF DLL
-and generated icon. A relative-path JSON manifest comes from
-`ctest --show-only=json-v1`; the test runner restores CTest registration with its
-downloaded bundle's absolute commands and working directories, without
-reconfiguring CMake or depending on the original runner's checkout path.
-
-All multi-file artifacts use the artifact action's default ZIP archive mode.
-Installer artifacts use compression level zero. Release merges the four
-`Fcitx5-installer-*-x64-*` artifacts; internal runtime and test bundles stay separate.
+`test-x64`, `test-x86` and `package-installer-x64` start in parallel as soon as
+`build-x64` finishes. The portable test bundle exports a relative-path manifest
+via `ctest --show-only=json-v1` and restores CTest entries on the test runner
+without reconfiguring CMake. Installer artifacts use compression level 0.
 
 ## Build Installer Packages
 
-Prepare a complete isolated runtime tree with the unified build, then package
-it with Inno Setup 7 (`-IsccPath` can select the compiler explicitly):
+Build an isolated staging tree, then package with Inno Setup 7 (use `-IsccPath`
+to select `ISCC.exe` explicitly):
 
 ```powershell
 ./scripts/build-and-deploy.ps1 -Prefix ./dist/installer-stage -BuildRoot ./build/installer
@@ -440,69 +319,38 @@ it with Inno Setup 7 (`-IsccPath` can select the compiler explicitly):
 ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer
 ```
 
-The bundled variant requires `vc_redist.x64.exe` and
-`WindowsAppRuntimeInstall-x64.exe` in `-Dependencies`. Prepare and verify these
-against `cmake/installer-lock.json`; CI downloads and checks the locked SHA256
-values. The packaging script itself checks presence, not dependency hashes.
-`-SkipRuntimes` requires neither installer. Both modes require Inno Setup 7,
-the setup helper, `setup/Fcitx5Upgrade.exe` and the complete Core/TSF/Settings staging tree.
+Bundled-runtime builds require `vc_redist.x64.exe` and
+`WindowsAppRuntimeInstall-x64.exe` in `-Dependencies`, matching the SHA256
+values in `cmake/installer-lock.json`. `-PackageVersion` defaults to `0.1.0.0`;
+`-PackageName` overrides the output basename. Each build outputs `.exe`,
+`.exe.sha256`, `.manifest.txt` and per-file runtime manifests under `metadata/`.
+All paths must stay inside the repository.
 
-`-PackageVersion` defaults to `0.1.0.0`; `-PackageName` overrides the output
-basename. Each variant produces an EXE, `.exe.sha256` and `.manifest.txt` with
-version, commit, runtime-bundling mode and compiler version. All input/output
-paths must be inside the repository.
+Packaging writes `setup/managed-install` into the staging tree, which makes
+service startup require installer-managed state; always use a dedicated staging
+prefix rather than an active development deployment.
 
-Packaging copies license files and writes `setup/managed-install` into the
-staging tree. Use a dedicated packaging prefix: that marker makes service startup
-require installer-managed state, so do not package an active development tree.
-`-WhatIf` validates required input files without compiling or changing the tree.
-Packaging does not register TSF, start services or execute runtime installers.
-Packaging also generates a per-file runtime manifest and an Inno file list under
-the output's `metadata` directory. The runtime manifest is installed as
-`setup/runtime-manifest.json`; maintenance binaries and transaction state are
-excluded from that payload.
+Deferred reboot upgrades are enabled by default (`-RebootUpgrade:$false`
+disables them). See [reboot upgrade design](windows-reboot-upgrade-design.md).
 
-Deferred reboot upgrades are enabled by default; use `-RebootUpgrade:$false`
-to disable this branch for a package.
-It stages the entire new runtime while the installed version remains usable,
-returns `3010`, and schedules protected machine work for a subsequent full
-Windows restart. CI/Nightly uses the same enabled default. Real reboot/VM
-acceptance remains outstanding. See [reboot upgrade design](windows-reboot-upgrade-design.md) for
-recovery, uninstall coordination and remaining system validation.
-The script regression can run without system installation:
+Local packaging and registration regressions (no system installation):
 
 ```powershell
 ./scripts/test-build-installer.ps1
+./scripts/test-installer-registration.ps1
 ./scripts/test-reboot-upgrade-package.ps1 -TsfBuild ./build/installer/tsf
+./scripts/test-installer-wizard.ps1 -IsccPath <Inno-Setup-7/ISCC.exe>
 ./scripts/test-installer-restart.ps1 -IsccPath <Inno-Setup-7/ISCC.exe>
 ```
 
-The package script compiles both default variants and an explicitly disabled package using fixture binaries.
-The restart script exercises the real finish-page callback with a fake helper,
-including immediate/later/silent choices and preparation failure. Neither script
-installs the product or requests a Windows restart.
-
-The GitHub Actions `installer-smoke-x64` job executes the no-runtime package on
-a fresh Windows runner with `/VERYSILENT /MACHINEONLY=1`, verifies the installed
-files, COM/profile/category registration and managed install state, then invokes
-the installed
-`Fcitx5SetupHelper.exe uninstall --silent` entry point and checks that both
-uninstall registrations and the TSF COM/TIP registration are removed. CI passes
-`-ModernApps` to `scripts/test-installer.ps1` to require the modern categories;
-omit it only when testing a build that deliberately disables them. The assertion
-regression can run locally without installing anything or changing the registry:
-
-```powershell
-./scripts/test-installer-registration.ps1
-```
-
-The bundled-runtime package is still only packaged in CI; installing system
-runtimes and exercising the original-user
-configuration path require a dedicated clean Windows VM or self-hosted runner.
+CI's `installer-smoke-x64` runs `scripts/test-installer.ps1 -ModernApps` with
+`/VERYSILENT /MACHINEONLY=1` on a fresh runner. Testing bundled runtime
+installers and interactive user initialization requires a clean Windows VM or
+self-hosted runner.
 
 ## Deployment and Updates
 
-Keep the complete runtime tree together:
+Keep the deployed runtime tree intact:
 
 ```text
 dist/pinyin/
@@ -512,31 +360,29 @@ dist/pinyin/
   settings/Fcitx5Settings.exe
   lib/
   share/
+  plugins/          # full edition plugins
 ```
 
-TSF locates Core at the fixed adjacent `bin/Fcitx5.exe` path; Core locates
-Settings at `settings/Fcitx5Settings.exe`. A DLL registered from a development
-build directory cannot infer this runtime layout. Core must remain in `bin`
-for resource path calculation. Rebuild and deploy all three components together
-after an IPC protocol upgrade.
+TSF locates Core at the adjacent `bin/Fcitx5.exe`, and Core locates Settings at
+`settings/Fcitx5Settings.exe`; Core must stay in `bin/` for resource path
+resolution. Rebuild and deploy all components together after an IPC protocol
+change.
 
-Before updating an existing deployment, use `关闭服务` in the input indicator
-and close applications loading its DLL. Locked or read-only target/staging files
-cause the build script to exit. Choose another `-Prefix` to build while the
-current deployment is running. The final file copy is not atomic; a process
-opening a target file during copying can still interrupt deployment.
+Before updating an existing deployment, choose **Stop Services** in the input
+indicator and close applications loading its TSF DLL (or deploy to a new
+`-Prefix`). Locked target files cause the build script to exit; file copying is
+not atomic.
 
-If Settings cannot open, choose `重启服务` if services were manually stopped,
-then check the executable path and Windows App SDK/Visual C++ runtime. A
-successful `ipc_probe --ready` confirms the Core connection; use
-`settings_probe --open-settings` to check the Settings launch request. See
-[settings diagnostics](pinyin.md#windows-settings).
+If Settings fails to open, choose **Restart Services** if stopped, then verify
+the executable path and Windows App SDK/Visual C++ runtimes. Check Core and
+Settings separately with `ipc_probe --ready` and
+`settings_probe --open-settings` (see
+[settings diagnostics](pinyin.md#windows-settings)).
 
 ## Validation
 
-The unified build runs default TSF CTest only. It does not automatically run
-Core integration probes or interactive WinUI checks. With no existing Core or
-Settings process, use the unified build's TSF directory:
+With no existing Core or Settings running, run integration checks against the
+deployed tree:
 
 ```powershell
 ./scripts/test-pinyin.ps1 -TsfBuild ./build/all/tsf
@@ -544,65 +390,50 @@ Settings process, use the unified build's TSF directory:
 ./scripts/test-service.ps1 -TsfBuild ./build/all/tsf -WithSettings
 ./scripts/test-settings-ui.ps1 -TsfBuild ./build/all/tsf
 ./scripts/test-inputmethods.ps1 -Prefix ./dist/pinyin -TsfBuild ./build/all/tsf
+./scripts/test-engine-localization.ps1 -Prefix ./dist/pinyin -TsfBuild ./build/all/tsf
 ```
 
-Supply `-Prefix` if the deployment is not `dist/pinyin`. These scripts start/stop
-their own service processes and do not register the input method. The UI checks
-require an interactive desktop and installed Settings runtimes. See
-[probe coverage and limits](pinyin.md#build-and-test-tsf) for the distinction
-between actual TSF contexts, simulated callbacks and real OS dispatch.
+Additional targeted integration scripts:
 
-The Settings UI runner opens the separate add window, selects a language group
-and adds an available input method. Groups with non-keyboard methods come first;
-multilingual keyboard entries pass keys through using the active Windows layout.
-The runner starts real Core and Settings with a temporary Windows settings file,
-backs up and restores the Pinyin/table engine configuration, and requires a free
-service endpoint. Registered system input dispatch still needs acceptance.
-See [Settings design](windows-settings-design.md).
+- **Cross-architecture x86/x64 probes**:
+  `./scripts/test-pinyin.ps1 -Architecture x86 -TsfBuild ./build/all/tsf-x86 -PeerTsfBuild ./build/all/tsf`
+- **Punctuation & Settings UI**:
+  `./scripts/test-punctuation.ps1` (requires `FCITX5_UI_TEST` Core/TSF) and
+  `./scripts/test-settings-punctuation.ps1`
+- **Plugin status UI**:
+  `./scripts/test-settings-plugins.ps1 -SettingsExe <UiTest Settings> -FixtureExe <ui_fixture.exe>`
+- **Script regressions** (no registration or process termination):
+  `./scripts/test-build-and-deploy.ps1`, `./scripts/test-build-plugins.ps1`,
+  `./win32/tests/test_scripts.ps1`
 
-Default CTest includes `test_candidate` and `test_candidate_tsf`, which exercise the production
-DirectWrite/Direct2D draw function and popup lifecycle without Core or TIP
-registration. See [candidate rendering validation](windows-candidate-rendering.md#verification)
-for preview images and the remaining physical-monitor/application checks.
-Default CTest also checks the TSF runtime imports and verifies that the audit
-rejects fixtures with normal and delayed MSVCP140 imports. The portable runtime
-host loads the actual DLL, creates/activates the TIP, exercises pipe mutexes,
-translated COM text and translation worker exit, and deactivates/unloads it three
-times without registering the TIP or dispatching its Core-start message. LLVM must be installed for the
-import checks; it is found in PATH or `C:/Program Files/LLVM`.
-Enabling `ENABLE_PINYIN_INTEGRATION_TESTS` adds three Core probes and requires a
-running deployed Core.
+UI tests require an interactive desktop and installed Settings runtimes.
+See [probe coverage](pinyin.md#build-and-test-tsf) for default CTest details.
 
-To test coexistence with an older host runtime, configure a fresh TSF build with
-`-DTSF_PRELOAD_RUNTIME="C:/path/to/jbr/bin/MSVCP140.dll"`. This adds
-`test_tsf_old_runtime_host`, which verifies the requested DLL was preloaded before
-COM/TIP initialization and exercises the same lifecycle. The runtime and its
-matching dependencies must already exist; no runtime is downloaded or installed.
-This test covers activation and pipe locking, not full Core input or real IDE
-keyboard dispatch. Keep fresh Release and Debug build directories separate.
+### Default CTest Highlights and Old-Runtime Coexistence
 
-The following script regressions do not perform real registration or terminate
-applications:
-
-```powershell
-./scripts/test-build-and-deploy.ps1
-./win32/tests/test_scripts.ps1
-```
-
-The first checks build/deploy paths, preview behavior and locked/read-only file
-rejection without building. The second checks registration/release helpers
-with mocked system operations and requires the default deployed DLL to exist.
+- `test_candidate` and `test_candidate_tsf` exercise production DirectWrite /
+  Direct2D rendering, software DC fallback and popup lifecycle without Core or
+  registration (see
+  [candidate rendering verification](windows-candidate-rendering.md#verification)).
+- Runtime import checks (`test_tsf_runtime_imports`, `test_tsf_runtime_audit`,
+  `test_tsf_runtime_host`) audit normal and delayed PE imports via LLVM and
+  verify loading/activating/unloading the TIP DLL three times.
+- Enabling `-DENABLE_PINYIN_INTEGRATION_TESTS=ON` registers three Core probes in
+  CTest (requires a running deployed Core).
+- Configuring a fresh TSF build with
+  `-DTSF_PRELOAD_RUNTIME="C:/path/to/jbr/bin/MSVCP140.dll"` adds
+  `test_tsf_old_runtime_host` to verify coexistence when an older `MSVCP140.dll`
+  is already loaded in the host process (keep Release and Debug build trees
+  separate).
 
 ## Registration and DLL Management
 
-For installer-managed copies, use the Start menu or Windows installed-apps
-uninstall entry so user configuration, maintenance and file removal are handled
-together. The helpers below only register/unregister development deployments.
+Installer-managed installations should be removed through the Start menu or
+Windows Installed Apps. The helpers below manage development deployments only.
 
-Install/uninstall helpers default to `dist/pinyin/tsf/fcitx5-x86_64.dll`, resolved
-relative to the repository regardless of the current directory. Use `-Prefix`
-for another runtime tree or `-DllPath` for an explicit DLL; these are mutually
-exclusive. Preview before making system changes:
+`install.ps1` and `uninstall.ps1` default to `dist/pinyin/tsf/fcitx5-x86_64.dll`
+(use `-Prefix` or `-DllPath` for another build; `-DllPath` selects
+`System32`/`SysWOW64` `regsvr32` from the PE machine):
 
 ```powershell
 ./win32/scripts/install.ps1 -WhatIf
@@ -610,35 +441,21 @@ exclusive. Preview before making system changes:
 ./win32/scripts/uninstall.ps1 -WhatIf
 ```
 
-Real registration/unregistration requests administrator privileges when needed,
-waits for completion and reports errors. It does not copy files, install system
-runtimes, stop services or unload DLLs from running applications. Re-register
-after changing profile/category/icon metadata and reopen applications to load
-the updated DLL.
+Real registration/unregistration requests elevation when needed and waits for
+completion. Re-register after changing profile, category or icon metadata, and
+reopen applications to load the rebuilt DLL.
 
-The input mode item is a TSF Language Bar item; visibility depends on Windows
-language-bar settings. Registered right-click dispatch still needs validation.
-The menu's service commands use graceful shutdown and report timeouts for hung
-processes. Restart discards unfinished preedit and settings drafts; stopping
-services pauses automatic startup for the current login until a restart.
-
-For diagnosing or releasing a loaded DLL, preview the release helper:
+To inspect or release a locked TSF DLL, preview first:
 
 ```powershell
 ./win32/scripts/release-tsf.ps1 -Force -WhatIf
 ./win32/scripts/release-tsf.ps1 -Prefix "$PWD/dist/another" -Force -WhatIf
 ```
 
-Real unregistration requires an elevated PowerShell. The helper unregisters
-TSF by default; `-SkipUnregister` skips that step and its elevation check.
-`-Force` also terminates
-processes verified to load the exact DLL path, potentially including editors,
-browsers and Explorer; save work before using it. Owners whose paths cannot be
-verified are not terminated. It does not stop Core/Settings as services; use the
-input indicator menu first. Closing applications or choosing an isolated build
-directory is sufficient for ordinary rebuilds.
-
-Use `-HandlePath` if Sysinternals Handle is not in `PATH`; otherwise the helper
-falls back to `tasklist /m` and accessible module lists. `-WhatIf` requires no
-elevation, does not invoke Handle or accept its EULA, and makes no registration
-or process changes.
+`release-tsf.ps1` unregisters TSF by default (`-SkipUnregister` skips
+unregistration and elevation). `-Force` terminates processes verified to load
+the exact DLL path (which can include editors, browsers and Explorer—save work
+first; unverified owners are skipped). Stop Core/Settings from the indicator
+menu beforehand. Supply `-HandlePath` if Sysinternals Handle is not in `PATH`;
+otherwise the script falls back to `tasklist /m` and accessible module lists.
+`-WhatIf` makes no system changes and needs no elevation.

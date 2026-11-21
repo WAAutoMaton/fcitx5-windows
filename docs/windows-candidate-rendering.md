@@ -2,181 +2,165 @@
 
 ## Decision and Scope
 
-The nonactivating Win32 popup uses DirectWrite layouts and a Direct2D HWND
-render target, with a software DC render target fallback. Language-bar icons
-and document composition use separate paths.
-The TSF target links Windows `d2d1` and `dwrite`.
-The window and graphics resources stay on the TSF owning thread. Initialization
-is lazy, outside `DllMain`. Snapshots still come from Core; rendering never
-commits text. There is no render thread or continuous animation loop.
+The nonactivating Win32 candidate popup uses DirectWrite layouts and a Direct2D
+HWND render target, with an `ID2D1DCRenderTarget` software fallback.
+Language-bar icons and document composition use separate paths. The TSF target
+links Windows `d2d1` and `dwrite`.
+
+Window and graphics resources stay on the TSF owning thread, initialized lazily
+outside `DllMain`, with no background render thread or animation loop. Snapshots
+come from Core and rendering never commits text.
 
 Candidate data is published independently through TSF UIElement/Behavior.
-The host's BeginUIElement/Show permission gates popup display; missing HWND or
-layout does not discard the host-readable snapshot. Host selection/finalize/abort
-actions go to Core with the original context and stable candidate generation.
-The popup itself has no mouse interaction. See
-[modern UI policy](windows-modern-apps-design.md#候选-uielement-与自绘窗口).
+Host `BeginUIElement`/`Show` permission gates popup visibility; a missing HWND
+or unavailable layout preserves the host-readable snapshot. Host
+selection/finalize/abort actions are sent to Core with the original context and
+stable candidate generation. The popup itself supports keyboard selection only.
+See [modern UI policy](windows-modern-apps-design.md#候选-uielement-与自绘窗口).
 
 ## Typography and Layout
 
-Labels, bodies and comments have separate layouts. The body uses 16 DIP Segoe
-UI, secondary text 13 DIP, with DirectWrite's system font fallback. Complete
-UTF-16 strings include surrogate pairs, ZWJ sequences, skin-tone modifiers and
-combining marks. Drawing enables `D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT`.
-Explicit VS15 text-presentation sequences prefer Segoe UI Symbol for the scalar
-and selector. The tested VS15 heart is monochrome alongside a VS16 color heart;
-unsupported glyphs and sequences still depend on installed fonts and Windows.
+Labels, bodies and comments use separate DirectWrite layouts (16 DIP Segoe UI
+for body, 13 DIP for secondary text, with system font fallback). Full UTF-16
+strings—including surrogate pairs, ZWJ sequences, skin-tone modifiers and
+combining marks—render with `D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT`.
+Explicit VS15 text-presentation sequences prefer Segoe UI Symbol so monochrome
+text symbols stay distinct from VS16 color emoji; glyph coverage depends on
+Windows and installed fonts.
 
-Measurement and drawing use the same layouts. Row height includes text height,
-vertical glyph overhang and padding, with a 32 DIP minimum. In the default
-vertical layout, columns align labels and comments. Under Global Settings →
-General, users can select Horizontal to place entries from left to right and
-wrap them onto additional rows when needed. Both layouts use DirectWrite
-ellipsis for long text. Comments that cannot fit receive at most 35% of the
-remaining width. Popup width is bounded to 180-640 DIP and the monitor work area.
-Core includes the saved layout in candidate snapshots so the TSF popup picks up
-changes on the next update.
-System colors supply text, background, selection and border. Theme/color changes
-invalidate the window; a dedicated Windows 11 dark theme remains pending.
+Measurement and drawing share the same layouts:
+
+- Row height accounts for text height, vertical glyph overhang and padding
+  (minimum 32 DIP).
+- **Vertical layout (default)** aligns label, body and comment columns.
+- **Horizontal layout** (**Global Settings > General**) arranges entries left to
+  right and wraps onto additional rows when width is exceeded. Core sends the
+  saved layout in candidate snapshots so the popup applies changes on the next
+  update.
+- Both layouts use DirectWrite ellipsis trimming for long text; overflowed
+  comments receive at most 35% of remaining width. Popup width is bounded to
+  180–640 DIP and clamped to the monitor work area.
+- System colors supply text, background, selection and border, invalidating on
+  theme/color changes. A dedicated Windows 11 dark theme remains pending.
 
 ## DPI and Lifecycle
 
-The edit session queries `GetTextExt` under the owner's DPI awareness, then
-restores the thread context. `show` accepts owner-space logical screen coordinates.
-Per-Monitor-aware owners already use physical coordinates; other owners convert
-both corners with `LogicalToPhysicalPointForPerMonitorDPI`. This avoids rejecting
-valid text extents when modern hosts such as Windows Terminal use a visible,
-zero-sized input-site HWND. If an extent starts inside a child window but its
-end fails conversion, retry both corners using its top-level window on the same
-monitor with the same DPI awareness context. This handles extents that extend
-beyond a short edit control, such as Everything's search box.
-Unresolved conversion failures hide the popup and log the failed
-corner, owner awareness/DPI/client dimensions and anchor coordinates when detailed
-logging is enabled. A null owner assumes physical coordinates. A clipped
-composition falls back to the collapsed selection range. If that caret is also
-reported as clipped, valid geometry overlapping the document display returned by
-`GetScreenExt` can still anchor the popup. This accommodates hosts that report a
-visible caret as clipped. Clipped geometry without a visible caret,
-hidden/minimized owners, invalid UTF-8 and empty candidates hide the popup.
-Detailed logging records the display bounds and the clipped-caret
-acceptance decision as `candidate_clipped_caret`.
+### Coordinate Conversion and Anchors
 
-A successful zero-height or malformed composition extent also retries the
-collapsed selection. If the host supplies only an unclipped point for that
-selection, use it as the popup anchor when it lies inside the valid document
-display bounds from `GetScreenExt`. This supports game hosts such as Unity
-that provide an insertion position without text dimensions. The all-zero
-rectangle remains [TSF's invisible-text sentinel](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontextview-gettextext);
-clipped points, failed display
-queries and points outside the document display stay hidden. Detailed logging
-records display bounds and acceptance as `candidate_point_anchor`.
+Edit sessions query `GetTextExt` under the owner's DPI awareness, then restore
+the thread context. `show` accepts owner-space logical screen coordinates:
 
-`TS_E_NOLAYOUT` after a preedit write is temporary: keep the visible popup at its
-last physical anchor and update it with the applied snapshot for up to 250 ms.
-This anchor is never reused across context, view or owner changes, commit or
-cancellation. If layout stays unavailable, hide without discarding the pending
-snapshot so a later successful query can restore it. A merged message retries
-once after the write; the existing 100 ms timer also retries pending geometry.
+- Per-Monitor-aware owners already report physical coordinates (this accepts
+  valid extents from modern hosts such as Windows Terminal with a visible
+  zero-sized input-site HWND).
+- Other owners convert both corners via `LogicalToPhysicalPointForPerMonitorDPI`.
+  If an extent starts inside a child control but its end corner fails
+  conversion (e.g., Everything's short search box), both corners are retried
+  using the top-level window on the same monitor and DPI awareness context.
+- Unresolved conversion failures hide the popup and log the failed corner,
+  owner awareness/DPI/client bounds and anchor coordinates when detailed logging
+  is enabled. A null owner assumes physical coordinates.
+- A clipped composition falls back to the collapsed caret selection. If that
+  caret is also flagged as clipped, geometry overlapping the document display
+  from `GetScreenExt` can still anchor the popup (logged as
+  `candidate_clipped_caret`).
+- A zero-height or malformed composition extent also retries the collapsed
+  selection. If the host supplies an unclipped point inside valid `GetScreenExt`
+  bounds (e.g., game hosts such as Unity), it anchors the popup (logged as
+  `candidate_point_anchor`). The all-zero rectangle remains
+  [TSF's invisible-text sentinel](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfcontextview-gettextext).
+- Clipped geometry without a visible anchor, hidden/minimized owners, invalid
+  UTF-8 and empty candidate lists hide the popup.
+
+### Deferred Layout and `ITfTextLayoutSink`
+
+`TS_E_NOLAYOUT` after a preedit write is treated as temporary: the visible popup
+stays at its last physical anchor and updates with the applied snapshot for up
+to 250 ms (never reusing anchors across context, view or owner changes, commit
+or cancellation). If layout remains unavailable, the popup hides while keeping
+the pending snapshot so a merged retry or the 100 ms timer can restore it once
+geometry becomes valid.
 
 The focused context advises `ITfTextLayoutSink`. Layout notifications post a
-merged message which requests a read-only edit session (synchronous with async
-fallback); they do not write document text or make IPC requests. The session
-holds its original context and generation and uses the last applied candidate
-snapshot, not input still waiting in the edit queue. Unadvise on context change
-and reject late sessions after cancellation, focus change or deactivation.
-Hosts that reject this optional sink still use the existing timer/snapshots.
+merged message requesting a read-only edit session (synchronous with async
+fallback) bound to the original context, generation and last applied snapshot.
+Late sessions after cancellation, focus change or deactivation are rejected.
+Hosts that reject this optional sink fall back to the timer and regular
+snapshots.
 
-Creation and positioning temporarily use Per-Monitor V2, restoring the host
-thread without changing process awareness. The popup's own DPI determines
-DIP-to-pixel conversion, even for DPI-unaware owners. `WM_DPICHANGED` and display
-changes recompute bounds; `WM_SIZE` updates target size. Positioning supports
-negative coordinates, clamps to the anchor monitor's work area, and moves above
-the anchor when space below is exhausted.
+### Window Awareness, Device Loss and Software Fallback
 
-`WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW` and `MA_NOACTIVATE` preserve focus.
-Owner destruction clears the HWND and device resources; a later snapshot can
-recreate the popup. Device-target loss discards device
-resources and schedules at most two repaint retries, after 16/32 ms, without
-hiding. Persistent or other drawing errors hide until a later snapshot retries,
-without resetting or replaying input. Hiding cancels repaint retries.
+Popup creation and positioning temporarily switch the thread to Per-Monitor V2
+and restore it afterward without changing process awareness. The popup's own DPI
+governs DIP-to-pixel scaling even for DPI-unaware owners. `WM_DPICHANGED` and
+display changes recompute bounds; `WM_SIZE` resizes the target. Positioning
+supports negative coordinates, clamps to the anchor monitor's work area and
+flips above the anchor when space below is insufficient.
 
-If HWND render-target creation fails, switch that candidate-window instance to
-`ID2D1DCRenderTarget` with explicit software rendering. Bind the current paint DC
-and full client rectangle on every paint, including after resize or DPI changes.
-This avoids the HWND presentation path while reusing the existing DirectWrite
-layouts, colors and draw routine. Log `popup_render_fallback` with the original
-HRESULT and `dc_software` backend. Creation/binding failures retain their original
-HRESULT in `popup_paint`; only actual `D2DERR_RECREATE_TARGET` failures use the
-bounded device-loss retries. Host UIElement permission and owner checks still
-apply before either rendering path.
+`WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW` and `MA_NOACTIVATE` preserve host focus.
+Owner destruction clears the HWND and device resources for lazy recreation on
+the next snapshot. On `D2DERR_RECREATE_TARGET`, device resources are discarded
+and up to two repaint retries run at 16/32 ms without hiding; persistent or
+other errors hide until the next snapshot without resetting or replaying input.
+
+If HWND render-target creation fails, the window instance switches to
+`ID2D1DCRenderTarget` with explicit software rendering, binding the paint DC and
+full client rectangle on each paint while reusing the same DirectWrite layouts
+and draw routine (`popup_render_fallback` logs the original HRESULT and
+`dc_software`). Host UIElement permission and owner checks apply to both paths.
 
 ## Resource and Latency Policy
 
-Reuse factories, font formats, trimming sign, target and brush. Unchanged
-strings retain layouts, including selection-only updates. Resize the target
-only when pixel dimensions change. A single BeginDraw/EndDraw pair renders
-the frame, without explicit Flush per row. `D2D1_PRESENT_OPTIONS_IMMEDIATELY`
-avoids waiting for display refresh on the application's TSF thread.
-After positioning, `UpdateWindow` paints the invalidated surface immediately,
-including after resizing; production updates do not wait for an idle `WM_PAINT`.
-See Microsoft's [performance guide](https://learn.microsoft.com/en-us/windows/win32/direct2d/improving-direct2d-performance)
-and [presentation options](https://learn.microsoft.com/en-us/windows/win32/api/d2d1/ne-d2d1-d2d1_present_options).
+Factories, text formats, trimming signs, render targets and brushes are reused.
+Unchanged candidate strings keep their DirectWrite layouts (including
+selection-only updates). Render targets resize only when pixel dimensions
+change. Frames draw in a single `BeginDraw`/`EndDraw` pair with
+`D2D1_PRESENT_OPTIONS_IMMEDIATELY`, followed by `UpdateWindow` so updates paint
+immediately without waiting for an idle `WM_PAINT`. See Microsoft's
+[Direct2D performance guide](https://learn.microsoft.com/en-us/windows/win32/direct2d/improving-direct2d-performance)
+and
+[presentation options](https://learn.microsoft.com/en-us/windows/win32/api/d2d1/ne-d2d1-d2d1_present_options).
 
 ## Verification
 
-`test_candidate` is a default CTest with no Core or registration requirement.
-It injects `DXGI_ERROR_NOT_CURRENTLY_AVAILABLE` into HWND-target creation and
-checks software DC pixels, target reuse, resize, DPI changes, resource recreation
-and failure recovery.
+- **`test_candidate`** (default CTest, no Core or registration):
+  - Runs the production draw routine on a software WIC target at 96/120/144/192/
+    288 DPI; verifies color emoji vs. monochrome controls, VS15, ellipsis,
+    layout reuse and vertical/horizontal wrapping layout.
+  - Injects `DXGI_ERROR_NOT_CURRENTLY_AVAILABLE` into HWND-target creation to
+    verify software DC fallback pixels, target reuse, resize, DPI changes and
+    failure recovery.
+  - Covers three owner awareness modes, thread-state restoration, focus, owner
+    lifetime, work-area bounds, immediate paint, device-loss retries, zero-sized
+    per-monitor input sites and child-edit overflow into top-level coordinates.
+- **`test_candidate_tsf`** (default CTest, in-memory `ITextStoreACP`, no Core or
+  registration):
+  - Covers `TS_E_NOLAYOUT` anchor retention, merged read-only layout sessions,
+    applied vs. queued snapshots, clipped-composition caret fallback, clipped
+    carets overlapping document bounds, point anchors (including negative
+    coordinates, clipped points and the all-zero sentinel), timeout/recovery,
+    hidden owners, late sessions and host UIElement show/hide without an HWND.
+- **`candidate_render_probe <AppContainer profile or package family name>`**:
+  - Compares default/software HWND targets, software DC targets and both
+    production paths across desktop and real AppContainer-token child processes.
+- **Visual preview generation**:
 
-`candidate_render_probe <existing AppContainer profile/package family name>`
-compares default/software HWND targets, software DC targets and both production
-candidate rendering paths in desktop and real AppContainer-token children.
-It uses an existing profile and isolated diagnostic children without Core or
-TIP registration. Packaged immersive hosts such as SearchHost still need
-interactive validation; see [modern app acceptance](windows-modern-apps-design.md#剩余验收矩阵).
+  ```powershell
+  ./build/all/tsf/tests/test_candidate.exe build/candidate-preview
+  ```
 
-The production draw function runs through a software WIC target at 96/120/144/
-192/288 DPI. It compares color emoji with monochrome controls and checks VS15,
-ellipsis and layout reuse. Window tests cover three owner awareness modes,
-thread-state restoration, focus, owner lifetime, empty/invalid input, work-area
-bounds, immediate paint, target-loss recovery and bounded repaint retries.
-Zero-sized per-monitor input sites are accepted without logical coordinate
-conversion; zero-sized owners requiring failed conversion remain hidden.
-The child edit test checks positioning after a two-pixel overflow and hiding
-when the extent also exceeds the top-level window.
+  Produces five synthetic-DPI offscreen PNGs and a native HWND capture via
+  `PrintWindow(PW_RENDERFULLCONTENT)`.
 
-`test_candidate_tsf` uses a real TSF context backed by the shared in-memory text
-store, without Core, IPC or registration. It checks repeated TS_E_NOLAYOUT,
-content at retained anchors, merged read-only layout sessions, applied versus
-queued snapshots, clipped-composition caret fallback, clipped carets overlapping
-document bounds, invalid/empty/offscreen geometry, timeout/recovery, commit,
-cancel, hidden owners and late sessions after focus loss/deactivation.
-Point-anchor cases cover composition-to-caret fallback, document boundaries,
-negative coordinates, clipped points and the all-zero invisible-text sentinel.
-It also checks host UIElement show/hide and candidate publication without HWND
-or usable popup geometry, using explicit adapter callbacks.
-
-For the current default suite and real engine probes, see
-[TSF tests](pinyin.md#build-and-test-tsf). Generate synthetic-DPI PNGs and briefly
-show a native preview after building:
-
-```powershell
-./build/all/tsf/tests/test_candidate.exe build/candidate-preview
-```
-
-The output includes five synthetic offscreen images and a native HWND capture
-using PrintWindow(PW_RENDERFULLCONTENT), independent of occlusion. Timing covers
-the rendering call; end-to-end input latency needs a live engine/application
-measurement. Interactive desktop focus and installed fonts can affect the preview.
+For the full CTest list and real engine probes, see
+[TSF tests](pinyin.md#build-and-test-tsf).
 
 ## Remaining Validation
 
-Real registered-TIP applications, physical mixed-DPI monitor transitions,
-themes/high contrast and accessibility text scaling remain unverified. Font
-coverage and newer color-font formats depend on the OS and installed fonts.
-Physical scrolling/moving behavior still needs application testing despite the
-layout-change subscription. Oversized pages are height-clamped
-without scrolling. Popup mouse interaction and full accessibility remain
-incomplete. UIElement/Behavior has unregistered coverage, but real host rendering,
-candidate actions and screen-reader behavior still need system acceptance.
+- Live registered-TIP testing across real desktop and packaged immersive hosts
+  (e.g., SearchHost), mixed-DPI monitor transitions, scrolling/moving windows,
+  dark/high-contrast themes and accessibility text scaling.
+- Real host UIElement rendering, host candidate actions and screen-reader
+  integration.
+- Oversized candidate pages are height-clamped without scrolling; popup mouse
+  interaction and full accessibility remain pending.

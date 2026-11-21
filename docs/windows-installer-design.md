@@ -1,38 +1,38 @@
 # Windows 安装包实现与设计
 
-安装实现、base/full × 运行库双版本打包、可选登录启动、默认延迟升级和 CI/Nightly 发布流程已接入。CI 对 base/full 均提供不含运行库包的机器级安装/注册/卸载 smoke；完整用户初始化、升级和重启清理仍需系统验收。
+安装实现、`base`/`full` × 含/不含运行库四种打包、可选登录启动、默认延迟升级和 CI/Nightly 发布流程均已接入。CI 对 `base`/`full` 的不含运行库包运行机器级安装/注册/卸载 smoke；完整用户初始化、含运行库部署、升级与重启清理需干净 VM 验收。
 
-## 当前交付与支持范围
+## 交付与支持范围
 
-使用 Inno Setup 7 生成 x64 EXE，安装到 Program Files 下的 `Fcitx5`，包含独立的 x64/x86 TSF。MSI 和原生 ARM64 TSF 尚未提供，ARM64 不在当前 CI 构建矩阵中。
+使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，内置共享同一 x64 Core 的独立 x64/x86 TSF。MSI 与原生 ARM64 TSF 尚未提供。
 
-| CI 包名 | 运行库要求 |
+| CI 包名 | 运行库策略 |
 | --- | --- |
-| `Fcitx5-<run>-<edition>-x64-setup.exe` | 附带 Microsoft x64 VC++ Redistributable 和 Windows App Runtime 安装程序 |
-| `Fcitx5-<run>-<edition>-x64-no-runtime-setup.exe` | 不附带或执行上述安装程序；须预先满足运行库要求 |
+| `Fcitx5-<run>-<edition>-x64-setup.exe` | 附带 Microsoft x64 VC++ Redistributable 与 Windows App Runtime 安装程序 |
+| `Fcitx5-<run>-<edition>-x64-no-runtime-setup.exe` | 需预先为当前用户安装上述运行库 |
 
-四种包都包含完整 Core、x64/x86 TSF、Settings 和原生安装/升级 helper。`edition` 为 `base` 时输入法插件为 fcitx5-chinese-addons；`full` 自动包含 `plugins/` 下全部插件，目前额外提供 fcitx5-rime、fcitx5-table-extra、fcitx5-wenzhounese 和 fcitx5-zhuyin。table-extra 复用 base 的 `table` 引擎，提供 25 张码表；注音包含 libzhuyin、模型及依赖许可。额外插件部署到安装树 `plugins/<name>`，其文件进入安装/升级所有权清单，依赖与布局见 [Windows 插件](windows-plugins.md)。Settings 继续使用 framework-dependent Windows App SDK 1.8，要求当前用户有 x64 Framework/DDLM >= `8000.994.2142.0` 和 Visual C++ 运行库。不含运行库版本仍执行 Settings `--runtime-check`，缺少依赖时用户初始化不能成功完成。
+四种安装包均包含 Core、x64/x86 TSF、Settings 及原生安装/升级 helper：
 
-安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.17763` 和 `PrivilegesRequired=admin`，使用固定 AppId。最低安装版本是 Windows 10 1809 x64（build 17763），与 Settings 的目标和锁定的 Windows App Runtime 1.8.12 x64 MSIX 的 `TargetDeviceFamily MinVersion` 一致。Settings 构建需要 Windows SDK 10.0.22000.0 或更新版本。Windows 10 实机验收待完成。参见 [Windows App SDK 版本要求](https://learn.microsoft.com/en-us/windows/apps/get-started/versioning-overview#windows-app-sdk-versions)。
+- `base`：内置 `fcitx5-chinese-addons`。
+- `full`：包含 `plugins/` 下全部插件（`fcitx5-chinese-addons`、`fcitx5-rime`、`fcitx5-table-extra`、`fcitx5-wenzhounese`、`fcitx5-zhuyin`），额外插件部署到 `plugins/<name>` 并纳入安装/升级所有权清单，见 [Windows 插件](windows-plugins.md)。
+- Settings 采用 framework-dependent Windows App SDK 1.8，要求当前用户已安装 x64 Framework/DDLM >= `8000.994.2142.0` 与 VC++ 运行库；不含运行库包在用户阶段仍会执行 `Fcitx5Settings.exe --runtime-check`。
 
-x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册；两者使用同一 CLSID/profile 和独立 registry view。参见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)。
+安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.17763`（Windows 10 1809 x64，与锁定的 Windows App Runtime 1.8.12 MSIX 一致）、`PrivilegesRequired=admin` 与固定 AppId。x64 TSF 由原生 helper 注册，x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，两者共享 CLSID/profile 并使用独立 registry view（参见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)）。
 
 ## 实现入口
 
-| 位置 | 当前职责 |
+| 位置 | 职责 |
 | --- | --- |
-| `scripts/build-and-deploy.ps1` | 调度 Core/libime/addons、TSF/helper 和独立 MSBuild Settings 工程，测试并部署完整开发运行树 |
-| `scripts/build-installer.ps1`、`installer/fcitx5.iss` | 校验打包输入、复制许可证、标记受管理安装、生成双版本 EXE/manifest/SHA256，编排安装与卸载 |
-| `cmake/installer-lock.json` | 记录参考 Inno 版本及官方运行库下载地址、版本、SHA256 和发布者 |
-| `win32/setup/main.cpp`、`userprofile.cpp` | 注册归属、权限、占用检查、用户输入项备份/恢复、启用/激活、Core 就绪及卸载 launcher |
-| `win32/setup/startup.h` | 显式当前用户登录启动项；固定 `--login-start` 命令和安装路径归属检查 |
-| `win32/setup/log.h` | 安装 helper 的 UTF-8 诊断日志 |
-| `win32/setup/upgrade*.{h,cpp}` | 延迟升级：暂存、SYSTEM 开机提交、文件保护、状态/注册恢复和卸载所有权 |
-| `win32/dll/register.cpp`、`main.cpp` | COM/profile/category 注册与注销、失败结果传递 |
+| `scripts/build-and-deploy.ps1` | 调度 Core/libime/addons、双架构 TSF/helper 与 Settings，测试并部署运行树 |
+| `scripts/build-installer.ps1`、`installer/fcitx5.iss` | 校验打包输入、复制许可证、写入 `managed-install`、生成运行清单与 EXE/SHA256/manifest |
+| `cmake/installer-lock.json` | 锁定参考 Inno 版本及官方运行库 URL、版本、SHA256 与发布者 |
+| `win32/setup/main.cpp`、`userprofile.cpp` | 注册归属、权限与占用检查、用户输入项备份/恢复、启用/激活、Core 就绪与卸载入口 |
+| `win32/setup/startup.h` | 当前用户可选登录启动项（固定 `--login-start` 命令与安装路径归属检查） |
+| `win32/setup/log.h` | 安装/维护 helper 的 UTF-8 诊断日志 |
+| `win32/setup/upgrade*.{h,cpp}` | 延迟升级：暂存、COM 暂停与预关机服务、SYSTEM 开机提交、文件保护、恢复与卸载所有权 |
+| `win32/dll/register.cpp`、`main.cpp` | COM/profile/category 注册与注销（使用 32768 字符 DLL 路径缓冲并返回失败结果） |
 | `win32/ipc/installation.h` | 受管理安装识别与服务启动门控 |
-| `.github/workflows/ci.yml` | 一次 x64 联合构建，独立测试/打包 job，Nightly 发布 |
-
-`RegisterServerAt()` 检查注册表调用、可靠关闭句柄并为 REG_SZ 写入终止符；DLL 路径使用 32768 字符缓冲区。`DllUnregisterServer()` 返回 profile/category 或 COM 清理失败结果。
+| `.github/workflows/ci.yml` | 联合构建、并行测试/打包、安装 smoke 与 Nightly 发布 |
 
 ## 安装树与状态
 
@@ -41,7 +41,7 @@ x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册�
   bin/Fcitx5.exe + Core/MSYS2 运行 DLL
   lib/fcitx5/ + lib/libime/zh_CN.lm
   share/fcitx5/ + share/libime/sc.dict
-  share/locale/ （Windows 与上游简体/繁体翻译目录）
+  share/locale/ （Windows 与上游简体/繁体翻译）
   tsf/fcitx5-x86_64.dll
   tsf/x86/fcitx5-x86.dll
   settings/Fcitx5Settings.exe + DLL/PRI/WinMD
@@ -51,106 +51,86 @@ x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，x64 TSF 由原生 helper 注册�
   setup/managed-install + install-state
   setup/WindowsAppRuntimeInstall-x64.exe  （仅含运行库版）
   licenses/
-  plugins/<name>/bin + lib + share + licenses  （full 的额外插件）
+  plugins/<name>/bin + lib + share + licenses  （full 额外插件）
   unins*.exe + 卸载记录
 ```
 
-Core 保持独立进程和 MSYS2 Windows GNU 运行库；TSF/helper 使用 Windows SDK/ATL，Settings 使用独立 MSBuild 工程。Core 与 TSF/Settings 只通过 Named Pipe 交换协议数据，不跨进程传递 C++ 对象或分配器。安装路径仍符合 `bin`、`tsf`、`settings` 相邻目录的定位约定。
-
-当前机器状态存于安装树 `setup/install-state` 和 `HKLM\SOFTWARE\Fcitx5\Installer`，实际状态值为 `installed`、`maintenance`、`pending`。受管理安装由 `setup/managed-install` 或 HKLM 安装根识别，只有完整有效的 `installed` 文件允许服务启动；状态缺失/损坏时拒绝启动。未标记的隔离开发树保留原有启动行为。升级状态独立存于 `setup/upgrades/current`，等待重启时不改旧版 `installed`；结果保留在 `setup/upgrade-result.json`。
-
-TSF 启动路径及 Core/Settings 主循环检查维护状态。用户级 `.state` 仍只表达 SID/session/logon 的手动关闭意图，不能代替机器安装状态。旧版本已加载 DLL 若不认识维护状态，仍需要关闭相关应用或注销/重启来释放。
-
-安装向导的 `loginstart` 任务默认不选中，按普通原始用户身份写入 HKCU Run 的固定 `Fcitx5.exe --login-start` 命令。该启动路径在读取配置/创建服务之前检查自动启动许可，不解除本次登录的手动停止状态。`prepare-uninstall-user` 清理本安装树拥有的启动项，保留其他路径的同名值；machine-only、构建、部署和 probe 不创建启动项。真实登录、升级/卸载及其他用户账户清理仍需验收。
-
-用户设置、词库和学习历史位于 `%APPDATA%/Fcitx5`，不由安装器覆盖或删除。用户输入项备份和 helper 日志位于该用户 LocalAppData。打包脚本枚举给定树的 `bin/lib/share/tsf/settings/licenses/plugins` 及活动 helper/marker，生成逐文件大小和 SHA256 的运行清单与 Inno 文件列表。维护程序和事务状态单独管理；最小运行依赖裁剪及完整依赖源码/许可清单仍需完善。
+- **机器状态**：存于 `setup/install-state` 与 `HKLM\SOFTWARE\Fcitx5\Installer`（取值为 `installed`、`maintenance`、`pending`）。受管理安装由 `setup/managed-install` 或 HKLM 键识别，仅在 `install-state` 有效且为 `installed` 时允许服务启动；未标记的开发树保留原有启动行为。升级事务状态独立存于 `setup/upgrades/current`，等待重启期间不修改旧版 `installed`；最终结果持久化在 `setup/upgrade-result.json`。
+- **可选登录启动**：向导中的 `loginstart` 任务默认不勾选，以普通原始用户身份写入 HKCU Run 的 `Fcitx5.exe --login-start`，启动前检查自动启动许可并遵守本次登录的手动停止状态；卸载仅清理归属本安装树的启动项。
+- **用户数据保留**：`%APPDATA%/Fcitx5` 中的配置、词库和学习历史不受安装/卸载影响；用户输入项备份与 helper 日志位于用户 LocalAppData。
 
 ## Helper 与权限
 
-`Fcitx5SetupHelper.exe` 复用注册与服务控制代码，不要求用户运行开发 PowerShell 脚本。实际命令如下：
+`Fcitx5SetupHelper.exe` 封装注册、用户配置与服务控制（所有变更命令支持 `--prefix` 和无副作用 `--what-if`）：
 
 | 命令 | 执行身份与行为 |
 | --- | --- |
-| `preflight-machine` | 检查冲突注册及安装根下待重启删除的文件 |
-| `register-machine` / `unregister-machine` | 管理员注册/注销，核对当前 COM DLL 路径归属；DLL 缺失时支持有限注销清理 |
-| `configure-user` | 普通权限验证 runtime、备份/启用输入项、首次设置默认并激活、重启 Core 和等待就绪 |
-| `rollback-user` / `prepare-uninstall-user` | 普通权限恢复必要的用户偏好、移除输入项并正常停止自己的服务 |
-| `pause-user` / `resume-user` | 普通权限执行维护前用户处理及恢复 |
-| `enable-login-start` / `disable-login-start` | 普通原始用户显式设置本安装路径的 HKCU Run 启动项；拒绝覆盖其他路径 |
+| `preflight-machine` | 检查冲突注册及安装根下待重启删除项 |
+| `register-machine` / `unregister-machine` | 管理员注册/注销并核对 COM DLL 路径归属（支持 DLL 缺失时的有限清理） |
+| `configure-user` | 普通用户验证 runtime、备份/启用输入项、首次设默认并激活、重启 Core 并等待就绪 |
+| `rollback-user` / `prepare-uninstall-user` | 普通用户恢复必要偏好、移除输入项并优雅停止服务 |
+| `pause-user` / `resume-user` | 普通用户执行维护前暂停与恢复 |
+| `enable-login-start` / `disable-login-start` | 普通原始用户管理本安装路径的 HKCU Run 项（不覆盖其他路径） |
 | `set-maintenance` / `clear-maintenance` / `mark-pending` | 管理员写入 `maintenance` / `installed` / `pending` |
-| `inspect-locks` | 用 Restart Manager 查询安装树的 EXE/DLL 占用，返回错误或占用状态 |
-| `uninstall` | 普通权限处理用户阶段，再提权执行机器注销和原生卸载器；支持 `--silent` |
+| `inspect-locks` | 通过 Restart Manager 查询安装树 EXE/DLL 占用 |
+| `uninstall` | 普通权限先处理用户阶段，再提权执行机器注销与 Inno 卸载（支持 `--silent`） |
 
-命令支持 `--prefix` 和无系统变更的 `--what-if`。升级维护程序另提供 `query-upgrade`、`cancel-upgrade`、`recover-upgrade` 和 `cleanup-upgrade`，详见 [维护接口](windows-reboot-upgrade-design.md#11-维护接口与代码归属)。卸载待重启删除仍由 Inno/Windows 处理。
+`Fcitx5Upgrade.exe` 另提供 `query-upgrade`、`cancel-upgrade`、`recover-upgrade`、`cleanup-upgrade`、`suspend-upgrade`、`resume-upgrade` 等接口，详见 [维护接口](windows-reboot-upgrade-design.md#11-维护接口与代码归属)。
 
-安装使用 [`ExecAsOriginalUser`](https://jrsoftware.org/ishelp/topic_isxfunc_execasoriginaluser.htm) 调用用户阶段；普通权限 helper 拒绝以管理员身份执行用户配置。普通双击 + UAC 是预期路径，标准用户由其他管理员代输凭据、从已提升终端运行等身份分支仍需实测。`/MACHINEONLY=1` 显式跳过用户初始化，结束提示会说明尚未配置用户；当前没有自动登录初始化。
+安装器通过 [`ExecAsOriginalUser`](https://jrsoftware.org/ishelp/topic_isxfunc_execasoriginaluser.htm) 运行用户阶段；普通权限命令拒绝以管理员身份执行用户配置。`/MACHINEONLY=1` 跳过用户初始化并在结束页提示。
 
-## 首次安装与关闭延迟升级时的流程
+## 安装与升级流程
 
-1. 已有 helper 时执行 `preflight-machine`，拒绝冲突注册或安装根下仍有待重启删除的文件。已有受管理安装时先处理用户服务、写入维护状态并检查占用；占用或检查失败时退出并尝试恢复。
-2. 含运行库版安装 VC++ 先决条件，接受成功、待重启及已装其他版本的对应返回码，然后复制完整运行树。安装器设置 `CloseApplications=no`、`RestartApplications=no`，不自动结束第三方应用。
-3. 从最终路径注册 TSF，写入 `installed` 状态。含运行库版执行 Windows App Runtime 安装，随后通过原始用户的 `configure-user` 验证实际 bootstrap；必要时在该用户身份下重试运行库安装。
-4. `configureUser()` 首次保存旧默认输入项及启用状态，调用 `InstallLayoutOrTip` 启用 Fcitx5；首次初始化才设置默认并激活，后续保留用户后来选择的默认项。已有备份时先读取验证。
-5. 正常重启 Core 并轮询 `GetSettings`，记录 IPC 就绪。
-6. 用户配置或后续步骤失败时尝试 `rollback-user`、注销并标记 pending。这一路径采用步骤补偿，中途崩溃后的恢复仍需系统验收。
+### 首次安装（及关闭延迟升级时的覆盖路径）
 
-`InstallLayoutOrTip` 使用既有简体中文 profile 描述，不使用会禁用其他输入项的 `ILOT_CLEANINSTALL`，也不配置登录屏幕。首次激活记录 `ChangeCurrentLanguage` 和 `ActivateProfile` 的实际结果；不能推断非中文系统、每应用输入模式和已有应用窗口必然立即切换。API 参考：[InstallLayoutOrTip](https://learn.microsoft.com/en-us/windows/win32/tsf/installlayoutortip)、[SetDefaultLayoutOrTip](https://learn.microsoft.com/en-us/windows/win32/tsf/setdefaultlayoutortip)、[ActivateProfile](https://learn.microsoft.com/en-us/windows/win32/api/msctf/nf-msctf-itfinputprocessorprofilemgr-activateprofile)。
+1. 已有 helper 时执行 `preflight-machine`，拒绝冲突注册或安装根下待重启删除项（发现待删项返回 `3010`）。已有受管理安装且关闭延迟升级时，暂停服务、写入 `maintenance` 并检查占用，发现占用则退出并恢复。
+2. 含运行库版先安装 VC++ 运行库，再复制完整运行树。安装器设置 `CloseApplications=no`、`RestartApplications=no`，不终止第三方应用。
+3. 从最终路径注册双架构 TSF 并写入 `installed`。含运行库版安装 Windows App Runtime，再以原始用户执行 `configure-user` 验证 bootstrap（必要时在该用户下重试运行库安装）。
+4. `configure-user` 备份旧默认项，调用 `InstallLayoutOrTip`（不使用 `ILOT_CLEANINSTALL`，不改登录屏幕）启用 Fcitx5；仅首次初始化时设置默认并激活，随后重启 Core 并轮询就绪。
+5. 若用户配置或后续步骤失败，执行补偿回滚（`rollback-user`、注销并标记 `pending`）。
 
-通过 `-RebootUpgrade:$false` 关闭延迟升级的包在固定目录升级遇到 DLL 占用时仍拒绝覆盖。helper 会扫描 `PendingFileRenameOperations` 中安装根下的条目；若被预检发现则返回 `3010`。完整卸载后旧 helper 不再存在时的同路径重装保护仍需系统验收。
+### 默认延迟升级
 
-打包默认启用延迟升级，CI/Nightly 使用相同默认值：受管理升级统一完整暂存，等待重启期间继续使用旧版，重启后在维护门控下提交与恢复。可通过 `-RebootUpgrade:$false` 显式关闭。实现和限制见 [Windows 输入法占用时的延迟升级设计](windows-reboot-upgrade-design.md)。开机时序和真实系统重启仍需 VM 验收。
+默认安装包（含 CI/Nightly）启用延迟升级（可通过 `-RebootUpgrade:$false` 关闭）：受管理升级完整暂存新版并保持旧版可用，返回 `3010`；重启前通过 `suspend-upgrade` 或临时 SYSTEM 预关机服务（`Fcitx5-UpgradeShutdown`）暂停双视图 COM 入口，重启后由临时 SYSTEM 开机任务在维护门控下整体提交与恢复。完整机制见 [延迟升级设计](windows-reboot-upgrade-design.md)。
 
 ## 卸载与 DLL 占用
 
-新包的开始菜单和 Windows 应用卸载项指向 `setup/maintenance-host/Fcitx5Upgrade.exe uninstall --prefix <root>`，与 `Fcitx5SetupHelper.exe` 共用卸载调用链。普通权限入口处理当前用户输入偏好及服务后再提权；仅在当前默认仍为 Fcitx5 时恢复原项或选择有效替代项。管理员阶段先协调待升级事务，再写维护状态、查询占用、注销并运行 Inno 原生卸载器；原生卸载后清理动态状态及独立所有权清单中的升级新增文件，不能只依赖旧 Inno 日志。
+开始菜单与 Windows 已安装应用卸载入口指向 `setup/maintenance-host/Fcitx5Upgrade.exe uninstall --prefix <root>`：
 
-传给 Inno 的参数为 `/NORESTART /HELPER=1`；静默时另加 `/VERYSILENT /SUPPRESSMSGBOXES`。`/HELPER=1` 避免原生卸载器重复维护/注销。文件条目使用 `uninsrestartdelete`，被占用时可能延迟到重启删除。launcher 在占用且原生卸载成功时返回 `ERROR_SUCCESS_REBOOT_REQUIRED`（`3010`），保留该返回码且不弹失败提示。不会调用 `RmShutdown`、结束 Explorer/ctfmon 或按进程名杀用户应用。
+- 普通权限阶段处理当前用户输入项恢复（仅当当前默认仍为 Fcitx5 时恢复原项或有效替代项）并优雅停止服务。
+- 提权阶段协调待升级事务、写 `maintenance`、查询占用、注销双视图 TSF 并调用 Inno 原生卸载器（`/NORESTART /HELPER=1`，静默时加 `/VERYSILENT /SUPPRESSMSGBOXES`），最后清理动态状态及升级所有权清单中的新增文件。
+- 文件使用 `uninsrestartdelete`：若存在 DLL 占用且原生卸载成功，返回 `ERROR_SUCCESS_REBOOT_REQUIRED`（`3010`），不调用 `RmShutdown` 或按进程名强杀应用。
+- 保留 `%APPDATA%/Fcitx5` 用户数据及共享 VC++/Windows App Runtime。正式安装请使用上述卸载入口，而非开发用 PowerShell 脚本。
 
-注销登录可释放当前会话的 DLL，重启删除队列需重启 Windows 执行；其他会话也可能仍在占用。真实占用检测、提示和重启后的删除仍需验收。相关机制见 [Restart Manager](https://learn.microsoft.com/en-us/windows/win32/rstmgr/functions) 和 [Inno uninsrestartdelete](https://jrsoftware.org/ishelp/topic_filessection.htm)。
+## 构建、CI 与自动化验证
 
-用户词典与学习数据、共享 VC++/Windows App Runtime 保留。开发用 `install.ps1`/`uninstall.ps1` 只注册/注销 DLL，不管理正式安装文件；正式安装应使用上述卸载入口。
+本地打包命令见 [build.md](build.md#build-installer-packages)。打包会向 `-Prefix` 写入 `setup/managed-install` 并复制许可证，应始终使用独立 staging 目录。CI 通过 winget 安装 Inno Setup 7 并校验主版本为 7。
 
-## 构建与 CI
-
-本地命令和打包参数见 [构建安装包](build.md#build-installer-packages)。打包使用独立完整暂存树，`build-installer.ps1` 会复制许可证并写入 `setup/managed-install`，不能对正在使用的开发运行树执行。它不注册、不启动服务、不执行运行库安装；`-WhatIf` 只验证必要输入并预览。
-
-依赖锁记录参考 Inno `7.1.0`；脚本和 CI 实际校验主版本为 7，并记录实际版本。CI 当前通过 winget 安装 Inno Setup 7，未使用锁文件的 Inno 安装程序 SHA256 来固定编译器补丁版本。各打包 job 将检查过的完整路径传给 `-IsccPath`，避免 PATH 中旧版 6 被误选。
-
-| Job | 当前流程 |
+| Job | 流程 |
 | --- | --- |
-| `build-x64` | 统一 Release 构建 base，复用同一 SDK 构建全部额外插件生成 full；验证温州话、额外码表和注音候选提交及对应 base 条目缺席，检查注音模型保存/重载，上传两套运行树及共享测试/Settings artifact |
-| `test-x64` | 复用运行树和测试包，执行脚本/注册检查回归、图标校验、默认 CTest、拼音/TSF/settings、五笔/输入法列表、引擎翻译及词库验证 |
-| `test-x86` | 独立构建/测试 x86 TSF；对 x64 Core 执行 x86 拼音/TSF 和双架构 Pipe 并发/断线 probe |
-| `package-installer-x64` | base/full × runtime/no-runtime 四个矩阵 job，各下载对应运行树；含运行库 job 下载并核对运行库 SHA256，执行打包回归并生成对应安装包；检查额外码表、注音引擎/模型及许可在 full 清单中存在、base 中缺席 |
-| `installer-smoke-x64` | 对 base/full 不含运行库包分别执行静默 machine-only 安装，检查实际 COM/profile/现代 category 双向注册、安装状态及卸载清理 |
-| `release` | 等待构建、测试、打包和安装 smoke 成功，在 master 且提交消息不含 `!release` 时用 GitHub CLI 更新 `latest` 预发布 |
+| `build-x64` | 使用固定 LLVM `22.1.8` 构建 `base` 并复用 SDK 构建 `full` 全部插件；验证温州话、额外码表和注音提交及注音模型保存/重载，上传两套运行树与共享测试/Settings artifact |
+| `test-x64` | 运行脚本与模拟注册检查回归、图标校验、默认 CTest、拼音/TSF/Settings/五笔/输入法列表、引擎翻译迁移与词库验证 |
+| `test-x86` | 使用固定 LLVM `22.1.8` 构建/测试 x86 TSF，运行 x86 探针、双架构并发 Pipe 与部署审计 |
+| `package-installer-x64` | `base`/`full` × 含/不含运行库四路矩阵；核对运行库 SHA256，运行 `test-build-installer.ps1`、`test-installer-wizard.ps1`、`test-installer-restart.ps1`，生成安装包并核对 `full`/`base` 插件清单 |
+| `installer-smoke-x64` | 对 `base`/`full` 不含运行库包执行 `/VERYSILENT /MACHINEONLY=1` 静默安装、双架构 COM/profile/现代 category 双向检查与静默卸载清理 |
+| `release` | 全部上游 job 通过且在 `master`（提交信息不含 `!release`）时发布四个 EXE 与对应 SHA256（共 8 个附件）至 `latest` 预发布 |
 
-四个 `Fcitx5-installer-<edition>-x64-<runtime>` artifact 各包含一个 EXE、SHA256 和 manifest。Nightly 汇总发布四个 EXE 和各自 SHA256，共八个附件；不发布 manifest、Core 开发包或内部运行树/测试 artifact。PR 只上传 artifact，不发布 Nightly。
+当前 CI 不执行代码签名。CI/Nightly 安装包均声明 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`，smoke 缺失现代声明会阻止发布。
 
-当前 CI 没有代码签名步骤。CI/Nightly 的四种安装包均声明 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`；更改注册元数据需安装或显式重新注册。smoke 检查 category/item 双向索引、安装 DLL 路径/threading model 和启用的 profile，缺少现代声明阻止发布。注册断言本身由 `scripts/test-installer-registration.ps1` 使用模拟注册表回归，不修改本机注册。
+已有自动化回归：
 
-`installer-smoke-x64` 不安装 VC++/Windows App Runtime，也不执行原始用户配置。含运行库包、完整用户初始化、升级及重启后的延迟删除仍需干净 Windows VM 或 self-hosted runner 验证。完整产物流向见 [CI 构建与产物](build.md#ci-build-and-artifact-flow)。
+- `scripts/test-build-installer.ps1`、`scripts/test-installer-registration.ps1`、`scripts/test-reboot-upgrade-package.ps1`、`scripts/test-installer-wizard.ps1`、`scripts/test-installer-restart.ps1`。
+- CTest：`test_setup`、`test_uninstall`、`test_startup`、`test_upgrade`、`test_upgrade_files`、`test_upgrade_registration`、`test_upgrade_activation`、`test_upgrade_shutdown`、`test_registration_views`。
+- helper 日志写入执行用户的 `%LOCALAPPDATA%/fcitx5/installer-helper.log`，记录时间、PID/TID、命令/安装根、runtime-check、启用/默认设置、语言切换、激活 HRESULT 与 Core 就绪步骤。
 
-## 已记录的验证
-
-- 两种运行库组合已有本地 Inno Setup 7.1.0 编译及清单/SHA256 核对记录；不含运行库版没有运行库文件条目及安装步骤。
-- `scripts/test-build-installer.ps1` 使用模拟编译器覆盖双版本、缺失依赖、版本选择、独立元数据、失败返回和无副作用预览，不执行系统安装。
-- `test_setup` 覆盖用户输入项和安装维护；`test_uninstall` 运行生产入口和 launcher，通过模拟系统调用覆盖普通/提权、占用、`3010`、失败、取消及静默路径；`test_startup` 覆盖登录项命令与路径归属。默认测试清单见 [TSF 测试](pinyin.md#build-and-test-tsf)。
-- helper 日志位于执行用户的 `%LOCALAPPDATA%/fcitx5/installer-helper.log`，包含本地时间、PID/TID、命令/安装根、runtime-check、启用/默认设置、语言切换、激活原始 HRESULT 和 Core 就绪步骤。日志失败不改变返回码并恢复 `GetLastError()`；用于定位已记录的用户配置 `0x80004005`，具体失败调用仍待复现确认。
-
-## 待验收与后续设计
+## 待验收矩阵
 
 | 场景 | 待验证结果 |
 | --- | --- |
-| Windows 10 1809 和 22H2 x64 | 含运行库的 base/full 安装包完成依赖安装和双架构注册，Settings 可打开，真实应用可提交中文 |
-| 干净 Windows 11 x64，无开发工具/runtime | 含运行库包完成依赖、注册、用户启用；真实应用中文提交并打开 Settings |
-| 不含运行库包 | 已装依赖时成功，缺失依赖时准确报错并补偿 |
-| 普通管理员双击、标准用户由另一管理员代输 UAC | 原用户获得初始化，Core 保持普通权限；已提升终端及机器阶段分支明确 |
-| 非中文系统、每应用输入模式、已有应用窗口 | 记录默认/激活行为及需重开或重新登录的实际限制 |
-| 重装、升级、取消、配置失败、中途崩溃 | 无半套 IPC 文件，注册/偏好/服务恢复可诊断，pending 后同路径重装受保护 |
-| DLL 被应用占用，多用户/RDP 会话 | 不结束用户应用；注销归属正确，延迟删除登记和重启后清理可核对 |
-| 用户改变默认、已有词库及学习历史 | 升级/卸载保留后续选择与用户数据 |
-| 静默、SYSTEM/无交互身份 | 退出码区分失败、待用户初始化及待重启，无弹窗阻塞 |
-| x86 TSF 系统验收 | 32/64 位真实应用均加载正确 DLL 并提交中文；方案见 [Windows x86 应用支持设计](windows-x86-tsf-design.md) |
-
-后续应补充干净交互 VM 的真实安装与重启测试、签名及完整发行依赖/源码清单。
+| Windows 10 1809 / 22H2 与干净 Windows 11 x64 | 含运行库的 `base`/`full` 包完成依赖安装、双架构注册、用户启用；Settings 正常打开，真实应用提交中文 |
+| 不含运行库包 | 已装依赖时成功；缺失依赖时报错并补偿回滚 |
+| 权限分支（管理员双击、标准用户经另一管理员 UAC、已提升终端、静默/SYSTEM） | 原始用户获得配置且 Core 保持普通权限；退出码准确区分失败、待初始化与 `3010` |
+| 非中文系统、每应用输入模式、已有应用窗口 | 记录默认/激活与重开限制 |
+| 重装、延迟升级、取消、配置失败、中途崩溃与 DLL 占用 / 多用户 RDP | 不强杀应用，无半套 IPC 文件，注册/偏好/延迟删除及重启后清理正确 |
+| 用户更改默认输入法、已有词库与学习历史 | 升级/卸载保留用户选择与数据 |
+| 32/64 位真实应用与代码签名 | 双架构加载正确 DLL；后续补充代码签名及完整发行源码/许可清单 |

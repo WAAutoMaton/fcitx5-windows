@@ -1,34 +1,31 @@
 # Windows 输入法插件
 
-## 结论与现状
+## 概述
 
-采用上游 Fcitx5 的 `SharedLibrary` addon ABI，输入法以独立 DLL、addon 描述、输入法描述及数据文件发布。Windows 侧补充目录发现、DLL 依赖搜索和独立 SDK 构建。TSF 和 Settings 继续通过 Core 的现有 IPC 工作，插件只在 Core 进程中执行。
+Windows 侧沿用上游 Fcitx5 的 `SharedLibrary` addon ABI，输入法以独立 DLL（或纯资源包）、addon 描述、输入法描述及数据文件形式部署。插件仅在 Core 进程中运行，TSF 与 Settings 继续通过现有 IPC 交互；插件提供的方案、模式和选项菜单通过通用状态菜单桥接展示，详见 [Windows 状态菜单设计](windows-status-menu-design.md)。
 
-插件通过 `StatusArea`、`Action/Menu` 提供方案、模式或选项菜单的通用 Windows 桥接见 [Windows 状态菜单设计](windows-status-menu-design.md)。Core 和 TSF 已接入该桥接，Rime 与拼音动作复用相同协议与渲染路径；真实系统语言栏与应用矩阵仍需验收。
-
-当前 chinese-addons 已经是 DLL：`build-pinyin.ps1` 分别构建 Core、libime、chinese-addons，最后统一部署；Core 注册了 `SharedLibraryLoader`。本次保留这条构建及加载链路。新增输入法无需成为 Core 子模块，也无需加入 Core 的 `add_subdirectory` 或静态注册表。
-
-原先的阻碍是 Windows `StandardPaths` 不读取 `FCITX_ADDON_DIRS`、`FCITX_DATA_DIRS`、`XDG_DATA_DIRS`，以及没有为独立前缀的私有 DLL 配置搜索目录。修复保存在 `patches/fcitx5-windows-paths.patch` 中，由现有补丁脚本重现。
+- `fcitx5-chinese-addons` 随 `build-pinyin.ps1` 作为 `base` 版一部分构建部署；Core 已注册 `SharedLibraryLoader`。
+- 新增输入法无需加入 Core 子模块或静态注册表。Windows `StandardPaths` 通过 `patches/fcitx5-windows-paths.patch` 读取 Core 生成的 `FCITX_ADDON_DIRS`、`FCITX_DATA_DIRS`、`XDG_DATA_DIRS`，并配合 `AddDllDirectory` 搜索各插件包的私有 DLL。
 
 ## 参考实现
 
-| 来源 | 采用的设计 |
+| 来源 | 借鉴点 |
 | --- | --- |
-| [Fcitx5 5.1.22 addonloader.cpp](https://github.com/fcitx/fcitx5/blob/5.1.22/src/lib/fcitx/addonloader.cpp) 和 [addonloader_p.h](https://github.com/fcitx/fcitx5/blob/5.1.22/src/lib/fcitx/addonloader_p.h) | 根据 addon 描述查找共享库，解析工厂入口，按依赖加载并捕获初始化异常。这里与仓库固定版本比较，不混入 master 的后续重构。 |
-| [fcitx5-macos/src/fcitx.cpp](https://github.com/fcitx/fcitx5-macos/blob/master/src/fcitx.cpp) | 应用与用户插件分别使用前缀；启动前配置 addon、数据和语言模型路径，提前绑定插件翻译。 |
-| [fcitx5-plugins](https://github.com/fcitx-contrib/fcitx5-plugins) | 插件可在独立仓库中构建发布，平台适配与引擎源码分离。其现成 Windows 包没有在本项目验证过 ABI，不能直接视为兼容。 |
+| [Fcitx5 5.1.22 addonloader.cpp](https://github.com/fcitx/fcitx5/blob/5.1.22/src/lib/fcitx/addonloader.cpp) / [addonloader_p.h](https://github.com/fcitx/fcitx5/blob/5.1.22/src/lib/fcitx/addonloader_p.h) | 根据 addon 描述查找共享库、解析工厂入口、按依赖加载并捕获初始化异常 |
+| [fcitx5-macos/src/fcitx.cpp](https://github.com/fcitx/fcitx5-macos/blob/master/src/fcitx.cpp) | 应用与用户插件分离前缀；启动前配置 addon、数据与语言模型路径并绑定翻译 |
+| [fcitx5-plugins](https://github.com/fcitx-contrib/fcitx5-plugins) | 插件可在独立仓库构建发布，平台适配与引擎源码分离（需使用本项目匹配的 SDK 构建） |
 
-Windows 使用 PE DLL、导入库与 Windows GNU C++ 运行库；不能套用 macOS 的动态链接参数，或将 TSF 使用的 MSVC ABI 用于 Core 插件。
+Windows 使用 PE DLL、导入库和 Clang Windows GNU 运行库，与 macOS 动态链接方式及 TSF 使用的 MSVC ABI 相互独立。
 
 ## 目录与发现
 
-每个插件发布包使用一个独立目录，目录内部保留标准安装前缀的 `bin`、`lib` 和 `share` 布局。一个包可以包含多个 addon，无需按 addon 拆分目录。Core 启动时依次加入这些前缀：
+每个插件包使用独立目录并保留标准 `bin`/`lib`/`share`/`licenses` 结构（一个包可包含多个 addon）。Core 启动时按以下顺序加入搜索前缀：
 
-1. Core 安装目录，保持现有 `bin`、`lib/fcitx5`、`share` 和 `lib/libime`。
-2. `<Core 安装目录>/plugins/<插件包名>`，用于便携部署。
-3. `%LOCALAPPDATA%/Fcitx5/plugins/<插件包名>`，用于不需管理员权限、与 Core 安装目录分离的插件安装。
+1. Core 安装目录（`bin`、`lib/fcitx5`、`share`、`lib/libime`）。
+2. `<Core 安装目录>/plugins/<插件包名>`（便携部署）。
+3. `%LOCALAPPDATA%/Fcitx5/plugins/<插件包名>`（当前用户安装，无需管理员权限）。
 
-插件包名用于组织文件，不必与 addon 名称或输入法 ID 相同。通用的运行时文件布局为：
+运行时布局示例：
 
 ```text
 plugins/
@@ -41,51 +38,43 @@ plugins/
     share/fcitx5/inputmethod/<输入法ID>.conf
     share/<插件资源目录>/...
     share/locale/<语言>/LC_MESSAGES/<翻译域>.mo
+    licenses/...
 ```
 
-只扫描两个 `plugins` 目录的直接子目录，不递归发现嵌套插件。子目录包含 `bin`、`lib` 或 `share` 目录之一时才作为插件前缀；因此也支持只提供资源的包，缺少 DLL 的插件仍可被发现并显示为不可用。`bin`、`lib` 和 `share` 是保留目录名（不区分大小写），不会作为插件包目录。缺失或无法访问的目录跳过；同一位置的插件按目录名的路径字典序排序，使搜索顺序固定。
+发现与搜索规则：
 
-兼容旧的 `plugins/bin`、`plugins/lib` 和 `plugins/share` 共用布局。每个位置先加入旧布局前缀，再加入该位置的独立插件目录：完整顺序是 Core、安装目录的旧布局、安装目录的独立插件、用户目录的旧布局、用户目录的独立插件。新包应使用独立目录。迁移旧包时，先关闭服务，将该包拥有的文件移入独立目录并移除旧副本；不自动搬迁无法确定归属的旧文件，也不应长期保留同一插件的两份副本。
-
-`FCITX_ADDON_DIRS`、`FCITX_DATA_DIRS`、`XDG_DATA_DIRS` 和 `LIBIME_MODEL_DIRS` 使用分号分隔的绝对路径，由 Core 根据安装位置重新生成。Windows 路径层仍保留原有用户配置、用户词库和内置路径规则；这些变量用于内置搜索前缀，不改变用户数据写入位置。既有用户数据路径在系统资源路径之前，新增前缀之间按上面的顺序查找。相同 addon 名称及数据相对路径应视为冲突，插件不应覆盖内置文件。
-
-Core 使用 `AddDllDirectory` 加入存在的插件 `bin` 目录，并启用相应的 DLL 搜索模式，供 addon 的私有依赖使用。独立目录便于管理文件，不提供进程或依赖命名空间隔离：addon ID、资源相对路径和翻译域仍应避免冲突。主程序及已经加载的 Core 运行库继续共享；不同插件的私有 DLL 应使用不同文件名。Windows 不保证多个 `AddDllDirectory` 目录之间的搜索顺序，不能靠目录顺序解决 DLL 同名冲突。
-
-安装、升级或移除插件前先关闭 Core 服务，完成后重启，再在 Settings 的输入法列表启用条目。独立插件可通过替换或删除其目录来更新或移除，用户配置和词库仍保存在原有用户数据目录。当前不实现 DLL 热卸载。已有 Settings 会枚举 addon 的输入法、可用状态及配置描述；符合上游接口的输入法可使用通用配置页和文字标签，不需要增加专用 IPC 或 TSF profile。
+- 仅扫描两个 `plugins` 目录的直接子目录，不递归嵌套。子目录包含 `bin`、`lib` 或 `share` 之一即作为有效插件前缀（支持纯资源包；缺 DLL 的插件可被发现并标为不可用）。`bin`/`lib`/`share` 为保留名（不区分大小写），不作为插件包目录；同一位置按目录名字典序排序。
+- 兼容旧的 `plugins/bin`、`plugins/lib`、`plugins/share` 共用布局，完整搜索顺序为：Core → 安装目录旧布局 → 安装目录独立插件 → 用户目录旧布局 → 用户目录独立插件。新包应使用独立目录。
+- Core 根据安装位置生成分号分隔的 `FCITX_ADDON_DIRS`、`FCITX_DATA_DIRS`、`XDG_DATA_DIRS` 和 `LIBIME_MODEL_DIRS`（仅用于系统内置搜索前缀，用户配置与词库写入路径保持不变，且用户数据优先于系统资源）。
+- Core 通过 `AddDllDirectory` 注册存在的插件 `bin` 目录以解析私有依赖。独立目录便于文件管理，但不提供进程/符号命名空间隔离：addon ID、资源相对路径、翻译域及不同插件的私有 DLL 文件名均应避免冲突（Windows 不保证多 `AddDllDirectory` 目录间的查找顺序）。
+- 安装、升级或移除插件前先关闭 Core 服务，完成后重启（当前不支持 DLL 热卸载）。独立包可直接替换或删除目录，用户数据保留在 `%APPDATA%/Fcitx5`。
 
 ## 设置中的插件状态
 
-Settings 的“全局设置 → 插件”页通过只读 IPC 展示 Core 已发现的 addon 名称、标识、版本、库、说明及当前状态（已加载、未加载、已禁用），包含内置组件和外部插件。查询不会触发按需加载；“未加载”表示尚无 addon 实例，可能仍等待按需加载。页面在可见时定期更新状态，提供打开 `%LOCALAPPDATA%/Fcitx5/plugins` 的按钮，目录不存在时创建。安装或移除插件后需重启 Core。插件查询始于 IPC v11，当前统一协议为 v15，Core、TSF 和 Settings 必须配套构建部署。
+**全局设置 → 插件**通过只读 IPC 展示 Core 发现的全部 addon（内置与外部）名称、标识、版本、库、说明与状态（已加载、未加载、已禁用），可见时定期刷新，并提供打开 `%LOCALAPPDATA%/Fcitx5/plugins` 的按钮（目录不存在时自动创建）。查询不触发按需加载；插件增删需重启 Core。
 
 ## 仓库插件与 full 包
 
-`build-pinyin.ps1` 构建 base 中的 fcitx5-chinese-addons；`build-plugins.ps1` 自动发现其余直接插件目录，使用同一次构建的 SDK，安装到 `Prefix/plugins/<name>`。当前 full 包包含 chinese-addons、fcitx5-rime、fcitx5-table-extra、fcitx5-wenzhounese 和 fcitx5-zhuyin。脚本对额外插件执行 `git lfs pull`，需要 Git LFS。
+`build-pinyin.ps1` 构建 `base` 中的 `fcitx5-chinese-addons`；`build-plugins.ps1` 自动发现 `plugins/` 下其余直接子目录，执行 `git lfs pull`，使用同一次构建的 SDK 编译并安装到 `Prefix/plugins/<name>`。当前 `full` 包包含：
 
-fcitx5-table-extra 是资源包，复用 base 已包含的 `table` 引擎，不新增 DLL 或 addon。构建使用 SDK 的 Windows 原生 `libime_tabledict.exe` 生成全部 25 张码表，输入法描述、字典、图标和许可保留在 `plugins/fcitx5-table-extra`。CI 通过 addon probe 检查五笔 98、仓颉五代和粤拼码表的自动发现、配置与候选提交，以及 base 中的条目缺席；full 的两种安装包清单均检查全部码表描述、字典和许可。真实应用的系统派发仍需验收。
+- **`fcitx5-chinese-addons`**（`base` 已含）：拼音、双拼及八张基础码表。
+- **`fcitx5-table-extra`**：纯资源包，复用 `base` 的 `table` 引擎。使用 SDK 的 `libime_tabledict.exe` 生成 25 张码表，CI 验证五笔 98、仓颉五代、粤拼码表提交及 `full`/`base` 清单差异。
+- **`fcitx5-rime`**：补丁见 `patches/fcitx5-rime-windows.patch`。依赖匹配的 `clang64` `librime` 与 `librime-data`，构建时复制共享方案与 OpenCC 数据到 `plugins/fcitx5-rime/share/rime-data`。状态菜单与繁简切换验证见 `scripts/test-status-menu.ps1 -Rime`（[build.md](build.md#status-menus)）。
+- **`fcitx5-wenzhounese`**：温州话引擎，CI addon probe 验证 `nyi` 候选提交。
+- **`fcitx5-zhuyin`**：依赖 `clang64` GLib（`glib2`）与 Berkeley DB（`db`）。`cmake/zhuyin-deps` 从 SHA256 固定的 libpinyin 2.10.3 源码构建 libzhuyin 及三个原生数据工具（`patches/libpinyin-windows.patch`），编译固定模型至 `share/fcitx5/zhuyin`；引擎补丁位于 `patches/fcitx5-zhuyin-windows.patch`。CI 验证标准注音 `su3` 候选与 Enter 提交、模型连续保存/重载及 `full`/`base` 清单差异。
 
-Rime 的 Windows 补丁记录在 `patches/fcitx5-rime-windows.patch`，由 `apply-pinyin-patches.ps1` 按锁定版本应用。构建需匹配的 clang64 librime 和 librime-data 包；脚本将共享方案数据复制到 `plugins/fcitx5-rime/share/rime-data`，并将 clang64 OpenCC 数据复制到其 `opencc` 子目录，运行时通过 StandardPaths 查找 `default.yaml`。`scripts/test-status-menu.ps1 -Rime` 使用隔离 Core 与临时用户目录，覆盖两个方案的首次部署、菜单勾选/切换、繁简输入提交、旧预编辑取消、F4/Ctrl+反引号选单和重新部署后的输入恢复；可用 `-PeerTsfBuild` 增加另一架构验证。真实语言栏派发、普通用户环境首次部署和应用覆盖仍需验收，前提与命令见 [状态菜单验证](build.md#status-menus)。温州话 `nyi` 候选提交由 CI addon probe 验证。
+## ABI 与插件 SDK
 
-fcitx5-zhuyin 使用 clang64 的 GLib 和 Berkeley DB（`mingw-w64-clang-x86_64-glib2`、`mingw-w64-clang-x86_64-db`）。插件脚本通过 `cmake/zhuyin-deps` 从固定 SHA256 的 libpinyin 2.10.3 源码构建 libzhuyin 及三个 Windows 原生数据工具，再将上游固定 SHA256 的模型编译到插件的 `share/fcitx5/zhuyin`。`patches/libpinyin-windows.patch` 适配二进制读写、文件同步、保存时替换旧模型、`size_t` 格式、`getline` 和禁用用户路径的 probe；`patches/fcitx5-zhuyin-windows.patch` 由补丁脚本应用，适配 Windows 路径，并在缺少 `table.conf` 或模型初始化失败时报告插件加载失败。full 包收录引擎、词库、图标、翻译和依赖许可，运行时依赖由 PE import 审计复制。CI 检查标准注音 `su3` 的候选选择和 Enter 提交、模型连续保存与重载、base 条目缺失及 full 安装包清单。真实应用系统派发仍需验收。
+输入法工厂返回 C++ 对象，插件必须匹配 Core 的架构（当前为 AMD64 Release）、Fcitx5/libime 版本与补丁、Clang Windows GNU 工具链、libc++、CRT 及 ABI 相关编译选项。
 
-## ABI 与发布边界
-
-输入法工厂入口是 C 符号，返回值及后续接口是 C++ 对象，因此这不是跨编译器的稳定 C ABI。插件必须匹配 Core 的架构、Fcitx5/libime 版本及补丁、Clang Windows GNU 工具链、libc++、CRT 和影响 ABI 的编译选项。当前统一 Core 构建脚本使用 AMD64 Release。
-
-SDK 是同一次 Core/libime 构建的安装前缀，包含头文件、导入库、CMake package、模块公共头文件及生成数据的工具。现有部署脚本的 staging prefix 可以用于开发；SDK 中部分导出路径是绝对路径，开发时应直接引用原安装前缀，不能仅移动 SDK 目录后继续使用。
-
-插件引用 SDK 中的共享库，不再静态链接一份 Core，也不分发 `libFcitx5*.dll`、`libIMECore.dll`、`libc++.dll` 等公共运行库。引擎使用其他 addon 时，应在 addon 描述中声明依赖，并确保宿主已安装相应模块。
-
-上游 addon 描述中的版本依赖会检查 Core 版本，但不能校验完整 Windows C++ ABI。目前是针对匹配 SDK 的本地插件能力，尚无自动 ABI 校验或在线插件管理器。面向公开分发时，建议增加宿主 SDK 标识以及包清单，记录架构、依赖、哈希和拥有的文件；安装器先验证兼容性和名称冲突，再将包安装到独立目录，卸载时只移除该包拥有的文件。清单是部署层协议，不必改变上游 addon ABI。每个 Core ABI 更新应同时提供对应 SDK，并重建插件。
-
-## 插件 SDK
-
-各插件在自身仓库维护构建脚本、平台适配和打包说明。主仓库提供通用的 `cmake/windows-addon-toolchain.cmake`，其 `FCITX5_WINDOWS_SDK` 参数指向匹配的 Core/libime SDK 安装前缀，例如统一构建生成的 `build/all/prefix`。SDK 需要包含头文件、导入库、模块公共接口、CMake package 和所需数据生成工具；仅有运行时文件的部署目录不能代替 SDK。
-
-插件应将私有共享库安装到 `bin`，将 addon DLL 安装到 `lib/fcitx5`，并通过运行时搜索路径读取资源。数据文件使用插件专用名称，避免与其他插件冲突。将包中的 `bin`、`lib` 和 `share` 一起放入选定的 `plugins/<插件包名>` 目录后重启 Core；构建输出前缀内部的布局无需改变。分发运行时包时可省略头文件、导入库、CMake 文件和数据转换工具，并附上引擎及数据许可。
+- **SDK**：即同一次 Core/libime 构建的 staging 前缀（如 `build/all/prefix`），含头文件、导入库、CMake package、模块公共头和数据生成工具（导出路径含绝对路径，开发时应直接使用原 staging 路径，不能用仅含运行文件的部署树替代）。
+- **工具链**：主仓库提供 `cmake/windows-addon-toolchain.cmake`（传入 `-DFCITX5_WINDOWS_SDK=<SDK 前缀>`）。插件应链接 SDK 共享库，不静态链接 Core，也不随包分发 `libFcitx5*.dll`、`libIMECore.dll`、`libc++.dll` 等宿主公共运行库。
+- **打包**：将私有共享库装入 `bin`、addon DLL 装入 `lib/fcitx5`、资源装入 `lib`/`share` 并附带许可证，分发运行时可省略头文件、导入库、CMake 文件和构建工具。
+- **未来扩展**：上游版本依赖仅核对 Core 版本，公开分发场景后续可引入包含 SDK 标识、架构、哈希和文件所有权的包清单与管理器。
 
 ## 隔离验证
 
-`tools/addon-probe` 是按需构建的独立工程，通过 SDK 链接 Core，使用与主程序相同的插件环境设置，适用于提供配置和候选列表的输入法。以下插件包路径、输入法 ID 和 ASCII 按键序列应替换为待验证插件的实际值。将工具安装到隔离 Core 树的 `bin` 后运行：
+`tools/addon-probe` 通过 SDK 链接 Core 并复用主程序插件发现逻辑（禁用用户配置/词库读写，不启动 Pipe 或注册 TSF）：
 
 ```powershell
 $sdk = (Resolve-Path ./build/all/prefix).Path.Replace('\', '/')
@@ -98,26 +87,17 @@ cmake -S tools/addon-probe -B build/addon-probe -G Ninja `
   -DCMAKE_MAKE_PROGRAM=C:/msys64/clang64/bin/ninja.exe
 cmake --build build/addon-probe
 cmake --install build/addon-probe
-$plugin = (Resolve-Path 'D:/path/to/plugin/package').Path.Replace('\', '/')
-$method = '<输入法ID>'
-$keys = '<可产生候选的ASCII按键序列>'
-& "$sdk/bin/addon_probe.exe" "$sdk" "$plugin" "$method" "$keys"
-```
 
-probe 禁用用户配置与词库读写，不创建 Pipe 服务或注册 TSF。最后一个参数可以是 `--absent` 或 `--unavailable`，分别验证没有安装描述文件、以及描述存在但缺 DLL/依赖/数据的情况。第二个参数显式指定的是单个插件前缀（包含 `bin`、`lib` 和 `share` 的目录），不会扫描其子目录。验证自动发现时，将包放入隔离 Core 树的 `plugins/<插件包名>`，并使用 `--default`：
-
-```powershell
-& "$sdk/bin/addon_probe.exe" "$sdk" --default "$method" "$keys"
-```
-
-注音等先选择预编辑、再按 Enter 提交的引擎使用可选的 `--preedit` 参数。probe 发送 Down 打开候选，验证选择后的预编辑文本，再发送 Enter 并核对实际提交：
-
-```powershell
+# 显式指定单个插件前缀（含 bin/lib/share）：
+& "$sdk/bin/addon_probe.exe" "$sdk" "D:/path/to/plugin/package" "<输入法ID>" "<ASCII按键序列>"
+# 验证 plugins/<包名> 自动发现：
+& "$sdk/bin/addon_probe.exe" "$sdk" --default "<输入法ID>" "<ASCII按键序列>"
+# 先选预编辑再 Enter 提交的引擎（如注音）：
 & "$sdk/bin/addon_probe.exe" "$sdk" --default zhuyin su3 --preedit
 ```
 
-目录发现回归测试与 probe 一起构建，可用 `ctest --test-dir build/addon-probe --output-on-failure` 运行；测试仅在临时目录创建数据，不修改已安装插件。
+最后一个参数支持 `--absent`（验证未安装）或 `--unavailable`（验证描述存在但缺 DLL/依赖/数据）。配套目录发现回归可通过 `ctest --test-dir build/addon-probe --output-on-failure` 运行。
 
-`scripts/test-build-plugins.ps1` 使用 fixture 项目验证自动发现、独立目录和依赖复制；`scripts/test-settings-plugins.ps1 -SettingsExe <UiTest Settings> -FixtureExe <ui_fixture.exe>` 使用模拟 Core 验证插件状态页、翻译和布局。
+其他回归：`scripts/test-build-plugins.ps1`（fixture 自动发现、目录布局与依赖复制）；`scripts/test-settings-plugins.ps1 -SettingsExe <UiTest Settings> -FixtureExe <ui_fixture.exe>`（插件状态页 UI 与翻译）。
 
-addon probe 覆盖资源发现、DLL 加载、配置读取和引擎候选提交。剩余验证包括真实 Windows 应用输入、安装器升级/卸载对用户插件的保留，以及 ARM64；完整包管理和跨版本 ABI 校验仍需实现。
+剩余待验收：真实 Windows 应用输入、安装器升级/卸载对用户插件的保留、ARM64 支持，以及完整的包管理与跨版本 ABI 校验。

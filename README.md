@@ -2,234 +2,257 @@
 
 [中文文档](README_zh-cn.md)
 
-An in-progress Windows port of Fcitx5. On AMD64 it provides Pinyin, Shuangpin
-and table input methods through a TSF integration, with Rime, Wenzhounese and
-Zhuyin available in the full edition.
-Core runs in a separate process; a TSF DLL integrates with applications, and a
-WinUI settings app manages the ordered input-method list and engine
-configuration. Unified x64 installers are available through the CI packaging
-and Nightly release workflow.
+An in-progress Windows port of Fcitx5 for AMD64. Core runs in a separate
+process, x64 and x86 TSF DLLs integrate with applications, and a WinUI 3
+settings app manages input methods and engine options.
+
+The `base` edition provides Pinyin, Shuangpin and the `fcitx5-chinese-addons`
+table input methods; the `full` edition adds Rime, Wenzhounese, Zhuyin and
+`fcitx5-table-extra`. Unified x64 installers are published by the CI and Nightly
+release workflow.
 
 ## Features
 
-- Pinyin preedit, candidate selection and Chinese commits, with full Pinyin and
-  Xiaohe/Ziranma Shuangpin.
-- Keyboard candidate selection with number keys or Space, configurable cycling
-  (`Ctrl+Space` by default), and direct selection of entries 1–5 (`Ctrl+Alt+1…5`).
-- A nonactivating candidate popup with DirectWrite layout, Direct2D color-font
-  rendering and Per-Monitor V2 positioning.
-- A Windows input-method indicator showing the current method's icon or compact
-  label, with its name in the tooltip; English keyboard uses `A`. Left-clicking
-  cycles through the same input-method list.
-- Settings to add, remove and reorder installed input methods, with shared
-  Pinyin/Shuangpin options, eight built-in Shuangpin profiles and table-engine
-  options. A separate add window groups available methods by language, placing
-  languages with non-keyboard methods first. The base table entries are Wubi,
-  Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan, Wanfeng and Ziranma;
-  an entry is available when its engine and
-  table data are installed.
-- The full edition adds Rime, Wenzhounese, Zhuyin and 25 extra tables, including
-  Wubi98, Zhengma, Boshiamy, Cangjie5 and Jyutping Table.
-- Third-party Pinyin dictionary loading status and automatic dictionary reload.
-- Independently built and installed engine DLLs and resource packages, with a read-only
-  addon status page in Global Settings.
-- Simplified Chinese, Traditional Chinese and English UI, with a system-language
-  option in Global Settings. Engine/UI language changes take effect after a
-  service restart; native menus and About refresh in the background.
-- Shortcut recording for global and engine key-list options, alongside manual
-  text editing.
-- Input-method status menus expose plugin modes, options and submenus, including
-  Rime schema selection. Chinese/English punctuation is switched in this menu
-  and shared by Pinyin, Shuangpin and table methods using the punctuation module.
-- Optional structured developer logs for Core, TSF and Settings, including
-  Settings exit/exception diagnostics, without recording input text.
-- Sandboxie clients share the host Core through an explicit pipe rule.
-- AppContainer input transport and TSF candidate UIElement/Behavior.
-- Automatic background Core startup, with settings and service controls in the
-  input indicator's right-click menu. AppContainer and Sandboxie clients require
-  an already-running host Core; elevated desktop clients also use the host for
-  service operations. The installer offers optional login startup.
+- **Chinese & multilingual input**:
+  - Full Pinyin and eight built-in Shuangpin profiles (including Xiaohe and
+    Ziranma), with preedit, candidate selection and Chinese commits.
+  - Base table methods: Wubi, Wubi Pinyin, Cangjie, Dianbaoma, Erbi, Bingchan,
+    Wanfeng and Ziranma (available when their engine and table data are
+    installed).
+  - Full edition extras: Rime, Wenzhounese, Zhuyin and 25 additional tables
+    (including Wubi98, Zhengma, Boshiamy, Cangjie5 and Jyutping Table).
+  - Multilingual keyboard entries that pass keys through using the active
+    Windows keyboard layout.
+- **Candidate window**:
+  - Nonactivating DirectWrite/Direct2D candidate popup with color-font
+    rendering, software DC fallback and Per-Monitor V2 DPI positioning.
+  - Configurable vertical (default) or wrapping horizontal candidate layout in
+    **Global Settings > General**.
+  - Keyboard selection with number keys or Space, plus TSF candidate
+    UIElement/Behavior for host-rendered UIs.
+- **Input indicator & status menus**:
+  - Windows input-method indicator displaying the current method's icon or
+    compact label (`A` for English keyboard) and tooltip name.
+  - Dynamic right-click status menus exposing plugin modes, options and
+    submenus (such as Rime schema selection and shared Chinese/English
+    punctuation), followed by settings and service commands.
+- **Settings & shortcuts**:
+  - Add, remove and reorder enabled input methods; a separate add window groups
+    available methods by language (placing languages with non-keyboard methods
+    first).
+  - Configurable cycle shortcut (`Ctrl+Space` by default) and direct selection
+    for entries 1–5 (`Ctrl+Alt+1…5`), with interactive shortcut recording
+    alongside manual text editing for both global and engine key-list options.
+  - Third-party Pinyin dictionary status view with automatic background reload.
+  - Read-only addon status page in **Global Settings > Plugins**, plus
+    independent engine/resource plugin package discovery.
+  - Simplified Chinese, Traditional Chinese and English UI with a
+    follow-system option.
+- **Environment & diagnostics**:
+  - Automatic background Core startup for standard desktop sessions, plus
+    optional login startup in the installer.
+  - Support for elevated desktop apps (UAC linked-token), AppContainer input
+    transport, and Sandboxie host-sharing via an explicit pipe rule.
+  - Persistent Fcitx5 engine logs (`Info` by default, `Debug` when detailed
+    logging is enabled) and optional structured developer logs for Core, TSF
+    and Settings (including Settings exit/exception diagnostics). Structured
+    logs exclude input text.
 
 ## Install
 
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
-workflow publishes four x64 installers and their SHA256 files. Setup requires
-Windows 10 version 1809 (build 17763) or later.
-Both editions include Core, x64/x86 TSF and Settings. Choose `base` for
-fcitx5-chinese-addons, or `full` for all bundled plugins
-(currently fcitx5-chinese-addons, fcitx5-rime, fcitx5-table-extra,
-fcitx5-wenzhounese and fcitx5-zhuyin). Each edition has two runtime variants:
+publishes four x64 installers and their SHA256 checksums for Windows 10 version
+1809 (build 17763) or later. Both editions include Core, x64/x86 TSF DLLs and
+Settings:
 
-- `Fcitx5-<run>-<base|full>-x64-setup.exe`: bundles Visual C++ and Windows App Runtime installers.
-- `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`: requires those runtimes to be installed
-  beforehand, including x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`
-  for the current user.
+- `base`: bundles `fcitx5-chinese-addons`.
+- `full`: bundles `fcitx5-chinese-addons`, `fcitx5-rime`, `fcitx5-table-extra`,
+  `fcitx5-wenzhounese` and `fcitx5-zhuyin`.
 
-The installer targets Program Files, registers TSF, configures the initiating
-user's input method and starts Core. Optional login startup is unchecked by
-default and respects a manual service stop. The build includes separate x64 and
-x86 TSF DLLs sharing the x64 Core; native ARM64 TSF is not provided. See
-[installer details](docs/windows-installer-design.md).
+Each edition comes in two runtime variants:
 
-Managed upgrades stage the complete new version and finish after a Windows
-restart. The current version remains usable until then; successful staging
-returns `3010`. See [reboot upgrades](docs/windows-reboot-upgrade-design.md)
-for status queries, cancellation and recovery.
+- `Fcitx5-<run>-<base|full>-x64-setup.exe`: bundles Visual C++ and Windows App
+  Runtime installers.
+- `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`: requires Visual C++ and
+  x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` to be installed
+  beforehand for the current user.
 
-For an installer-managed copy, use **Uninstall Fcitx5** in the Start menu or
-Windows' installed-apps list. User data and shared runtimes are retained;
-locked files may require a Windows restart to finish removal. The PowerShell
-registration helpers below are for development deployments.
+The installer deploys to Program Files, registers both x64 and x86 TSF DLLs
+sharing the x64 Core, configures the initiating user's input method and starts
+Core. Optional login startup is unchecked by default and respects manual
+service stops. See [installer details](docs/windows-installer-design.md).
+
+Upgrades stage the new version while keeping the current version usable, return
+`3010`, and finish after a Windows restart. See
+[reboot upgrades](docs/windows-reboot-upgrade-design.md) for status queries,
+cancellation and recovery.
+
+To remove an installer-managed copy, use **Uninstall Fcitx5** in the Start menu
+or Windows Installed Apps. User data and shared runtimes are preserved; locked
+files finish removal after a Windows restart. The PowerShell registration
+scripts below are for development deployments only.
 
 ## Build and Deploy
 
-Prepare CMake 3.27+, Git, MSYS2 clang64 and its dependencies, standalone LLVM,
-ImageMagick, and Visual Studio with C++ tools, Windows SDK, ATL, MSBuild and NuGet.
-See [prerequisites](docs/build.md#prerequisites) for the dependency list and paths.
-The settings app also requires the matching x64 Windows App SDK 1.8
-Framework/DDLM and Visual C++ runtime.
+Prerequisites: CMake 3.27+, Git, MSYS2 `clang64` packages, standalone LLVM
+(22+ when using MSVC 14.52+), ImageMagick, and Visual Studio with C++ tools,
+Windows SDK, ATL, MSBuild and NuGet. Running Settings requires the Visual C++
+runtime and x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`. See
+[prerequisites](docs/build.md#prerequisites) for the full dependency list.
 
-From the repository root in a normal Windows PowerShell terminal, run:
+From the repository root in Windows PowerShell, build and deploy the `base`
+edition:
 
 ```powershell
 ./scripts/build-and-deploy.ps1
 ```
 
-This initializes pinned submodules, applies Windows patches, builds AMD64 Release
-Core/Settings, separate x64/x86 TSF DLLs and setup/upgrade helpers, runs the default
-TSF CTest suites, and deploys to `dist/pinyin`. It uses checksum-verified
-precompiled dictionary/model data and reuses the build cache on subsequent runs.
+This initializes pinned submodules, applies Windows patches, builds AMD64
+Release Core/Settings, x64/x86 TSF DLLs and setup/upgrade helpers, runs the
+default TSF CTest suites, and deploys to `dist/pinyin` using checksum-verified
+prebuilt dictionary/model data. Subsequent runs reuse the build cache.
 
-This builds the base edition. To add all full-edition plugins using the same SDK:
+To add all `full`-edition plugins using the same SDK:
 
 ```powershell
 ./scripts/build-plugins.ps1 -CorePrefix ./build/all/prefix -Prefix ./dist/pinyin
 ```
 
-The additional build requires Git LFS, matching clang64 librime/schema packages,
-and GLib/Berkeley DB for Zhuyin; see [plugin build details](docs/build.md#independent-input-method-plugins).
+Additional plugin builds require Git LFS, matching `clang64` librime/schema
+packages, and GLib/Berkeley DB for Zhuyin. See
+[plugin build details](docs/build.md#independent-input-method-plugins).
 
-Before updating an existing deployment, choose `Stop Services` and close
-applications loading its DLL. See [build options and deployment details](docs/build.md) for custom
-paths, individual builds and integration checks.
+Before overwriting an existing deployment, choose **Stop Services** and close
+applications that loaded its TSF DLL. See [build options and deployment
+details](docs/build.md) for custom paths, individual builds and validation.
 
 ## Input-Method Plugins
 
-Input methods can be built and installed as independent engine or resource packages without
-adding them to the Core project. Existing `fcitx5-chinese-addons` continue to be built
-and deployed alongside Core.
-
-`fcitx5-table-extra` supplies 25 tables using the base `table` engine and adds no
-engine DLL. `fcitx5-zhuyin` uses libzhuyin built from pinned libpinyin sources
-and includes its model data. Rime includes shared schema data; plugin files and
-licenses remain in each package's directory.
+Input methods can be built and installed as independent engine or resource
+packages. `fcitx5-chinese-addons` is built with Core; `fcitx5-table-extra`
+reuses the base `table` engine with 25 tables; `fcitx5-zhuyin` bundles
+libzhuyin built from pinned libpinyin sources with compiled models; Rime
+bundles shared schema and OpenCC data.
 
 ### Install and Enable
 
-Choose either plugin location:
+Install packages into either directory:
 
 | Location | Purpose |
 | --- | --- |
-| `%LOCALAPPDATA%/Fcitx5/plugins/<package>` | Current-user installation without administrator privileges, separate from the Core installation |
-| `<Core installation>/plugins/<package>` | Portable deployment within the installation tree; the Core installation is the directory containing `bin/Fcitx5.exe` |
+| `%LOCALAPPDATA%/Fcitx5/plugins/<package>` | Per-user installation without administrator privileges |
+| `<Core installation>/plugins/<package>` | Portable deployment beside `bin/Fcitx5.exe` |
 
-1. Choose `Stop Services` from the input-method indicator's context menu.
-2. Keep each package's supplied `bin`, `lib`, `share` and `licenses` directories inside its own `<package>` directory. Engine DLLs belong in `<package>/lib/fcitx5`, private dependency DLLs in `<package>/bin`, and resources in the corresponding `lib` or `share` subdirectories. Resource-only packages need no DLL. Core scans direct package subdirectories; the older shared `plugins/bin`, `plugins/lib` and `plugins/share` layout remains compatible.
-3. Choose `Restart Services`, open `Input Method Settings`, and add the new input method to the enabled list. Adjust its order, then switch with `Ctrl+Space` or by left-clicking the indicator.
+1. Choose **Stop Services** from the input-method indicator's right-click menu.
+2. Place the package's `bin`, `lib`, `share` and `licenses` directories inside
+   `<package>` (`lib/fcitx5` for engine DLLs, `bin` for private dependency
+   DLLs, `lib`/`share` for resources). Core scans direct package subdirectories
+   and also supports the legacy shared `plugins/bin`, `plugins/lib`,
+   `plugins/share` layout.
+3. Choose **Restart Services**, open **Input Method Settings**, and add the new
+   input method to the enabled list.
 
 Stop services before updating or removing a plugin, then restart afterward.
-Remove an independent package by deleting its directory. For older shared
-layouts, delete only the package's own files. Loading and unloading plugins
-require a Core restart. Global Settings > Plugins shows discovered addons and
-their loaded, not-loaded or disabled state; it also opens the personal plugin directory.
+Delete `<package>` to remove an independent package. **Global Settings >
+Plugins** displays discovered addons and their Loaded, Not Loaded or Disabled
+state, and provides a shortcut to the personal plugin folder.
 
 ### Compatibility
 
-Follow each plugin's own repository for build and packaging instructions.
-Plugins must match Core's architecture, Fcitx5/libime versions, Windows patches,
-Clang Windows GNU toolchain
-and runtime libraries. Linux/macOS plugins and DLLs built with other toolchains
-cannot be used directly. Plugins should share the host's public Core/libime
-runtime libraries and avoid overwriting them. See the
-[Windows plugin guide](docs/windows-plugins.md) for the complete layout and
-dependencies.
+Build instructions live in each plugin's repository. Plugins must match Core's
+architecture, Fcitx5/libime versions, Windows patches, Clang Windows GNU
+toolchain and runtime libraries, and should share Core's public runtime DLLs
+rather than overwriting them. See the
+[Windows plugin guide](docs/windows-plugins.md) for layout and SDK details.
 
 ## Run
 
-For a development deployment, register the input method:
+### Register a Development Deployment
 
 ```powershell
 ./win32/scripts/install.ps1
 ```
 
-The script requests administrator privileges when needed. Keep the complete
-`dist/pinyin` tree together, and reopen applications that loaded an older DLL.
-Select Fcitx5 with `Win+Space`; if absent, add its keyboard in Windows' Chinese
-language options. Activation starts Core automatically.
+The script requests elevation when needed. Keep the complete `dist/pinyin` tree
+together and reopen applications that loaded an older DLL. Select Fcitx5 with
+`Win+Space` (add it under Windows Chinese language options if absent);
+activation starts Core automatically.
 
-Use the configured cycle shortcut (default `Ctrl+Space`) or left-click the
-input-method indicator to cycle through the enabled list. The default list is
-English keyboard and Pinyin; Settings lets
-you add Shuangpin or other installed input methods and change their order.
-Unavailable entries are skipped. With Pinyin selected, type `nihao` in a text
-application and select a candidate with Space or a number key. With Wubi
-selected, enter a Wubi code and select its candidate in the same way. Changing
-input methods or losing focus cancels unfinished preedit without committing it.
-
-The add window also lists multilingual keyboard entries. These pass keys
-through to the application; character mapping follows the active Windows
-keyboard layout.
-
-**Global Settings > Shortcuts** changes the cycle shortcut and direct-selection
-shortcuts for entries 1–5. Direct selection uses the list's original positions;
-an absent or unavailable target passes the key through. Clear a shortcut to disable it.
-Switch Chinese/English punctuation from the input indicator's status menu. The
-punctuation module saves the shared state; Pinyin/Shuangpin settings pages use
-the engine's other options.
-
-Right-click the input-method indicator for the current engine's status actions
-and submenus, followed by these fixed commands:
-
-- `Input Method Settings`: manage the input-method list, edit engine options and view
-  third-party Pinyin dictionaries. List changes save immediately; option edits
-  save with `Apply`.
-- `Restart Services`: restart/start Core and reopen Settings if it was already open.
-- `Stop Services`: stop Core/Settings and pause automatic startup until a restart.
-- `User Data Folder`: open `%APPDATA%/Fcitx5`, including settings and Pinyin learning data.
-- `About`: show architecture, CI build number, commit and project/license links.
-
-With Rime selected, its schema submenu switches Rime schemas; `F4` opens the
-engine's candidate-based schema menu. `Ctrl+Space` and left-clicking still cycle
-the enabled input-method list. Rime deployment, schema switching and
-traditional/simplified commits have isolated probe coverage; real language-bar
-dispatch, first-use deployment in a normal user environment and application
-coverage still require validation. See [status menu details](docs/windows-status-menu-design.md).
-
-In **Global Settings**, the **General** tab selects the UI language; restart
-services after applying it to update Core and Settings. **Developer options**
-enables detailed logging immediately and opens `%LOCALAPPDATA%/Fcitx5/logs`.
-Logs rotate automatically; maintenance removes expired files after 7 days and
-enforces capacity limits. See [developer diagnostics](docs/windows-developer-logging-design.md).
-
-For Sandboxie, follow the [host-sharing setup guide](docs/windows-sandboxie-design.md).
-Modern-app configuration is documented in
-[modern app support](docs/windows-modern-apps-design.md). CI/Nightly installers
-declare modern TSF categories; local builds require `-ModernApps`. Re-register
-after changing category declarations. AppContainer menus expose only Settings.
-
-Compatible Fcitx5/libime binary `.dict` files placed in
-`%APPDATA%/Fcitx5/pinyin/dictionaries` are loaded automatically. See
-[dictionary details](docs/pinyin.md#third-party-dictionaries) for formats and conversion.
-
-To unregister a development deployment, choose `Stop Services`, then run:
+To unregister a development deployment, choose **Stop Services** first, then:
 
 ```powershell
 ./win32/scripts/uninstall.ps1
 ```
 
-Unregistration does not delete files or unload the DLL from running applications.
-See [registration and DLL management](docs/build.md#registration-and-dll-management)
-for previews, alternate paths and troubleshooting.
+Reopen applications to unload the DLL. See
+[registration and DLL management](docs/build.md#registration-and-dll-management)
+for previews, alternate paths and locked-DLL helpers.
+
+### Everyday Input and Switching
+
+- Cycle enabled input methods with `Ctrl+Space` (default) or by left-clicking
+  the indicator. Unavailable entries are skipped.
+- The default list contains English keyboard and Pinyin; add Shuangpin, table
+  methods, Rime, Wenzhounese, Zhuyin or multilingual keyboards in Settings.
+- Select candidates with Space or number keys. Switching input methods or
+  losing focus cancels unfinished preedit.
+- Configure the cycle shortcut and direct-selection shortcuts for entries 1–5
+  under **Global Settings > Shortcuts** (clear a shortcut to disable it).
+  Direct selection targets the list's original positions and passes through if
+  absent or unavailable.
+- Switch Chinese/English punctuation from the indicator's status menu; Pinyin,
+  Shuangpin and table methods using the punctuation module share this state.
+- With Rime selected, switch schemas from the status menu's schema submenu or
+  press `F4` for the candidate-based schema menu. See
+  [status menu details](docs/windows-status-menu-design.md).
+
+### Indicator Menu and Settings
+
+Right-click the input-method indicator to access the active engine's status
+actions and submenus, followed by five fixed commands:
+
+- **Input Method Settings**: manage the enabled list (saves immediately),
+  configure engine options (saved with **Apply**) and inspect third-party
+  Pinyin dictionaries.
+- **Restart Services**: start or restart Core, and reopen Settings if it was
+  open.
+- **Stop Services**: stop Core and Settings and pause automatic startup until
+  restarted.
+- **User Data Folder**: open `%APPDATA%/Fcitx5` (settings and Pinyin learning
+  data).
+- **About**: show architecture, CI build number, commit and project/license
+  links.
+
+Under **Global Settings**:
+
+- **General**: choose the UI language (restart services to update Core and
+  Settings; native menus and About refresh in the background) and candidate
+  window layout (**Vertical** or **Horizontal**).
+- **Developer options**: toggle detailed logging immediately and open
+  `%LOCALAPPDATA%/Fcitx5/logs`. Core persists engine logs (`Info` by default,
+  `Debug` with detailed logging), and detailed mode adds structured JSON Lines
+  logs for Core, TSF and Settings. Logs rotate at 8 MiB / UTC day changes with
+  7-day retention and a 512 MiB directory budget. See
+  [developer diagnostics](docs/windows-developer-logging-design.md).
+- **Plugins**: view discovered addons and open the personal plugin directory.
+- **Shortcuts**: configure input-method cycling and direct selection (entries
+  1–5).
+
+### Dictionaries and Special Environments
+
+- **Third-party Pinyin dictionaries**: place compatible Fcitx5/libime binary
+  `.dict` files in `%APPDATA%/Fcitx5/pinyin/dictionaries` for automatic loading.
+  See [dictionary details](docs/pinyin.md#third-party-dictionaries).
+- **Sandboxie**: configure an explicit pipe rule per the
+  [Sandboxie guide](docs/windows-sandboxie-design.md). Host Core must already
+  be running.
+- **Modern / AppContainer apps**: CI/Nightly installers enable modern TSF
+  categories; local builds require `-ModernApps` and re-registration. Host Core
+  must already be running, and AppContainer menus expose only Settings. See
+  [modern app support](docs/windows-modern-apps-design.md).
+- **Elevated desktop apps (UAC)**: connect to the running normal-privilege host
+  Core and delegate service commands to it. See
+  [UAC IPC details](docs/windows-uac-ipc-design.md).
 
 ## Documentation
 
@@ -250,5 +273,5 @@ for previews, alternate paths and troubleshooting.
 
 ## Credits
 
-* [fcitx5](https://github.com/fcitx/fcitx5): LGPL-2.1-or-later
-* [weasel](https://github.com/rime/weasel): GPL-3.0-only
+- [fcitx5](https://github.com/fcitx/fcitx5): LGPL-2.1-or-later
+- [weasel](https://github.com/rime/weasel): GPL-3.0-only
