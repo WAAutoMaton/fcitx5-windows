@@ -4,6 +4,8 @@
 #include "../ipc/service.h"
 #include "../tsf/pipeclient.h"
 #undef GetCurrentTime
+#include <atomic>
+#include <functional>
 #include <memory>
 #include <vector>
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -16,9 +18,13 @@ bool settingsServiceStopping();
 class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
   public:
     ~SettingsWindow();
-    bool open();
+    bool open(std::function<void()> onClosed = {});
 
   private:
+    void prepareClose();
+    void closeWindow(const char *reason);
+    void clearAddWindow();
+    void closeAddWindow();
     winrt::fire_and_forget transfer(bool save);
     winrt::fire_and_forget chooseMethod();
     winrt::fire_and_forget chooseGlobal();
@@ -47,8 +53,9 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
                    std::wstring label);
     void renderMethods(const std::string &selected = {});
     winrt::fire_and_forget
-    loadIcon(winrt::Microsoft::UI::Xaml::Controls::Image image,
-             winrt::Microsoft::UI::Xaml::Controls::TextBlock fallback,
+    loadIcon(winrt::weak_ref<winrt::Microsoft::UI::Xaml::Controls::Image> image,
+             winrt::weak_ref<winrt::Microsoft::UI::Xaml::Controls::TextBlock>
+                 fallback,
              std::string path);
     const ipc::InputMethodInfo *method(const std::string &id) const;
     winrt::fire_and_forget refreshDictionaries();
@@ -61,9 +68,19 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     winrt::Microsoft::UI::Xaml::Controls::ListView methods_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel options_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock heading_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock methodsHeading_{nullptr},
+        globalSettingsText_{nullptr}, languageLabel_{nullptr},
+        candidateLayoutLabel_{nullptr}, openPluginFolderText_{nullptr},
+        detailedLoggingLabel_{nullptr}, loggingPrivacy_{nullptr},
+        logFolderLabel_{nullptr}, openLogFolderText_{nullptr},
+        logStatistics_{nullptr}, dictionaryFolderText_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button add_{nullptr},
-        remove_{nullptr}, up_{nullptr}, down_{nullptr}, reset_{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::TabViewItem dictionaryTab_{nullptr};
+        remove_{nullptr}, up_{nullptr}, down_{nullptr}, reset_{nullptr},
+        cancel_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TabViewItem dictionaryTab_{nullptr},
+        generalTab_{nullptr}, developerTab_{nullptr}, pluginTab_{nullptr},
+        shortcutsTab_{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::StackPanel shortcutOptions_{nullptr};
     std::vector<winrt::Microsoft::UI::Xaml::FrameworkElement> editors_;
     ipc::InputMethodsReply catalog_;
     ipc::MethodConfigReply config_;
@@ -74,7 +91,7 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
         addCandidates_{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button addConfirm_{nullptr};
     std::vector<std::string> addLanguageCodes_, addCandidateIds_;
-    bool working_ = false, rendering_ = false;
+    bool working_ = false, rendering_ = false, dialogOpen_ = false;
     enum class PageKind { InputMethod, Global };
     PageKind page_ = PageKind::InputMethod;
     win32::i18n::Translator translator_;
@@ -113,7 +130,9 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
     bool dictionaryRefresh_ = false;
     unsigned dictionaryTicks_ = 0;
     bool loaded_ = false;
-    bool closed_ = false;
+    bool visualsReleased_ = false;
+    std::atomic<bool> closed_{false};
+    std::function<void()> onClosed_;
     HANDLE activation_ = nullptr;
     HWND handle_ = nullptr;
     std::wstring activationProperty_;

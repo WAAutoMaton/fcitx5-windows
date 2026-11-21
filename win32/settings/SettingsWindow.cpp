@@ -263,52 +263,28 @@ std::wstring SettingsWindow::errorText(ipc::SettingsError error) const {
 }
 
 void SettingsWindow::translateStatic() {
-    const auto root = window_.Content().as<FrameworkElement>();
+    if (closed_ || !window_) {
+        return;
+    }
     window_.Title(tr("settings", "Input Method Settings"));
-    root.FindName(L"MethodsHeading")
-        .as<TextBlock>()
-        .Text(tr("settings", "Input Methods"));
-    root.FindName(L"GlobalSettingsText")
-        .as<TextBlock>()
-        .Text(tr("settings", "Global Settings"));
-    root.FindName(L"LanguageLabel")
-        .as<TextBlock>()
-        .Text(tr("settings", "Language"));
-    root.FindName(L"CandidateLayoutLabel")
-        .as<TextBlock>()
-        .Text(tr("settings", "Candidate layout"));
-    root.FindName(L"ShortcutsTab")
-        .as<TabViewItem>()
-        .Header(box_value(tr("settings", "Shortcuts")));
-    root.FindName(L"GeneralTab")
-        .as<TabViewItem>()
-        .Header(box_value(tr("settings", "General")));
-    root.FindName(L"PluginTab")
-        .as<TabViewItem>()
-        .Header(box_value(tr("settings", "Plugins")));
-    root.FindName(L"OpenPluginFolderText")
-        .as<TextBlock>()
-        .Text(tr("settings", "Open Personal Plugin Folder"));
+    methodsHeading_.Text(tr("settings", "Input Methods"));
+    globalSettingsText_.Text(tr("settings", "Global Settings"));
+    languageLabel_.Text(tr("settings", "Language"));
+    candidateLayoutLabel_.Text(tr("settings", "Candidate layout"));
+    shortcutsTab_.Header(box_value(tr("settings", "Shortcuts")));
+    generalTab_.Header(box_value(tr("settings", "General")));
+    pluginTab_.Header(box_value(tr("settings", "Plugins")));
+    openPluginFolderText_.Text(tr("settings", "Open Personal Plugin Folder"));
     Automation::AutomationProperties::SetName(
         pluginFolder_, tr("settings", "Open Personal Plugin Folder"));
-    root.FindName(L"DeveloperTab")
-        .as<TabViewItem>()
-        .Header(box_value(tr("settings", "Developer options")));
-    root.FindName(L"DetailedLoggingLabel")
-        .as<TextBlock>()
-        .Text(tr("settings", "Enable detailed logging"));
-    root.FindName(L"LoggingPrivacy")
-        .as<TextBlock>()
-        .Text(tr("settings",
-                 "Logs record connection, context, candidate counts "
-                 "and layout metadata, never input text. Files are "
-                 "kept here for up to 7 days, up to 512 MiB total."));
-    root.FindName(L"LogFolderLabel")
-        .as<TextBlock>()
-        .Text(tr("settings", "Log folder"));
-    root.FindName(L"OpenLogFolderText")
-        .as<TextBlock>()
-        .Text(tr("settings", "Open log folder"));
+    developerTab_.Header(box_value(tr("settings", "Developer options")));
+    detailedLoggingLabel_.Text(tr("settings", "Enable detailed logging"));
+    loggingPrivacy_.Text(
+        tr("settings", "Logs record connection, context, candidate counts "
+                       "and layout metadata, never input text. Files are "
+                       "kept here for up to 7 days, up to 512 MiB total."));
+    logFolderLabel_.Text(tr("settings", "Log folder"));
+    openLogFolderText_.Text(tr("settings", "Open log folder"));
     Automation::AutomationProperties::SetName(
         detailedLogging_, tr("settings", "Enable detailed logging"));
     detailedLogging_.OnContent(box_value(tr("settings", "On")));
@@ -321,14 +297,13 @@ void SettingsWindow::translateStatic() {
         candidateLayout_, tr("settings", "Candidate layout"));
     Automation::AutomationProperties::SetName(
         globalButton_, tr("settings", "Global Settings"));
-    const std::pair<const wchar_t *, const char *> buttons[] = {
-        {L"ResetDefaults", win32::i18n::mark("settings", "Reset to Defaults")},
-        {L"Retry", win32::i18n::mark("settings", "Reload")},
-        {L"Cancel", win32::i18n::mark("settings", "Close")},
-        {L"Confirm", win32::i18n::mark("settings", "Apply")}};
-    for (const auto &[name, message] : buttons)
-        root.FindName(name).as<Button>().Content(
-            box_value(tr("settings", message)));
+    const std::pair<Button, const char *> buttons[] = {
+        {reset_, win32::i18n::mark("settings", "Reset to Defaults")},
+        {retry_, win32::i18n::mark("settings", "Reload")},
+        {cancel_, win32::i18n::mark("settings", "Close")},
+        {confirm_, win32::i18n::mark("settings", "Apply")}};
+    for (const auto &[button, message] : buttons)
+        button.Content(box_value(tr("settings", message)));
     const std::pair<Button, const char *> tools[] = {
         {add_, win32::i18n::mark("settings", "Add Input Method")},
         {remove_, win32::i18n::mark("settings", "Remove")},
@@ -340,12 +315,8 @@ void SettingsWindow::translateStatic() {
                                                   tr("settings", message));
     }
     dictionaryTab_.Header(box_value(tr("settings", "Dictionaries")));
-    dictionaryFolder_.Content()
-        .as<StackPanel>()
-        .Children()
-        .GetAt(1)
-        .as<TextBlock>()
-        .Text(tr("settings", "Open Third-party Dictionary Folder"));
+    dictionaryFolderText_.Text(
+        tr("settings", "Open Third-party Dictionary Folder"));
     language_.Items().Clear();
     language_.Items().Append(
         box_value(tr("settings", "Follow System Language")));
@@ -362,6 +333,9 @@ void SettingsWindow::translateStatic() {
 }
 
 void SettingsWindow::renderGlobal() {
+    if (closed_.load(std::memory_order_acquire) || !methods_) {
+        return;
+    }
     const settings::diagnostic::Operation operation("render_global");
     operation.stage("selection");
     page_ = PageKind::Global;
@@ -391,10 +365,20 @@ void SettingsWindow::renderGlobal() {
 
 ipc::GlobalSettings SettingsWindow::globalDraft() const {
     auto draft = global_.settings;
-    draft.language = static_cast<ipc::UiLanguage>(language_.SelectedIndex());
-    draft.candidateLayout =
-        static_cast<ipc::CandidateLayout>(candidateLayout_.SelectedIndex());
-    draft.detailedLogging = detailedLogging_.IsOn();
+    if (language_) {
+        const auto index = language_.SelectedIndex();
+        if (index >= 0 &&
+            ipc::validLanguage(static_cast<ipc::UiLanguage>(index)))
+            draft.language = static_cast<ipc::UiLanguage>(index);
+    }
+    if (candidateLayout_) {
+        const auto index = candidateLayout_.SelectedIndex();
+        if (index >= 0 &&
+            ipc::validCandidateLayout(static_cast<ipc::CandidateLayout>(index)))
+            draft.candidateLayout = static_cast<ipc::CandidateLayout>(index);
+    }
+    if (detailedLogging_)
+        draft.detailedLogging = detailedLogging_.IsOn();
     for (size_t i = 0; i < shortcutEditors_.size(); ++i)
         if (shortcutEditors_[i])
             draft.shortcuts[i] = keyListValue(shortcutEditors_[i]);
@@ -402,10 +386,10 @@ ipc::GlobalSettings SettingsWindow::globalDraft() const {
 }
 
 void SettingsWindow::renderShortcuts() {
-    auto panel = window_.Content()
-                     .as<FrameworkElement>()
-                     .FindName(L"ShortcutOptions")
-                     .as<StackPanel>();
+    if (closed_ || !shortcutOptions_) {
+        return;
+    }
+    auto panel = shortcutOptions_;
     panel.Children().Clear();
     TextBlock help;
     help.Text(tr(
@@ -490,9 +474,18 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
     } catch (...) {
         settings::diagnostic::exception("load_global");
     }
-    co_await ui;
-    operation.stage(closed_ ? "closed" : "apply_reply");
-    if (closed_)
+    if (closed_.load(std::memory_order_acquire))
+        co_return false;
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return false;
+        throw;
+    }
+    operation.stage(closed_.load(std::memory_order_acquire) ? "closed"
+                                                            : "apply_reply");
+    if (closed_.load(std::memory_order_acquire))
         co_return false;
     if (!connected || reply.error != ipc::SettingsError::None) {
         status_.Text(connected ? errorText(reply.error)
@@ -509,6 +502,8 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
     const settings::diagnostic::Operation operation("save_global");
+    if (closed_.load(std::memory_order_acquire) || !language_)
+        co_return false;
     const auto index = language_.SelectedIndex();
     if (index < 0 || !ipc::validLanguage(static_cast<ipc::UiLanguage>(index)))
         co_return false;
@@ -541,8 +536,16 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
     } catch (...) {
         settings::diagnostic::exception("save_global");
     }
-    co_await ui;
-    if (closed_)
+    if (closed_.load(std::memory_order_acquire))
+        co_return false;
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return false;
+        throw;
+    }
+    if (closed_.load(std::memory_order_acquire))
         co_return false;
     if (!connected || reply.error != ipc::SettingsError::None) {
         status_.Text(connected ? errorText(reply.error)
@@ -570,6 +573,8 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
 }
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::resolveDraft() {
+    if (closed_.load(std::memory_order_acquire) || dialogOpen_)
+        co_return false;
     bool dirty = false;
     if (page_ == PageKind::Global) {
         dirty = globalDraft() != global_.settings;
@@ -580,14 +585,33 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::resolveDraft() {
     }
     if (!dirty)
         co_return true;
-    ContentDialog dialog;
-    dialog.XamlRoot(window_.Content().as<FrameworkElement>().XamlRoot());
-    dialog.Title(box_value(tr("settings", "Save changes?")));
-    dialog.PrimaryButtonText(tr("settings", "Save"));
-    dialog.SecondaryButtonText(tr("settings", "Discard"));
-    dialog.CloseButtonText(tr("settings", "Cancel"));
-    const auto result = co_await dialog.ShowAsync();
-    if (closed_ || result == ContentDialogResult::None)
+    const auto root = window_ ? window_.Content().try_as<FrameworkElement>()
+                              : FrameworkElement{nullptr};
+    if (!root || !root.XamlRoot())
+        co_return false;
+    struct DialogGuard {
+        bool &flag;
+        ~DialogGuard() { flag = false; }
+    };
+    dialogOpen_ = true;
+    ContentDialogResult result = ContentDialogResult::None;
+    {
+        DialogGuard guard{dialogOpen_};
+        ContentDialog dialog;
+        dialog.XamlRoot(root.XamlRoot());
+        dialog.Title(box_value(tr("settings", "Save changes?")));
+        dialog.PrimaryButtonText(tr("settings", "Save"));
+        dialog.SecondaryButtonText(tr("settings", "Discard"));
+        dialog.CloseButtonText(tr("settings", "Cancel"));
+        try {
+            result = co_await dialog.ShowAsync();
+        } catch (const hresult_error &) {
+            settings::diagnostic::exception("resolve_draft");
+            co_return false;
+        }
+    }
+    if (closed_.load(std::memory_order_acquire) ||
+        result == ContentDialogResult::None)
         co_return false;
     if (result == ContentDialogResult::Primary) {
         if (page_ == PageKind::Global)
@@ -600,12 +624,17 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::resolveDraft() {
 fire_and_forget SettingsWindow::chooseGlobal() try {
     const settings::diagnostic::Operation operation("choose_global");
     const auto lifetime = shared_from_this();
-    if (working_ || !loaded_ || page_ == PageKind::Global) {
+    if (closed_.load(std::memory_order_acquire))
+        co_return;
+    if (working_ || dialogOpen_ || !loaded_ || page_ == PageKind::Global) {
         globalButton_.IsChecked(page_ == PageKind::Global);
         co_return;
     }
     busy(true);
-    if (!(co_await resolveDraft()) || !(co_await loadGlobal()))
+    const bool ok = (co_await resolveDraft()) && (co_await loadGlobal());
+    if (closed_.load(std::memory_order_acquire))
+        co_return;
+    if (!ok)
         globalButton_.IsChecked(false);
     busy(false);
 } catch (...) {
@@ -619,8 +648,138 @@ SettingsWindow::~SettingsWindow() {
     }
 }
 
-bool SettingsWindow::open() {
+void SettingsWindow::clearAddWindow() {
+    addLanguages_ = nullptr;
+    addCandidates_ = nullptr;
+    addConfirm_ = nullptr;
+    addWindow_ = nullptr;
+}
+
+void SettingsWindow::closeAddWindow() {
+    if (!addWindow_) {
+        return;
+    }
+    auto target = addWindow_;
+    if (addLanguages_) {
+        addLanguages_.Items().Clear();
+    }
+    if (addCandidates_) {
+        addCandidates_.Items().Clear();
+    }
+    target.Content(nullptr);
+    clearAddWindow();
+    target.Close();
+}
+
+void SettingsWindow::prepareClose() {
+    closed_.store(true, std::memory_order_release);
+    if (visualsReleased_) {
+        return;
+    }
+    visualsReleased_ = true;
+    rendering_ = true;
+    if (timer_) {
+        timer_.Stop();
+        timer_ = nullptr;
+    }
+    closeAddWindow();
+    // Detach tooltips, TabView items and XAML content while the visual tree
+    // and XAML core are still live. Releasing TabView/TabViewItem after core
+    // teardown triggers a WinUI 3 null dereference in
+    // VisualTree::GetContentRootForElement via ToolTip::~ToolTip.
+    for (auto &button : {add_, remove_, up_, down_}) {
+        if (button) {
+            ToolTipService::SetToolTip(button, nullptr);
+        }
+    }
+    if (options_) {
+        options_.Children().Clear();
+    }
+    if (shortcutOptions_) {
+        shortcutOptions_.Children().Clear();
+    }
+    if (dictionaries_) {
+        dictionaries_.Items().Clear();
+    }
+    if (plugins_) {
+        plugins_.Items().Clear();
+    }
+    if (methods_) {
+        methods_.Items().Clear();
+    }
+    if (tabs_) {
+        tabs_.TabItems().Clear();
+    }
+    if (globalPanel_) {
+        globalPanel_.TabItems().Clear();
+    }
+    if (window_) {
+        window_.Content(nullptr);
+    }
+    editors_.clear();
+    shortcutEditors_.fill(nullptr);
+    methods_ = nullptr;
+    options_ = nullptr;
+    heading_ = nullptr;
+    methodsHeading_ = nullptr;
+    globalSettingsText_ = nullptr;
+    languageLabel_ = nullptr;
+    candidateLayoutLabel_ = nullptr;
+    openPluginFolderText_ = nullptr;
+    detailedLoggingLabel_ = nullptr;
+    loggingPrivacy_ = nullptr;
+    logFolderLabel_ = nullptr;
+    openLogFolderText_ = nullptr;
+    logStatistics_ = nullptr;
+    dictionaryFolderText_ = nullptr;
+    add_ = nullptr;
+    remove_ = nullptr;
+    up_ = nullptr;
+    down_ = nullptr;
+    reset_ = nullptr;
+    cancel_ = nullptr;
+    dictionaryTab_ = nullptr;
+    generalTab_ = nullptr;
+    developerTab_ = nullptr;
+    pluginTab_ = nullptr;
+    shortcutsTab_ = nullptr;
+    shortcutOptions_ = nullptr;
+    globalButton_ = nullptr;
+    globalPanel_ = nullptr;
+    language_ = nullptr;
+    candidateLayout_ = nullptr;
+    detailedLogging_ = nullptr;
+    logStatus_ = nullptr;
+    logDirectory_ = nullptr;
+    logFolder_ = nullptr;
+    status_ = nullptr;
+    confirm_ = nullptr;
+    retry_ = nullptr;
+    tabs_ = nullptr;
+    dictionaries_ = nullptr;
+    dictionaryDirectory_ = nullptr;
+    dictionaryStatus_ = nullptr;
+    dictionaryFolder_ = nullptr;
+    plugins_ = nullptr;
+    pluginDirectory_ = nullptr;
+    pluginStatus_ = nullptr;
+    pluginFolder_ = nullptr;
+}
+
+void SettingsWindow::closeWindow(const char *reason) {
+    win32::diagnostic::settingsLogger().event(win32::diagnostic::Level::Info,
+                                              "settings_close_requested",
+                                              {{"reason", reason}});
+    auto target = window_;
+    prepareClose();
+    if (target) {
+        target.Close();
+    }
+}
+
+bool SettingsWindow::open(std::function<void()> onClosed) {
     const settings::diagnostic::Operation operation("window_open");
+    onClosed_ = std::move(onClosed);
     const auto name = ipc::settingsActivationBase();
     activation_ =
         CreateEventW(nullptr, FALSE, FALSE, (name + L"-activate").c_str());
@@ -666,7 +825,7 @@ bool SettingsWindow::open() {
         <Button x:Name="DictionaryFolder" AutomationProperties.AutomationId="DictionaryFolder">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <FontIcon Glyph="&#xE8B7;" FontSize="16"/>
-            <TextBlock Text="Open Third-party Dictionary Folder"/>
+            <TextBlock x:Name="DictionaryFolderText" Text="Open Third-party Dictionary Folder"/>
           </StackPanel>
         </Button>
         <TextBlock x:Name="DictionaryDirectory" Grid.Row="1" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="12"/>
@@ -742,12 +901,33 @@ bool SettingsWindow::open() {
     methods_ = root.FindName(L"Methods").as<ListView>();
     options_ = root.FindName(L"Options").as<StackPanel>();
     heading_ = root.FindName(L"Heading").as<TextBlock>();
+    methodsHeading_ = root.FindName(L"MethodsHeading").as<TextBlock>();
+    globalSettingsText_ = root.FindName(L"GlobalSettingsText").as<TextBlock>();
+    languageLabel_ = root.FindName(L"LanguageLabel").as<TextBlock>();
+    candidateLayoutLabel_ =
+        root.FindName(L"CandidateLayoutLabel").as<TextBlock>();
+    openPluginFolderText_ =
+        root.FindName(L"OpenPluginFolderText").as<TextBlock>();
+    detailedLoggingLabel_ =
+        root.FindName(L"DetailedLoggingLabel").as<TextBlock>();
+    loggingPrivacy_ = root.FindName(L"LoggingPrivacy").as<TextBlock>();
+    logFolderLabel_ = root.FindName(L"LogFolderLabel").as<TextBlock>();
+    openLogFolderText_ = root.FindName(L"OpenLogFolderText").as<TextBlock>();
+    logStatistics_ = root.FindName(L"LogStatistics").as<TextBlock>();
+    dictionaryFolderText_ =
+        root.FindName(L"DictionaryFolderText").as<TextBlock>();
     add_ = root.FindName(L"Add").as<Button>();
     remove_ = root.FindName(L"Remove").as<Button>();
     up_ = root.FindName(L"Up").as<Button>();
     down_ = root.FindName(L"Down").as<Button>();
     reset_ = root.FindName(L"ResetDefaults").as<Button>();
+    cancel_ = root.FindName(L"Cancel").as<Button>();
     dictionaryTab_ = root.FindName(L"DictionaryTab").as<TabViewItem>();
+    generalTab_ = root.FindName(L"GeneralTab").as<TabViewItem>();
+    developerTab_ = root.FindName(L"DeveloperTab").as<TabViewItem>();
+    pluginTab_ = root.FindName(L"PluginTab").as<TabViewItem>();
+    shortcutsTab_ = root.FindName(L"ShortcutsTab").as<TabViewItem>();
+    shortcutOptions_ = root.FindName(L"ShortcutOptions").as<StackPanel>();
     globalButton_ =
         root.FindName(L"GlobalSettings").as<Primitives::ToggleButton>();
     globalPanel_ = root.FindName(L"GlobalPanel").as<TabView>();
@@ -761,38 +941,71 @@ bool SettingsWindow::open() {
     pluginDirectory_ = root.FindName(L"PluginDirectory").as<TextBlock>();
     pluginStatus_ = root.FindName(L"PluginStatus").as<TextBlock>();
     pluginFolder_ = root.FindName(L"PluginFolder").as<Button>();
-    pluginFolder_.Click([this](auto &&, auto &&) { openPluginFolder(); });
-    globalButton_.Click([this](auto &&, auto &&) { chooseGlobal(); });
-    methods_.SelectionChanged([this](auto &&, auto &&) {
-        if (!rendering_ && !working_) {
-            chooseMethod();
+    const auto weak = weak_from_this();
+    pluginFolder_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->openPluginFolder();
+    });
+    globalButton_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->chooseGlobal();
+    });
+    methods_.SelectionChanged([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire) &&
+            !self->rendering_ && !self->working_ && !self->dialogOpen_) {
+            self->chooseMethod();
         }
     });
-    add_.Click([this](auto &&, auto &&) { openAddWindow(); });
-    remove_.Click([this](auto &&, auto &&) { changeSelection(1); });
-    up_.Click([this](auto &&, auto &&) { changeSelection(2); });
-    down_.Click([this](auto &&, auto &&) { changeSelection(3); });
-    reset_.Click([this](auto &&, auto &&) {
-        if (page_ == PageKind::Global) {
-            language_.SelectedIndex(0);
-            candidateLayout_.SelectedIndex(
-                static_cast<int>(ipc::CandidateLayout::Vertical));
-            detailedLogging_.IsOn(false);
-            const auto defaults = ipc::defaultShortcuts();
-            for (size_t i = 0; i < shortcutEditors_.size(); ++i)
-                shortcutEditors_[i].Text(to_hstring(defaults[i]));
+    add_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->openAddWindow();
+    });
+    remove_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->changeSelection(1);
+    });
+    up_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->changeSelection(2);
+    });
+    down_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->changeSelection(3);
+    });
+    reset_.Click([weak](auto &&, auto &&) {
+        auto self = weak.lock();
+        if (!self || self->closed_.load(std::memory_order_acquire) ||
+            self->working_ || self->dialogOpen_) {
             return;
         }
-        const auto previous = config_.options;
-        for (auto &option : config_.options) {
+        if (self->page_ == PageKind::Global) {
+            self->language_.SelectedIndex(0);
+            self->candidateLayout_.SelectedIndex(
+                static_cast<int>(ipc::CandidateLayout::Vertical));
+            self->detailedLogging_.IsOn(false);
+            const auto defaults = ipc::defaultShortcuts();
+            for (size_t i = 0; i < self->shortcutEditors_.size(); ++i)
+                if (self->shortcutEditors_[i])
+                    self->shortcutEditors_[i].Text(to_hstring(defaults[i]));
+            return;
+        }
+        const auto previous = self->config_.options;
+        for (auto &option : self->config_.options) {
             if (option.path == "ShuangpinProfile" &&
                 option.defaultValue == "Custom") {
                 continue;
             }
             option.value = option.defaultValue;
         }
-        renderConfig();
-        config_.options = previous;
+        self->renderConfig();
+        self->config_.options = previous;
     });
     status_ = root.FindName(L"Status").as<TextBlock>();
     confirm_ = root.FindName(L"Confirm").as<Button>();
@@ -803,45 +1016,84 @@ bool SettingsWindow::open() {
         root.FindName(L"DictionaryDirectory").as<TextBlock>();
     dictionaryStatus_ = root.FindName(L"DictionaryStatus").as<TextBlock>();
     dictionaryFolder_ = root.FindName(L"DictionaryFolder").as<Button>();
-    tabs_.SelectionChanged([this](auto &&, auto &&) {
-        win32::diagnostic::settingsLogger().event(
-            win32::diagnostic::Level::Debug, "settings_tab_selected",
-            {{"page", "input_method"}, {"index", tabs_.SelectedIndex()}});
-        if (page_ == PageKind::InputMethod && tabs_.SelectedIndex() == 1) {
-            refreshDictionaries();
-        }
-    });
-    dictionaryFolder_.Click(
-        [this](auto &&, auto &&) { openDictionaryFolder(); });
-    globalPanel_.SelectionChanged([this](auto &&, auto &&) {
-        win32::diagnostic::settingsLogger().event(
-            win32::diagnostic::Level::Debug, "settings_tab_selected",
-            {{"page", "global"}, {"index", globalPanel_.SelectedIndex()}});
-        if (page_ == PageKind::Global && globalPanel_.SelectedIndex() == 2)
-            refreshPlugins();
-    });
-    logFolder_.Click([this](auto &&, auto &&) { refreshLogStatus(true); });
-    root.FindName(L"Cancel").as<Button>().Click([this](auto &&, auto &&) {
-        win32::diagnostic::settingsLogger().event(
-            win32::diagnostic::Level::Info, "settings_close_requested",
-            {{"reason", "close_button"}});
-        window_.Close();
-    });
-    confirm_.Click([this](auto &&, auto &&) { transfer(true); });
-    retry_.Click([this](auto &&, auto &&) { transfer(false); });
-    window_.Closed([this](auto &&, auto &&) {
-        if (addWindow_) {
-            addWindow_.Close();
+    tabs_.SelectionChanged([weak](auto &&, auto &&) {
+        auto self = weak.lock();
+        if (!self || self->closed_.load(std::memory_order_acquire) ||
+            !self->tabs_) {
+            return;
         }
         win32::diagnostic::settingsLogger().event(
-            win32::diagnostic::Level::Info, "settings_window_closed",
-            {{"page", page_ == PageKind::Global ? "global" : "input_method"},
-             {"working", working_},
-             {"log_refresh", logRefresh_},
-             {"dictionary_refresh", dictionaryRefresh_}});
-        closed_ = true;
-        timer_.Stop();
-        RemovePropW(handle_, activationProperty_.c_str());
+            win32::diagnostic::Level::Debug, "settings_tab_selected",
+            {{"page", "input_method"}, {"index", self->tabs_.SelectedIndex()}});
+        if (self->page_ == PageKind::InputMethod &&
+            self->tabs_.SelectedIndex() == 1) {
+            self->refreshDictionaries();
+        }
+    });
+    dictionaryFolder_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->openDictionaryFolder();
+    });
+    globalPanel_.SelectionChanged([weak](auto &&, auto &&) {
+        auto self = weak.lock();
+        if (!self || self->closed_.load(std::memory_order_acquire) ||
+            !self->globalPanel_) {
+            return;
+        }
+        win32::diagnostic::settingsLogger().event(
+            win32::diagnostic::Level::Debug, "settings_tab_selected",
+            {{"page", "global"},
+             {"index", self->globalPanel_.SelectedIndex()}});
+        if (self->page_ == PageKind::Global &&
+            self->globalPanel_.SelectedIndex() == 2)
+            self->refreshPlugins();
+    });
+    logFolder_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->refreshLogStatus(true);
+    });
+    cancel_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->closeWindow("close_button");
+    });
+    confirm_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->transfer(true);
+    });
+    retry_.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->transfer(false);
+    });
+    window_.AppWindow().Closing([weak](auto &&, auto &&) {
+        if (auto self = weak.lock()) {
+            self->prepareClose();
+        }
+    });
+    window_.Closed([weak](auto &&, auto &&) {
+        if (auto self = weak.lock()) {
+            win32::diagnostic::settingsLogger().event(
+                win32::diagnostic::Level::Info, "settings_window_closed",
+                {{"page",
+                  self->page_ == PageKind::Global ? "global" : "input_method"},
+                 {"working", self->working_},
+                 {"log_refresh", self->logRefresh_},
+                 {"dictionary_refresh", self->dictionaryRefresh_}});
+            self->prepareClose();
+            if (self->handle_) {
+                RemovePropW(self->handle_, self->activationProperty_.c_str());
+                self->handle_ = nullptr;
+            }
+            self->window_ = nullptr;
+            auto callback = std::move(self->onClosed_);
+            if (callback) {
+                callback();
+            }
+        }
     });
     window_.Content(root);
     translateStatic();
@@ -857,27 +1109,33 @@ bool SettingsWindow::open() {
     timer_ = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread()
                  .CreateTimer();
     timer_.Interval(std::chrono::milliseconds(200));
-    timer_.Tick([this](auto &&, auto &&) {
-        if (settingsServiceStopping()) {
-            win32::diagnostic::settingsLogger().event(
-                win32::diagnostic::Level::Info, "settings_close_requested",
-                {{"reason", "service_stop"}});
-            window_.Close();
+    timer_.Tick([weak](auto &&, auto &&) {
+        auto self = weak.lock();
+        if (!self || self->closed_.load(std::memory_order_acquire)) {
             return;
         }
-        if (WaitForSingleObject(activation_, 0) == WAIT_OBJECT_0) {
-            ShowWindow(handle_, IsIconic(handle_) ? SW_RESTORE : SW_SHOW);
-            window_.Activate();
+        if (settingsServiceStopping()) {
+            self->closeWindow("service_stop");
+            return;
         }
-        if (++dictionaryTicks_ >= 10) {
-            dictionaryTicks_ = 0;
-            if (page_ == PageKind::InputMethod && tabs_.SelectedIndex() == 1) {
-                refreshDictionaries();
+        if (WaitForSingleObject(self->activation_, 0) == WAIT_OBJECT_0 &&
+            self->handle_ && self->window_) {
+            ShowWindow(self->handle_,
+                       IsIconic(self->handle_) ? SW_RESTORE : SW_SHOW);
+            self->window_.Activate();
+        }
+        if (++self->dictionaryTicks_ >= 10) {
+            self->dictionaryTicks_ = 0;
+            if (self->page_ == PageKind::InputMethod && self->tabs_ &&
+                self->tabs_.SelectedIndex() == 1) {
+                self->refreshDictionaries();
             }
-            if (page_ == PageKind::Global && globalPanel_.SelectedIndex() == 1)
-                refreshLogStatus();
-            if (page_ == PageKind::Global && globalPanel_.SelectedIndex() == 2)
-                refreshPlugins();
+            if (self->page_ == PageKind::Global && self->globalPanel_ &&
+                self->globalPanel_.SelectedIndex() == 1)
+                self->refreshLogStatus();
+            if (self->page_ == PageKind::Global && self->globalPanel_ &&
+                self->globalPanel_.SelectedIndex() == 2)
+                self->refreshPlugins();
         }
     });
     timer_.Start();
@@ -890,6 +1148,9 @@ bool SettingsWindow::open() {
 
 void SettingsWindow::busy(bool enabled) {
     working_ = enabled;
+    if (closed_.load(std::memory_order_acquire) || !methods_) {
+        return;
+    }
     methods_.IsEnabled(!enabled && loaded_);
     globalButton_.IsEnabled(!enabled && loaded_);
     language_.IsEnabled(!enabled && loaded_);
@@ -915,7 +1176,7 @@ fire_and_forget SettingsWindow::transfer(bool save) try {
     const settings::diagnostic::Operation operation(save ? "apply" : "reload");
     const auto lifetime = shared_from_this();
     const apartment_context ui;
-    if (working_) {
+    if (working_ || dialogOpen_ || closed_.load(std::memory_order_acquire)) {
         co_return;
     }
     if (save) {
@@ -924,6 +1185,8 @@ fire_and_forget SettingsWindow::transfer(bool save) try {
             co_await saveGlobal();
         else
             co_await saveConfig();
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
         busy(false);
         co_return;
     }
@@ -947,9 +1210,19 @@ fire_and_forget SettingsWindow::transfer(bool save) try {
         settings::diagnostic::exception("reload");
         connected = false;
     }
-    co_await ui;
-    operation.stage(closed_ ? "closed" : "apply_reply");
-    if (closed_) {
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return;
+    }
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
+        throw;
+    }
+    operation.stage(closed_.load(std::memory_order_acquire) ? "closed"
+                                                            : "apply_reply");
+    if (closed_.load(std::memory_order_acquire)) {
         co_return;
     }
     if (!connected) {
@@ -979,10 +1252,17 @@ fire_and_forget SettingsWindow::transfer(bool save) try {
         retry_.Visibility(Visibility::Collapsed);
         if (page_ == PageKind::Global) {
             renderGlobal();
-        } else if (methods_.SelectedIndex() >= 0) {
-            co_await loadConfig(
-                catalog_.selection.enabled.at(methods_.SelectedIndex()));
+        } else {
+            const auto selectedIndex = methods_.SelectedIndex();
+            if (selectedIndex >= 0 &&
+                selectedIndex <
+                    static_cast<int>(catalog_.selection.enabled.size())) {
+                co_await loadConfig(catalog_.selection.enabled[selectedIndex]);
+            }
         }
+    }
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return;
     }
     status_.Visibility(status_.Text().empty() ? Visibility::Collapsed
                                               : Visibility::Visible);
@@ -1000,6 +1280,9 @@ SettingsWindow::method(const std::string &id) const {
 }
 
 void SettingsWindow::renderMethods(const std::string &selected) {
+    if (closed_.load(std::memory_order_acquire) || !methods_) {
+        return;
+    }
     const settings::diagnostic::Operation operation("render_methods");
     rendering_ = true;
     methods_.Items().Clear();
@@ -1032,7 +1315,7 @@ void SettingsWindow::renderMethods(const std::string &selected) {
             iconHost.Children().Append(icon);
             iconHost.Children().Append(image);
             row.Children().Append(iconHost);
-            loadIcon(image, icon, info->icon);
+            loadIcon(make_weak(image), make_weak(icon), info->icon);
         } else {
             row.Children().Append(icon);
         }
@@ -1060,12 +1343,15 @@ void SettingsWindow::renderMethods(const std::string &selected) {
             availableIds_.push_back(info.id);
         }
     }
-    methods_.SelectedIndex(page_ == PageKind::Global ? -1 : selectedIndex);
+    const int targetIndex =
+        catalog_.selection.enabled.empty() ? -1 : selectedIndex;
+    methods_.SelectedIndex(page_ == PageKind::Global ? -1 : targetIndex);
     rendering_ = false;
 }
 
 void SettingsWindow::renderAddCandidates() {
-    if (!addLanguages_ || !addCandidates_)
+    if (closed_.load(std::memory_order_acquire) || !addLanguages_ ||
+        !addCandidates_ || !addConfirm_)
         return;
     addCandidates_.Items().Clear();
     addCandidateIds_.clear();
@@ -1109,7 +1395,8 @@ void SettingsWindow::renderAddCandidates() {
 }
 
 void SettingsWindow::openAddWindow() {
-    if (!loaded_ || availableIds_.empty())
+    if (closed_.load(std::memory_order_acquire) || !loaded_ || working_ ||
+        dialogOpen_ || availableIds_.empty())
         return;
     if (addWindow_) {
         addWindow_.Activate();
@@ -1142,25 +1429,50 @@ void SettingsWindow::openAddWindow() {
         .Text(tr("settings", "Add Input Method"));
     addConfirm_.Content(box_value(tr("settings", "Add")));
     cancel.Content(box_value(tr("settings", "Cancel")));
-    addLanguages_.SelectionChanged(
-        [this](auto &&, auto &&) { renderAddCandidates(); });
-    addCandidates_.SelectionChanged([this](auto &&, auto &&) {
-        addConfirm_.IsEnabled(addCandidates_.SelectedIndex() >= 0);
+    const auto weak = weak_from_this();
+    addLanguages_.SelectionChanged([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire))
+            self->renderAddCandidates();
     });
-    cancel.Click([this](auto &&, auto &&) { addWindow_.Close(); });
-    addConfirm_.Click([this](auto &&, auto &&) {
-        const auto index = addCandidates_.SelectedIndex();
-        if (index < 0 || index >= static_cast<int>(addCandidateIds_.size()))
+    addCandidates_.SelectionChanged([weak](auto &&, auto &&) {
+        if (auto self = weak.lock();
+            self && !self->closed_.load(std::memory_order_acquire) &&
+            self->addCandidates_ && self->addConfirm_)
+            self->addConfirm_.IsEnabled(self->addCandidates_.SelectedIndex() >=
+                                        0);
+    });
+    cancel.Click([weak](auto &&, auto &&) {
+        if (auto self = weak.lock())
+            self->closeAddWindow();
+    });
+    addConfirm_.Click([weak](auto &&, auto &&) {
+        auto self = weak.lock();
+        if (!self || self->closed_.load(std::memory_order_acquire) ||
+            self->working_ || self->dialogOpen_ || !self->addCandidates_)
             return;
-        pendingAddId_ = addCandidateIds_[index];
-        addWindow_.Close();
-        changeSelection(0);
+        const auto index = self->addCandidates_.SelectedIndex();
+        if (index < 0 ||
+            index >= static_cast<int>(self->addCandidateIds_.size()))
+            return;
+        self->pendingAddId_ = self->addCandidateIds_[index];
+        self->closeAddWindow();
+        self->changeSelection(0);
     });
-    addWindow_.Closed([this](auto &&, auto &&) {
-        addLanguages_ = nullptr;
-        addCandidates_ = nullptr;
-        addConfirm_ = nullptr;
-        addWindow_ = nullptr;
+    addWindow_.AppWindow().Closing([weak](auto &&, auto &&) {
+        if (auto self = weak.lock(); self && self->addWindow_) {
+            if (self->addLanguages_)
+                self->addLanguages_.Items().Clear();
+            if (self->addCandidates_)
+                self->addCandidates_.Items().Clear();
+            self->addWindow_.Content(nullptr);
+            self->clearAddWindow();
+        }
+    });
+    addWindow_.Closed([weak](auto &&, auto &&) {
+        if (auto self = weak.lock()) {
+            self->clearAddWindow();
+        }
     });
     addWindow_.Content(root);
     addWindow_.SystemBackdrop(Media::MicaBackdrop());
@@ -1233,25 +1545,40 @@ void SettingsWindow::openAddWindow() {
     addWindow_.Activate();
 }
 
-fire_and_forget SettingsWindow::loadIcon(Image image, TextBlock fallback,
+fire_and_forget SettingsWindow::loadIcon(weak_ref<Image> image,
+                                         weak_ref<TextBlock> fallback,
                                          std::string path) try {
     const auto lifetime = shared_from_this();
     try {
+        if (closed_.load(std::memory_order_acquire)) {
+            co_return;
+        }
         const auto file =
             co_await Windows::Storage::StorageFile::GetFileFromPathAsync(
                 hstring(std::filesystem::path(to_hstring(path).c_str())
                             .make_preferred()
                             .wstring()));
-        const auto stream =
-            co_await file.OpenAsync(Windows::Storage::FileAccessMode::Read);
-        Media::Imaging::BitmapImage bitmap;
-        co_await bitmap.SetSourceAsync(stream);
-        if (closed_) {
+        if (closed_.load(std::memory_order_acquire)) {
             co_return;
         }
-        image.Source(bitmap);
-        image.Visibility(Visibility::Visible);
-        fallback.Visibility(Visibility::Collapsed);
+        const auto stream =
+            co_await file.OpenAsync(Windows::Storage::FileAccessMode::Read);
+        if (closed_.load(std::memory_order_acquire)) {
+            co_return;
+        }
+        auto targetImage = image.get();
+        auto targetFallback = fallback.get();
+        if (!targetImage || !targetFallback) {
+            co_return;
+        }
+        Media::Imaging::BitmapImage bitmap;
+        co_await bitmap.SetSourceAsync(stream);
+        if (closed_.load(std::memory_order_acquire)) {
+            co_return;
+        }
+        targetImage.Source(bitmap);
+        targetImage.Visibility(Visibility::Visible);
+        targetFallback.Visibility(Visibility::Collapsed);
     } catch (...) {
         settings::diagnostic::exception("load_icon");
     }
@@ -1261,6 +1588,9 @@ fire_and_forget SettingsWindow::loadIcon(Image image, TextBlock fallback,
 }
 
 void SettingsWindow::renderConfig() {
+    if (closed_.load(std::memory_order_acquire) || !options_) {
+        return;
+    }
     const settings::diagnostic::Operation operation("render_config");
     operation.stage("page_visibility");
     page_ = PageKind::InputMethod;
@@ -1387,7 +1717,13 @@ void SettingsWindow::renderConfig() {
             NumberBox number;
             number.Minimum(option.minimum);
             number.Maximum(option.maximum);
-            number.Value(std::stod(option.value));
+            double parsed = static_cast<double>(option.minimum);
+            try {
+                parsed = std::stod(option.value);
+            } catch (...) {
+                settings::diagnostic::exception("parse_integer_option");
+            }
+            number.Value(parsed);
             number.SpinButtonPlacementMode(
                 NumberBoxSpinButtonPlacementMode::Compact);
             number.Width(140);
@@ -1447,12 +1783,24 @@ fire_and_forget SettingsWindow::recordShortcut(TextBox text,
                                                std::wstring label) try {
     const settings::diagnostic::Operation operation("record_shortcut");
     const auto lifetime = shared_from_this();
-    if (working_ || closed_)
+    if (working_ || dialogOpen_ || closed_.load(std::memory_order_acquire) ||
+        !window_)
+        co_return;
+    const auto root = window_.Content().try_as<FrameworkElement>();
+    if (!root || !root.XamlRoot())
         co_return;
     const auto selectionStart = text.SelectionStart();
     const auto selectionLength = text.SelectionLength();
+    const auto targetEditor = make_weak(text);
+    text = nullptr;
+    struct DialogGuard {
+        bool &flag;
+        ~DialogGuard() { flag = false; }
+    };
+    dialogOpen_ = true;
+    DialogGuard guard{dialogOpen_};
     ContentDialog dialog;
-    dialog.XamlRoot(window_.Content().as<FrameworkElement>().XamlRoot());
+    dialog.XamlRoot(root.XamlRoot());
     dialog.Title(box_value(label));
     dialog.PrimaryButtonText(tr("settings", "Use shortcut"));
     dialog.CloseButtonText(tr("settings", "Cancel"));
@@ -1507,25 +1855,29 @@ fire_and_forget SettingsWindow::recordShortcut(TextBox text,
     try {
         const auto result = co_await dialog.ShowAsync();
         recorder->stop();
-        if (closed_ || result != ContentDialogResult::Primary)
+        if (closed_.load(std::memory_order_acquire) ||
+            result != ContentDialogResult::Primary)
+            co_return;
+        auto editor = targetEditor.get();
+        if (!editor)
             co_return;
         const std::wstring key(preview.Text());
         if (key.empty())
             co_return;
         if (selectionLength) {
-            text.Select(selectionStart, selectionLength);
-            text.SelectedText(key);
+            editor.Select(selectionStart, selectionLength);
+            editor.SelectedText(key);
         } else {
-            std::wstring value(text.Text());
+            std::wstring value(editor.Text());
             if (!value.empty() && value.back() != L'\n' &&
                 value.back() != L'\r')
                 value += L'\n';
-            text.Text(value + key);
+            editor.Text(value + key);
         }
     } catch (const hresult_error &) {
         settings::diagnostic::exception("record_shortcut");
         recorder->stop();
-        if (!closed_) {
+        if (!closed_.load(std::memory_order_acquire) && status_) {
             status_.Text(tr("settings", "Cannot record shortcut."));
             status_.Visibility(Visibility::Visible);
         }
@@ -1577,9 +1929,19 @@ SettingsWindow::loadConfig(const std::string &entry) {
     } catch (...) {
         settings::diagnostic::exception("load_config");
     }
-    co_await ui;
-    operation.stage(closed_ ? "closed" : "apply_reply");
-    if (closed_) {
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return false;
+    }
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return false;
+        throw;
+    }
+    operation.stage(closed_.load(std::memory_order_acquire) ? "closed"
+                                                            : "apply_reply");
+    if (closed_.load(std::memory_order_acquire)) {
         co_return false;
     }
     if (!connected) {
@@ -1599,6 +1961,9 @@ SettingsWindow::loadConfig(const std::string &entry) {
 
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveConfig() {
     const settings::diagnostic::Operation operation("save_config");
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return false;
+    }
     const apartment_context ui;
     const auto values = configValues();
     if (config_.id.empty() || config_.error != ipc::SettingsError::None) {
@@ -1641,8 +2006,17 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveConfig() {
         settings::diagnostic::exception("save_config");
         connected = false;
     }
-    co_await ui;
-    if (closed_) {
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return false;
+    }
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return false;
+        throw;
+    }
+    if (closed_.load(std::memory_order_acquire)) {
         co_return false;
     }
     if (!connected || reply.error != ipc::SettingsError::None) {
@@ -1662,25 +2036,42 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveConfig() {
 fire_and_forget SettingsWindow::chooseMethod() try {
     const settings::diagnostic::Operation operation("choose_method");
     const auto lifetime = shared_from_this();
-    const auto index = methods_.SelectedIndex();
-    if (index < 0) {
+    if (working_ || dialogOpen_ || closed_.load(std::memory_order_acquire) ||
+        !methods_) {
         co_return;
     }
-    const auto id = catalog_.selection.enabled.at(index);
+    const auto index = methods_.SelectedIndex();
+    if (index < 0 ||
+        index >= static_cast<int>(catalog_.selection.enabled.size())) {
+        co_return;
+    }
+    const auto id = catalog_.selection.enabled[index];
     if (page_ == PageKind::InputMethod && id == config_.id) {
         busy(false);
         co_return;
     }
     busy(true);
     if (!(co_await resolveDraft())) {
+        if (closed_.load(std::memory_order_acquire)) {
+            co_return;
+        }
         renderMethods(config_.id);
         busy(false);
         co_return;
     }
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return;
+    }
     if (!(co_await loadConfig(id))) {
+        if (closed_.load(std::memory_order_acquire)) {
+            co_return;
+        }
         if (config_.id != id) {
             renderMethods(config_.id);
         }
+    }
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return;
     }
     busy(false);
 } catch (...) {
@@ -1694,7 +2085,8 @@ fire_and_forget SettingsWindow::changeSelection(int action) try {
                                               "settings_selection_action",
                                               {{"action", action}});
     const auto lifetime = shared_from_this();
-    if (working_ || !loaded_) {
+    if (working_ || dialogOpen_ || !loaded_ ||
+        closed_.load(std::memory_order_acquire)) {
         co_return;
     }
     auto next = catalog_.selection;
@@ -1711,7 +2103,7 @@ fire_and_forget SettingsWindow::changeSelection(int action) try {
         selected = next.enabled.back();
         pendingAddId_.clear();
     } else {
-        if (index < 0) {
+        if (index < 0 || index >= static_cast<int>(next.enabled.size())) {
             co_return;
         }
         if (action == 1) {
@@ -1741,7 +2133,13 @@ fire_and_forget SettingsWindow::changeSelection(int action) try {
     if ((page_ == PageKind::Global && !(co_await resolveDraft())) ||
         (page_ == PageKind::InputMethod && !config_.options.empty() &&
          !(co_await saveConfig()))) {
+        if (closed_.load(std::memory_order_acquire)) {
+            co_return;
+        }
         busy(false);
+        co_return;
+    }
+    if (closed_.load(std::memory_order_acquire)) {
         co_return;
     }
     next.revision = catalog_.selection.revision;
@@ -1763,16 +2161,32 @@ fire_and_forget SettingsWindow::changeSelection(int action) try {
         settings::diagnostic::exception("change_selection");
         connected = false;
     }
-    co_await ui;
-    if (closed_) {
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return;
+    }
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
+        throw;
+    }
+    if (closed_.load(std::memory_order_acquire)) {
         co_return;
     }
     if (connected && reply.error == ipc::SettingsError::None) {
         catalog_ = std::move(reply);
         page_ = PageKind::InputMethod;
         renderMethods(selected);
-        co_await loadConfig(
-            catalog_.selection.enabled.at(methods_.SelectedIndex()));
+        const auto selectedIndex = methods_.SelectedIndex();
+        if (selectedIndex >= 0 &&
+            selectedIndex <
+                static_cast<int>(catalog_.selection.enabled.size())) {
+            co_await loadConfig(catalog_.selection.enabled[selectedIndex]);
+        }
+        if (closed_.load(std::memory_order_acquire)) {
+            co_return;
+        }
         status_.Visibility(Visibility::Collapsed);
     } else {
         status_.Text(connected ? errorText(reply.error)
@@ -1787,7 +2201,7 @@ fire_and_forget SettingsWindow::changeSelection(int action) try {
 }
 
 fire_and_forget SettingsWindow::refreshDictionaries() try {
-    if (dictionaryRefresh_ || closed_) {
+    if (dictionaryRefresh_ || closed_.load(std::memory_order_acquire)) {
         co_return;
     }
     const auto lifetime = shared_from_this();
@@ -1802,9 +2216,18 @@ fire_and_forget SettingsWindow::refreshDictionaries() try {
     } catch (...) {
         settings::diagnostic::exception("refresh_dictionaries");
     }
-    co_await ui;
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return;
+    }
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
+        throw;
+    }
     dictionaryRefresh_ = false;
-    if (closed_) {
+    if (closed_.load(std::memory_order_acquire)) {
         co_return;
     }
     if (!connected) {
@@ -1858,6 +2281,9 @@ fire_and_forget SettingsWindow::refreshDictionaries() try {
 fire_and_forget SettingsWindow::openDictionaryFolder() try {
     const settings::diagnostic::Operation operation("open_dictionary_folder");
     const auto lifetime = shared_from_this();
+    if (closed_.load(std::memory_order_acquire) || !dictionaryFolder_) {
+        co_return;
+    }
     const apartment_context ui;
     dictionaryFolder_.IsEnabled(false);
     HRESULT result = E_FAIL;
@@ -1868,8 +2294,17 @@ fire_and_forget SettingsWindow::openDictionaryFolder() try {
     } catch (...) {
         settings::diagnostic::exception("open_dictionary_folder");
     }
-    co_await ui;
-    if (!closed_) {
+    if (closed_.load(std::memory_order_acquire)) {
+        co_return;
+    }
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
+        throw;
+    }
+    if (!closed_.load(std::memory_order_acquire)) {
         dictionaryFolder_.IsEnabled(true);
         if (FAILED(result)) {
             dictionaryStatus_.Visibility(Visibility::Visible);
@@ -1883,7 +2318,7 @@ fire_and_forget SettingsWindow::openDictionaryFolder() try {
 }
 
 fire_and_forget SettingsWindow::refreshPlugins() try {
-    if (pluginRefresh_ || closed_)
+    if (pluginRefresh_ || closed_.load(std::memory_order_acquire))
         co_return;
     const auto lifetime = shared_from_this();
     const apartment_context ui;
@@ -1897,9 +2332,17 @@ fire_and_forget SettingsWindow::refreshPlugins() try {
     } catch (...) {
         settings::diagnostic::exception("refresh_plugins");
     }
-    co_await ui;
+    if (closed_.load(std::memory_order_acquire))
+        co_return;
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
+        throw;
+    }
     pluginRefresh_ = false;
-    if (closed_)
+    if (closed_.load(std::memory_order_acquire))
         co_return;
     if (!connected) {
         plugins_.Items().Clear();
@@ -1961,6 +2404,8 @@ fire_and_forget SettingsWindow::refreshPlugins() try {
 
 fire_and_forget SettingsWindow::openPluginFolder() try {
     const auto lifetime = shared_from_this();
+    if (closed_.load(std::memory_order_acquire) || !pluginFolder_)
+        co_return;
     const apartment_context ui;
     pluginFolder_.IsEnabled(false);
     HRESULT result = E_FAIL;
@@ -1970,8 +2415,16 @@ fire_and_forget SettingsWindow::openPluginFolder() try {
     } catch (...) {
         settings::diagnostic::exception("open_plugin_folder");
     }
-    co_await ui;
-    if (!closed_) {
+    if (closed_.load(std::memory_order_acquire))
+        co_return;
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
+        throw;
+    }
+    if (!closed_.load(std::memory_order_acquire)) {
         pluginFolder_.IsEnabled(true);
         if (FAILED(result)) {
             pluginStatus_.Text(
@@ -1985,7 +2438,7 @@ fire_and_forget SettingsWindow::openPluginFolder() try {
 }
 
 fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) try {
-    if (logRefresh_ || closed_)
+    if (logRefresh_ || closed_.load(std::memory_order_acquire) || !logFolder_)
         co_return;
     if (openFolder)
         win32::diagnostic::settingsLogger().event(
@@ -2028,9 +2481,17 @@ fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) try {
         settings::diagnostic::exception("refresh_log_status");
         unavailable = true;
     }
-    co_await ui;
+    if (closed_.load(std::memory_order_acquire))
+        co_return;
+    try {
+        co_await ui;
+    } catch (const hresult_error &) {
+        if (closed_.load(std::memory_order_acquire))
+            co_return;
+        throw;
+    }
     logRefresh_ = false;
-    if (closed_)
+    if (closed_.load(std::memory_order_acquire) || !logStatistics_)
         co_return;
     logFolder_.IsEnabled(true);
     logDirectory_.Text(path.wstring());
@@ -2040,12 +2501,9 @@ fire_and_forget SettingsWindow::refreshLogStatus(bool openFolder) try {
                     : state.state == win32::diagnostic::State::Starting
                         ? tr("settings", "Starting")
                         : tr("settings", "Recording"));
-    window_.Content()
-        .as<FrameworkElement>()
-        .FindName(L"LogStatistics")
-        .as<TextBlock>()
-        .Text(translator_.format("settings", "{0} log files, {1} bytes",
-                                 state.fileCount, state.totalBytes));
+    logStatistics_.Text(translator_.format("settings",
+                                           "{0} log files, {1} bytes",
+                                           state.fileCount, state.totalBytes));
 } catch (...) {
     settings::diagnostic::exception("refresh_log_status", true);
     throw;

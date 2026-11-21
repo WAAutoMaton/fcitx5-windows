@@ -144,7 +144,7 @@ Settings 直接编译 `win32/tsf/pipeclient.cpp` 复用协议/传输头，通过
 - `test_langbar`、`test_protocol`、`test_settingsfile`、`test_keycapture`。
 - `ipc_probe`、`settings_probe`（含 `--read-only-file`）、`tsf_probe`、`inputmethods_probe` / `scripts/test-inputmethods.ps1`。
 - `scripts/test-settings-ui.ps1`（真实 Core + WinUI：增删改序、添加窗口、模糊拼音/双拼、词库页、重启恢复、单实例与截图）。
-- 隔离 `-UiTest` Settings + `ui_fixture` 脚本：`test-ui-localization.ps1`、`test-settings-shortcuts.ps1`、`test-settings-keycapture.ps1`、`test-settings-plugins.ps1`、`test-settings-exit-logging.ps1`、`test-settings-punctuation.ps1`。
+- 隔离 `-UiTest` Settings + `ui_fixture` 脚本：`test-ui-localization.ps1`、`test-settings-shortcuts.ps1`、`test-settings-keycapture.ps1`、`test-settings-plugins.ps1`、`test-settings-exit-logging.ps1`、`test-settings-stability.ps1`、`test-settings-punctuation.ps1`。
 
 待实机验收：
 

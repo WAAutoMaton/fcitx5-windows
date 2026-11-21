@@ -138,6 +138,7 @@ function Apply {
 function Close-Settings {
     Invoke-Control (Find-Name (Text @(0x5173,0x95ed)))
     if (!$script:windowProcess.WaitForExit(5000)) { throw 'Settings did not close.' }
+    if ($script:windowProcess.ExitCode -ne 0) { throw "Settings exited abnormally: $($script:windowProcess.ExitCode)" }
 }
 function Screenshot([string]$Name, [int]$Width = 0, [int]$Height = 0) {
     $handle = [IntPtr]$script:uiWindow.Current.NativeWindowHandle

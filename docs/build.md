@@ -239,6 +239,9 @@ Verification commands:
   `./scripts/test-ui-localization.ps1 -SettingsBuild <build> -TsfBuild <build> -TestLogging`
 - Settings exit/exception logging (requires `-UiTest` Settings build):
   `./scripts/test-settings-exit-logging.ps1 -SettingsBuild <build>/Release`
+- Settings tab-switch & close stability (requires `-UiTest` Settings build and
+  `ui_fixture`):
+  `./scripts/test-settings-stability.ps1 -SettingsBuild <build> -TsfBuild <tsf-build>`
 
 These runners set `FCITX5_DIAGNOSTIC_TEST_DIRECTORY` (ignored by production
 builds). See [developer logging design](windows-developer-logging-design.md).

@@ -27,7 +27,12 @@ void App::OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const &) {
             Microsoft::UI::Xaml::Controls::XamlControlsResources());
         Resources(resources);
         window_ = std::make_shared<fcitx::SettingsWindow>();
-        if (!window_->open()) {
+        if (!window_->open([weak = get_weak()]() {
+                if (auto self = weak.get()) {
+                    self->window_.reset();
+                }
+            })) {
+            window_.reset();
             fcitx::win32::diagnostic::settingsLogger().event(
                 fcitx::win32::diagnostic::Level::Error, "settings_app_exit",
                 {{"reason", "window_open_failed"}});

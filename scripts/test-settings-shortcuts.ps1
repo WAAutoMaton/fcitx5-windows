@@ -80,6 +80,19 @@ try {
     Wait-For { Find-Name 'Horizontal' } 'Horizontal candidate layout is missing.'
     (Find-Name 'Horizontal').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
     $layout.Collapse()
+    # Apply while ShortcutsTab is inactive after visiting it, then exercise
+    # DeveloperOptions -> GeneralOptions -> Apply and re-entering GlobalSettings.
+    Invoke-Control (Find-Name 'Apply')
+    Select-GlobalTab 'DeveloperOptions'
+    Start-Sleep -Milliseconds 300
+    Select-GlobalTab 'GeneralOptions'
+    Start-Sleep -Milliseconds 200
+    Invoke-Control (Find-Name 'Apply')
+    (Find-Id 'method:pinyin').GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Start-Sleep -Milliseconds 400
+    Wait-For { (Find-Id 'GlobalSettings').Current.IsEnabled } 'Input method switch did not settle.'
+    (Find-Id 'GlobalSettings').GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+    Wait-For { (Find-Id 'ShortcutOptionsTab').Current.IsEnabled } 'Re-entering GlobalSettings failed.'
     Select-GlobalTab 'ShortcutOptionsTab'
     foreach ($i in 0..5) {
         $expected = if ($i -eq 0) { 'Control+space' } else { "Control+Alt+$i" }
@@ -118,6 +131,7 @@ try {
     if ($saved -notmatch 'CandidateLayout=vertical') { throw 'Candidate layout reset failed.' }
     Invoke-Control (Find-Name 'Close')
     if (!$settings.WaitForExit(5000)) { throw 'Settings did not close.' }
+    if ($settings.ExitCode -ne 0) { throw "Settings exited abnormally: $($settings.ExitCode)" }
     Write-Output "PASS: global shortcuts, candidate layout, save/reload, validation, reset and v2 migration. Physical key injection is covered separately by test-settings-keycapture.ps1. Logs: $LogDirectory"
 } catch {
     if ($script:window) {
