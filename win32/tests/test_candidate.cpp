@@ -18,6 +18,33 @@ struct CandidateWindowTestAccess {
     static D2D1_RECT_F bounds(const CandidateWindow &view, size_t index) {
         return view.placements_[index].bounds;
     }
+    static float width(const CandidateWindow &view) { return view.width_; }
+    static float height(const CandidateWindow &view) { return view.height_; }
+    static float widthLimit(const CandidateWindow &view) {
+        return view.layoutWidthLimit_;
+    }
+    static float textLeft(const CandidateWindow &view, size_t index) {
+        return view.placements_[index].textLeft;
+    }
+    static float commentLeft(const CandidateWindow &view, size_t index) {
+        return view.placements_[index].commentLeft;
+    }
+    static bool textTrimmed(const CandidateWindow &view, size_t index) {
+        DWRITE_LINE_METRICS line{};
+        UINT32 count = 0;
+        assert(SUCCEEDED(
+            view.rows_[index].text.layout->GetLineMetrics(&line, 1, &count)));
+        assert(count == 1);
+        return line.isTrimmed != FALSE;
+    }
+    static bool commentTrimmed(const CandidateWindow &view, size_t index) {
+        DWRITE_LINE_METRICS line{};
+        UINT32 count = 0;
+        assert(SUCCEEDED(view.rows_[index].comment.layout->GetLineMetrics(
+            &line, 1, &count)));
+        assert(count == 1);
+        return line.isTrimmed != FALSE;
+    }
     static void discardTarget(CandidateWindow &view) { view.discardTarget(); }
     static void factory(CandidateWindow &view, ID2D1Factory *factory) {
         view.drawingFactory_ = factory;
@@ -686,6 +713,121 @@ void preview(IWICImagingFactory *factory,
     view.hide();
     assert(SetThreadDpiAwarenessContext(previous));
 }
+void horizontalLayoutTests(IWICImagingFactory *factory,
+                           const std::filesystem::path &directory) {
+    fcitx::CandidateWindow view;
+    // 1. Short candidates stay compact without forcing vertical minimum width.
+    Reply compact;
+    compact.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    compact.selected = 0;
+    compact.candidates = {{"\xe4\xbd\xa0\xe5\xa5\xbd", "1", ""}};
+    Access::prepare(view, compact, 96);
+    assert(Access::width(view) < 120.f);
+    assert(Access::bounds(view, 0).left > 0.f &&
+           Access::bounds(view, 0).right < Access::width(view));
+
+    // 2. Single-row overflow uses water-filling: short candidates stay intact
+    // while oversized candidates are ellipsized on the same row (no wrapping).
+    Reply reply;
+    reply.candidates = {{"a", "1", "a"},
+                        {"b", "2", ""},
+                        {std::string(200, 'W'), "3", "long comment"},
+                        {"c", "4", ""}};
+    reply.selected = 1;
+    Access::prepare(view, reply, 96);
+    const auto first = Access::bounds(view, 0);
+    assert(Access::bounds(view, 1).top == first.bottom);
+    CComPtr<IDWriteTextLayout> text = Access::text(view, 0);
+    reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    Access::prepare(view, reply, 96);
+    const auto b0 = Access::bounds(view, 0);
+    const auto b1 = Access::bounds(view, 1);
+    const auto b2 = Access::bounds(view, 2);
+    const auto b3 = Access::bounds(view, 3);
+    assert(b1.top == b0.top && b1.bottom == b0.bottom && b1.left == b0.right);
+    assert(b2.top == b0.top && b2.bottom == b0.bottom && b2.left == b1.right);
+    assert(b3.top == b0.top && b3.bottom == b0.bottom && b3.left == b2.right);
+    assert(b3.right < Access::width(view));
+    assert(Access::width(view) <= Access::widthLimit(view) + .01f);
+    assert(!Access::textTrimmed(view, 0) && !Access::commentTrimmed(view, 0));
+    assert(!Access::textTrimmed(view, 1));
+    assert(Access::textTrimmed(view, 2));
+    assert(!Access::textTrimmed(view, 3));
+    assert(Access::text(view, 0) == text.p);
+    auto overflowBitmap = Access::render(view, factory);
+    assert(overflowBitmap);
+    if (!directory.empty()) {
+        save(factory, overflowBitmap,
+             directory / L"candidates-horizontal-overflow.png");
+    }
+
+    // 3. Multiple wide items share the cap equally on one row.
+    Reply multiWide;
+    multiWide.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    multiWide.selected = 2;
+    multiWide.candidates = {{"\xe7\x9f\xad", "1", ""},
+                            {std::string(80, 'A'), "2", ""},
+                            {std::string(80, 'B'), "3", "comment"},
+                            {std::string(80, 'C'), "4", ""},
+                            {"\xe5\xae\x8c", "5", ""}};
+    for (const UINT dpi : {96u, 192u, 288u}) {
+        Access::prepare(view, multiWide, dpi);
+        const auto rowTop = Access::bounds(view, 0).top;
+        const auto rowBottom = Access::bounds(view, 0).bottom;
+        for (size_t i = 0; i < multiWide.candidates.size(); ++i) {
+            const auto current = Access::bounds(view, i);
+            assert(current.top == rowTop && current.bottom == rowBottom);
+            if (i > 0) {
+                assert(std::fabs(current.left -
+                                 Access::bounds(view, i - 1).right) < .01f);
+            }
+        }
+        assert(Access::width(view) <= Access::widthLimit(view) + .01f);
+        assert(!Access::textTrimmed(view, 0) && !Access::textTrimmed(view, 4));
+        const auto w1 =
+            Access::bounds(view, 1).right - Access::bounds(view, 1).left;
+        const auto w2 =
+            Access::bounds(view, 2).right - Access::bounds(view, 2).left;
+        const auto w3 =
+            Access::bounds(view, 3).right - Access::bounds(view, 3).left;
+        assert(std::fabs(w1 - w2) < .5f && std::fabs(w2 - w3) < .5f);
+        assert(Access::render(view, factory));
+    }
+
+    // 4. Short body with long comment in a squeezed horizontal cell keeps
+    // comment tight against the body rather than reserving empty space.
+    Reply shortBodyLongComment;
+    shortBodyLongComment.candidateLayout =
+        fcitx::win32::ipc::CandidateLayout::Horizontal;
+    shortBodyLongComment.selected = 0;
+    for (int i = 0; i < 6; ++i) {
+        shortBodyLongComment.candidates.push_back(
+            {"\xe5\xa5\xbd", std::to_string(i + 1),
+             "a very long dictionary comment for horizontal squeezing test"});
+    }
+    Access::prepare(view, shortBodyLongComment, 288);
+    assert(Access::bounds(view, 5).top == Access::bounds(view, 0).top);
+    assert(Access::commentLeft(view, 0) - Access::textLeft(view, 0) < 40.f);
+    assert(Access::render(view, factory));
+
+    // 5. Realistic wide horizontal page stays on one row without wrapping.
+    auto horizontalFixture = fixture();
+    horizontalFixture.candidateLayout =
+        fcitx::win32::ipc::CandidateLayout::Horizontal;
+    Access::prepare(view, horizontalFixture, 96);
+    for (size_t i = 1; i < horizontalFixture.candidates.size(); ++i) {
+        assert(Access::bounds(view, i).top == Access::bounds(view, 0).top);
+    }
+    if (!directory.empty()) {
+        save(factory, Access::render(view, factory),
+             directory / L"candidates-horizontal-fixture.png");
+    }
+
+    // 6. Switching back to vertical restores stacked rows.
+    reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Vertical;
+    Access::prepare(view, reply, 96);
+    assert(Access::bounds(view, 1).top == Access::bounds(view, 0).bottom);
+}
 } // namespace
 
 int main(int argc, char **argv) {
@@ -699,28 +841,7 @@ int main(int argc, char **argv) {
             std::filesystem::create_directories(directory);
         }
         renderTests(factory, directory);
-        {
-            fcitx::CandidateWindow view;
-            Reply reply;
-            reply.candidates = {{"a", "1", "a"}, {"b", "2", ""},
-                                {std::string(200, 'W'), "3", "long comment"}};
-            reply.selected = 1;
-            Access::prepare(view, reply, 96);
-            const auto first = Access::bounds(view, 0);
-            assert(Access::bounds(view, 1).top == first.bottom);
-            CComPtr<IDWriteTextLayout> text = Access::text(view, 0);
-            reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
-            Access::prepare(view, reply, 96);
-            const auto left = Access::bounds(view, 0);
-            const auto right = Access::bounds(view, 1);
-            assert(right.top == left.top && right.left == left.right);
-            assert(Access::bounds(view, 2).top == left.bottom &&
-                   Access::bounds(view, 2).left == left.left);
-            assert(Access::text(view, 0) == text.p && Access::render(view, factory));
-            reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Vertical;
-            Access::prepare(view, reply, 96);
-            assert(Access::bounds(view, 1).top == first.bottom);
-        }
+        horizontalLayoutTests(factory, directory);
         windowTests();
         fallbackTests(factory);
         inputSiteWindowTests();

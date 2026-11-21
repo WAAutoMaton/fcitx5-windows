@@ -32,14 +32,18 @@ Measurement and drawing share the same layouts:
 
 - Row height accounts for text height, vertical glyph overhang and padding
   (minimum 32 DIP).
-- **Vertical layout (default)** aligns label, body and comment columns.
-- **Horizontal layout** (**Global Settings > General**) arranges entries left to
-  right and wraps onto additional rows when width is exceeded. Core sends the
-  saved layout in candidate snapshots so the popup applies changes on the next
-  update.
-- Both layouts use DirectWrite ellipsis trimming for long text; overflowed
-  comments receive at most 35% of remaining width. Popup width is bounded to
-  180–640 DIP and clamped to the monitor work area.
+- **Vertical layout (default)** aligns label, body and comment columns, bounded
+  to 180–640 DIP and clamped to the monitor work area.
+- **Horizontal layout** (**Global Settings > General**) keeps all entries on a
+  single row without wrapping, sized tightly to content up to 1280 DIP (clamped
+  to the monitor work area). When the page exceeds that width, a water-filling
+  cap leaves shorter entries intact and trims only the widest entries to share
+  the remaining width. Core sends the saved layout in candidate snapshots so the
+  popup applies changes on the next update.
+- Both layouts use DirectWrite ellipsis trimming for long text; when a cell
+  overflows, comments receive at most 35% of remaining width (or the remaining
+  space after a short body in horizontal layout). Per-item axis-aligned clipping
+  prevents glyphs from bleeding across adjacent horizontal cells.
 - System colors supply text, background, selection and border, invalidating on
   theme/color changes. A dedicated Windows 11 dark theme remains pending.
 
@@ -126,7 +130,7 @@ and
 - **`test_candidate`** (default CTest, no Core or registration):
   - Runs the production draw routine on a software WIC target at 96/120/144/192/
     288 DPI; verifies color emoji vs. monochrome controls, VS15, ellipsis,
-    layout reuse and vertical/horizontal wrapping layout.
+    layout reuse and vertical/single-row horizontal layout.
   - Injects `DXGI_ERROR_NOT_CURRENTLY_AVAILABLE` into HWND-target creation to
     verify software DC fallback pixels, target reuse, resize, DPI changes and
     failure recovery.

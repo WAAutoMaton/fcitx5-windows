@@ -41,13 +41,19 @@ class CandidateWindow {
         float textLeft;
         float commentLeft;
     };
+    struct LayoutMetrics {
+        float itemPaddingX;
+        float labelGap;
+        float commentGap;
+    };
     static LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam,
                                        LPARAM lParam);
     bool initialize();
     bool createText(Text &text, IDWriteTextFormat *format);
     bool updateRows(const PipeClient::KeyReply &reply);
     bool fitText(Row &row, Placement &placement, float labelWidth,
-                 float bodyWidth, float commentWidth);
+                 float bodyWidth, float commentWidth,
+                 const LayoutMetrics &metrics, bool horizontal);
     bool layout();
     void position();
     HRESULT createTarget(HDC dc);
