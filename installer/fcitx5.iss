@@ -212,7 +212,7 @@ begin
     if Code = 0 then
       StageOwned := True
     else
-      Result := Format('Cannot prepare the Fcitx5 upgrade (%d). The current version has not been replaced. Run the maintenance helper query-upgrade command for the current state.', [Code]);
+      Result := Format('Cannot prepare the Fcitx5 upgrade (%d). The current version has not been replaced. See the setup and installer-helper logs, or run the maintenance helper query-upgrade command for the current state.', [Code]);
     exit;
   end;
   Helper := ExpandConstant('{app}\setup\Fcitx5SetupHelper.exe');

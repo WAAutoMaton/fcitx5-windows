@@ -23,8 +23,7 @@ void uniqueKeys(const Tree &tree) {
         uniqueKeys(value);
     }
 }
-Tree json(const fs::path &path) {
-    const auto text = readText(path);
+Tree parseJsonText(const std::string &text) {
     Tree tree;
     std::istringstream stream(text);
     try {
@@ -35,6 +34,7 @@ Tree json(const fs::path &path) {
     uniqueKeys(tree);
     return tree;
 }
+Tree json(const fs::path &path) { return parseJsonText(readText(path)); }
 void save(const fs::path &path, const Tree &tree) {
     std::ostringstream stream;
     boost::property_tree::write_json(stream, tree, false);
@@ -210,8 +210,8 @@ void requireOwner(const fs::path &transaction, DWORD owner) {
 }
 } // namespace
 
-Manifest manifest(const fs::path &path) try {
-    const auto tree = json(path);
+namespace {
+Manifest parseManifestTree(const Tree &tree) try {
     Manifest result;
     if (tree.get<unsigned>("schemaVersion") != 1 ||
         tree.get<std::string>("architecture") != "x64")
@@ -239,6 +239,16 @@ Manifest manifest(const fs::path &path) try {
     return result;
 } catch (const boost::property_tree::ptree_error &) {
     fail(ERROR_INVALID_DATA);
+}
+} // namespace
+
+Manifest manifest(const fs::path &path) {
+    return parseManifestTree(json(path));
+}
+
+Manifest manifestExternal(const fs::path &path, std::string *detail) {
+    return parseManifestTree(
+        parseJsonText(readExternalText(path, 16 * 1024 * 1024, detail)));
 }
 
 void verify(const fs::path &root, const std::vector<File> &list) {
@@ -300,7 +310,7 @@ void Engine::replacePending(const fs::path &manifestPath) {
     reapCompleted(root_);
     logMessage("upgrade phase=completed transaction cleanup complete");
     logMessage("upgrade phase=manifest load begin");
-    const auto target = manifest(manifestPath);
+    const auto target = manifestExternal(manifestPath);
     if (fs::exists(root_ / "tsf/x86/fcitx5-x86.dll") &&
         std::none_of(target.files.begin(), target.files.end(),
                      [](const File &file) {
@@ -342,7 +352,8 @@ DWORD Engine::begin(const fs::path &manifestPath,
     fs::create_directories(transaction_ / "dependencies");
     logMessage("upgrade phase=transaction directories complete");
     logMessage("upgrade phase=transaction plan write begin");
-    writeText(transaction_ / "target-manifest.json", readText(manifestPath));
+    writeText(transaction_ / "target-manifest.json",
+              readExternalText(manifestPath));
     GUID id{};
     if (FAILED(CoCreateGuid(&id)))
         fail(ERROR_GEN_FAILURE);
@@ -768,6 +779,17 @@ std::vector<fs::path> ownedFiles(const fs::path &root) {
               "setup/maintenance-host/Fcitx5Upgrade.exe",
               "setup/maintenance.lock"})
             result.push_back(relativePath(name));
+        std::error_code error;
+        const auto hostDir = root / "setup" / "maintenance-host";
+        if (fs::exists(hostDir, error)) {
+            for (const auto &entry : fs::directory_iterator(hostDir, error)) {
+                const auto name = entry.path().filename().wstring();
+                if (name.starts_with(L"Fcitx5Upgrade.exe.old.") ||
+                    name == L"Fcitx5Upgrade.exe.new")
+                    result.push_back(
+                        relativePath("setup/maintenance-host/" + utf8(name)));
+            }
+        }
     }
     return result;
 }

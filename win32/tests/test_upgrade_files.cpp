@@ -1,10 +1,59 @@
 #include "../setup/upgrade_files.h"
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <sddl.h>
 
 namespace upgrade = fcitx::setup::upgrade;
 namespace fs = std::filesystem;
+
+namespace {
+bool checkSddl(const wchar_t *sddl,
+               const upgrade::detail::PrincipalPolicy &policy,
+               std::string *detail = nullptr) {
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    assert(ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        sddl, SDDL_REVISION_1, &descriptor, nullptr));
+    const bool ok =
+        upgrade::detail::validateSecurityDescriptor(descriptor, policy, detail);
+    LocalFree(descriptor);
+    return ok;
+}
+
+bool checkObjectAce(DWORD flags, ACCESS_MASK mask, PSID aceSid,
+                    const upgrade::detail::PrincipalPolicy &policy,
+                    std::string *detail = nullptr) {
+    BYTE adminSid[SECURITY_MAX_SID_SIZE]{};
+    DWORD adminSize = sizeof(adminSid);
+    assert(CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, adminSid,
+                              &adminSize));
+    const DWORD sidLength = GetLengthSid(aceSid);
+    size_t sidOffset = offsetof(ACCESS_ALLOWED_OBJECT_ACE, ObjectType);
+    if (flags & ACE_OBJECT_TYPE_PRESENT)
+        sidOffset += sizeof(GUID);
+    if (flags & ACE_INHERITED_OBJECT_TYPE_PRESENT)
+        sidOffset += sizeof(GUID);
+    const WORD aceSize = static_cast<WORD>((sidOffset + sidLength + 3) & ~3u);
+    std::vector<BYTE> aclBuffer(sizeof(ACL) + aceSize, 0);
+    auto *acl = reinterpret_cast<PACL>(aclBuffer.data());
+    assert(InitializeAcl(acl, DWORD(aclBuffer.size()), ACL_REVISION_DS));
+    std::vector<BYTE> aceBytes(aceSize, 0);
+    auto *ace = reinterpret_cast<ACCESS_ALLOWED_OBJECT_ACE *>(aceBytes.data());
+    ace->Header.AceType = ACCESS_ALLOWED_OBJECT_ACE_TYPE;
+    ace->Header.AceFlags = 0;
+    ace->Header.AceSize = aceSize;
+    ace->Mask = mask;
+    ace->Flags = flags;
+    memcpy(aceBytes.data() + sidOffset, aceSid, sidLength);
+    assert(AddAce(acl, ACL_REVISION_DS, MAXDWORD, aceBytes.data(), aceSize));
+
+    SECURITY_DESCRIPTOR sd{};
+    assert(InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION));
+    assert(SetSecurityDescriptorOwner(&sd, adminSid, FALSE));
+    assert(SetSecurityDescriptorDacl(&sd, TRUE, acl, FALSE));
+    return upgrade::detail::validateSecurityDescriptor(&sd, policy, detail);
+}
+} // namespace
 
 template <typename F> void rejected(F action) {
     bool failed = false;
@@ -54,6 +103,125 @@ int wmain(int argc, wchar_t **argv) try {
     assert(CreateWellKnownSid(WinWorldSid, nullptr, everyoneSidBuffer,
                               &everyoneSidSize));
     assert(!upgrade::detail::trustedWritePrincipal(everyoneSidBuffer));
+
+    BYTE usersSidBuffer[SECURITY_MAX_SID_SIZE]{};
+    DWORD usersSidSize = sizeof(usersSidBuffer);
+    assert(CreateWellKnownSid(WinBuiltinUsersSid, nullptr, usersSidBuffer,
+                              &usersSidSize));
+
+    PSID builtinAdminSid = nullptr, domainAdminsSid = nullptr,
+         enterpriseAdminsSid = nullptr, personalAdminSid = nullptr;
+    assert(ConvertStringSidToSidW(L"S-1-5-21-11111-22222-33333-500",
+                                  &builtinAdminSid));
+    assert(ConvertStringSidToSidW(L"S-1-5-21-44444-55555-66666-512",
+                                  &domainAdminsSid));
+    assert(ConvertStringSidToSidW(L"S-1-5-21-44444-55555-66666-519",
+                                  &enterpriseAdminsSid));
+    assert(ConvertStringSidToSidW(L"S-1-5-21-11111-22222-33333-1001",
+                                  &personalAdminSid));
+
+    upgrade::detail::PrincipalPolicy strictPolicy;
+    strictPolicy.builtinAdminSid = builtinAdminSid;
+    strictPolicy.domainAdminsSid = domainAdminsSid;
+    strictPolicy.enterpriseAdminsSid = enterpriseAdminsSid;
+    strictPolicy.currentAdminUserSid = personalAdminSid;
+
+    assert(upgrade::detail::trustedOwnerPrincipal(administratorsSidBuffer,
+                                                  strictPolicy));
+    assert(
+        upgrade::detail::trustedOwnerPrincipal(systemSidBuffer, strictPolicy));
+    assert(
+        upgrade::detail::trustedOwnerPrincipal(domainAdminsSid, strictPolicy));
+    assert(upgrade::detail::trustedOwnerPrincipal(enterpriseAdminsSid,
+                                                  strictPolicy));
+    assert(
+        !upgrade::detail::trustedOwnerPrincipal(builtinAdminSid, strictPolicy));
+    assert(!upgrade::detail::trustedOwnerPrincipal(personalAdminSid,
+                                                   strictPolicy));
+
+    auto unfilteredAdminPolicy = strictPolicy;
+    unfilteredAdminPolicy.allowUnfilteredBuiltinAdmin = true;
+    assert(upgrade::detail::trustedOwnerPrincipal(builtinAdminSid,
+                                                  unfilteredAdminPolicy));
+    assert(!upgrade::detail::trustedOwnerPrincipal(personalAdminSid,
+                                                   unfilteredAdminPolicy));
+
+    auto uacDisabledPolicy = unfilteredAdminPolicy;
+    uacDisabledPolicy.uacDisabled = true;
+    assert(upgrade::detail::trustedOwnerPrincipal(personalAdminSid,
+                                                  uacDisabledPolicy));
+    assert(!upgrade::detail::trustedOwnerPrincipal(everyoneSidBuffer,
+                                                   uacDisabledPolicy));
+    assert(!upgrade::detail::trustedOwnerPrincipal(usersSidBuffer,
+                                                   uacDisabledPolicy));
+
+    // TrustedInstaller as owner + standard Program Files ACLs + OWNER RIGHTS +
+    // read-only conditional ACE must pass.
+    std::string detail;
+    assert(checkSddl(
+        L"O:S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
+        L"D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FRFX;;;BU)(A;;FA;;;OW)"
+        L"(A;OICIIO;FA;;;CO)",
+        strictPolicy, &detail));
+    assert(
+        checkSddl(L"O:BAD:(A;;FA;;;BA)(XA;;FRFX;;;BU;(Exists WIN://SYSAPPID))",
+                  strictPolicy, &detail));
+    assert(checkSddl(L"O:BAD:(XA;;FA;;;BA;(Exists WIN://SYSAPPID))",
+                     strictPolicy, &detail));
+    // Writable conditional ACE for Users must be rejected with diagnostics.
+    detail.clear();
+    assert(
+        !checkSddl(L"O:BAD:(A;;FA;;;BA)(XA;;FW;;;BU;(Exists WIN://SYSAPPID))",
+                   strictPolicy, &detail));
+    assert(detail.find("untrusted-write-ace") != std::string::npos);
+    assert(detail.find("sid-kind=users") != std::string::npos);
+    // Untrusted owner (split-token personal admin SID) must be rejected when
+    // UAC is enabled, and allowed only when UAC is disabled.
+    detail.clear();
+    assert(
+        !checkSddl(L"O:S-1-5-21-11111-22222-33333-1001"
+                   L"D:(A;;FA;;;BA)(A;;FA;;;S-1-5-21-11111-22222-33333-1001)",
+                   strictPolicy, &detail));
+    assert(detail.find("untrusted-owner") != std::string::npos);
+    assert(checkSddl(L"O:S-1-5-21-11111-22222-33333-1001"
+                     L"D:(A;;FA;;;BA)(A;;FA;;;S-1-5-21-11111-22222-33333-1001)",
+                     uacDisabledPolicy, &detail));
+    // Built-in admin (RID 500) allowed when unfiltered, rejected when filtered.
+    assert(checkSddl(L"O:S-1-5-21-11111-22222-33333-500"
+                     L"D:(A;;FA;;;BA)(A;;FA;;;S-1-5-21-11111-22222-33333-500)",
+                     unfilteredAdminPolicy, &detail));
+    assert(!checkSddl(L"O:S-1-5-21-11111-22222-33333-500"
+                      L"D:(A;;FA;;;BA)(A;;FA;;;S-1-5-21-11111-22222-33333-500)",
+                      strictPolicy, &detail));
+    // Missing DACL (NULL DACL) must be rejected.
+    detail.clear();
+    assert(!checkSddl(L"O:BAD:NO_ACCESS_CONTROL", strictPolicy, &detail));
+    assert(detail == "missing-dacl");
+    // Object ACE: read-only for Users passes; writable for Users fails;
+    // writable for Administrators passes.
+    assert(checkObjectAce(ACE_OBJECT_TYPE_PRESENT, FILE_GENERIC_READ,
+                          usersSidBuffer, strictPolicy, &detail));
+    detail.clear();
+    assert(!checkObjectAce(
+        ACE_OBJECT_TYPE_PRESENT | ACE_INHERITED_OBJECT_TYPE_PRESENT,
+        FILE_WRITE_DATA, usersSidBuffer, strictPolicy, &detail));
+    assert(detail.find("untrusted-write-ace") != std::string::npos);
+    assert(detail.find("sid-kind=users") != std::string::npos);
+    assert(checkObjectAce(
+        ACE_OBJECT_TYPE_PRESENT | ACE_INHERITED_OBJECT_TYPE_PRESENT,
+        FILE_WRITE_DATA, administratorsSidBuffer, strictPolicy, &detail));
+
+    // Reparse tag allowlist: only WOF transparent compression is accepted.
+    assert(upgrade::detail::allowedReparseTag(0x80000017UL));
+    assert(!upgrade::detail::allowedReparseTag(IO_REPARSE_TAG_SYMLINK));
+    assert(!upgrade::detail::allowedReparseTag(IO_REPARSE_TAG_MOUNT_POINT));
+    assert(!upgrade::detail::allowedReparseTag(0x9000001AUL));
+    assert(!upgrade::detail::allowedReparseTag(0));
+
+    LocalFree(builtinAdminSid);
+    LocalFree(domainAdminsSid);
+    LocalFree(enterpriseAdminsSid);
+    LocalFree(personalAdminSid);
 
     const auto root =
         fs::temp_directory_path() /
@@ -158,10 +326,10 @@ int wmain(int argc, wchar_t **argv) try {
         rejected([&] { upgrade::relativePath(path); });
     }
     assert(upgrade::runtimePath(upgrade::relativePath("bin/Fcitx5.exe")));
-    assert(upgrade::runtimePath(
-        upgrade::relativePath("plugins/fcitx5-wenzhounese/lib/fcitx5/libwenzhounese.dll")));
-    assert(upgrade::runtimePath(
-        upgrade::relativePath("plugins/future-plugin/share/libime/example.dict")));
+    assert(upgrade::runtimePath(upgrade::relativePath(
+        "plugins/fcitx5-wenzhounese/lib/fcitx5/libwenzhounese.dll")));
+    assert(upgrade::runtimePath(upgrade::relativePath(
+        "plugins/future-plugin/share/libime/example.dict")));
     assert(!upgrade::runtimePath(
         upgrade::relativePath("plugins-other/example.dll")));
     assert(!upgrade::runtimePath(
@@ -170,6 +338,45 @@ int wmain(int argc, wchar_t **argv) try {
         fs::create_directories(root / "setup");
         upgrade::InstallationLock lock(root);
         rejected([&] { upgrade::InstallationLock second(root); });
+    }
+    // External temp inputs tolerate ancestor directory junctions while
+    // installation-tree readText still rejects them and external reads still
+    // reject hard links.
+    {
+        const auto realTemp = root / "real-temp";
+        const auto junction = root / "temp-junction";
+        fs::create_directories(realTemp);
+        upgrade::writeText(realTemp / "manifest.json", "{\"ok\":true}\n");
+        std::wstring cmd = L"cmd.exe /c mklink /J \"" + junction.wstring() +
+                           L"\" \"" + realTemp.wstring() + L"\"";
+        STARTUPINFOW startup{sizeof(startup)};
+        PROCESS_INFORMATION info{};
+        assert(CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE,
+                              CREATE_NO_WINDOW, nullptr, nullptr, &startup,
+                              &info));
+        upgrade::Handle child(info.hProcess), thread(info.hThread);
+        assert(WaitForSingleObject(child.get(), 10000) == WAIT_OBJECT_0);
+        DWORD exitCode = 1;
+        assert(GetExitCodeProcess(child.get(), &exitCode) && exitCode == 0);
+        std::string pathDetail;
+        rejected([&] {
+            upgrade::validatePath(junction / "manifest.json", false,
+                                  &pathDetail);
+        });
+        assert(pathDetail.find("reparse-point") != std::string::npos);
+        rejected([&] { upgrade::readText(junction / "manifest.json"); });
+        assert(upgrade::readExternalText(junction / "manifest.json") ==
+               "{\"ok\":true}\n");
+        fs::create_hard_link(realTemp / "manifest.json",
+                             realTemp / "manifest-link.json");
+        std::string linkDetail;
+        rejected([&] {
+            upgrade::readExternalText(junction / "manifest-link.json",
+                                      1024 * 1024, &linkDetail);
+        });
+        assert(linkDetail.find("hardlink-count=2") != std::string::npos);
+        fs::remove(realTemp / "manifest-link.json");
+        assert(RemoveDirectoryW(junction.c_str()));
     }
     fs::remove_all(root);
     std::cout << "PASS: loaded image rejection, concurrent LoadLibrary guard, "

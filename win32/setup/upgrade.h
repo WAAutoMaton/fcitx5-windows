@@ -20,6 +20,7 @@ struct Manifest {
     std::vector<File> dependencies;
 };
 Manifest manifest(const fs::path &path);
+Manifest manifestExternal(const fs::path &path, std::string *detail = nullptr);
 void verify(const fs::path &root, const std::vector<File> &files);
 bool hasTransaction(const fs::path &root);
 bool hasMaintenance(const fs::path &root);

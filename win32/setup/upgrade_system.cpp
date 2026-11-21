@@ -8,6 +8,7 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <iostream>
 #include <sddl.h>
+#include <set>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <sstream>
@@ -367,13 +368,57 @@ DWORD process(const fs::path &path, const std::wstring &arguments) {
     return result;
 }
 
+struct InsensitivePathLess {
+    bool operator()(const std::wstring &left, const std::wstring &right) const {
+        return CompareStringOrdinal(left.c_str(), int(left.size()),
+                                    right.c_str(), int(right.size()),
+                                    TRUE) == CSTR_LESS_THAN;
+    }
+};
+
+bool requiresStrictTreeSecurity(
+    const fs::path &relative, DWORD attributes, bool hasKnownManifest,
+    const std::set<std::wstring, InsensitivePathLess> &managed) {
+    if ((attributes & FILE_ATTRIBUTE_DIRECTORY) ||
+        (attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+        return true;
+    const auto topDir =
+        relative.empty() ? std::wstring() : relative.begin()->wstring();
+    if (_wcsicmp(topDir.c_str(), L"setup") == 0 ||
+        _wcsicmp(topDir.c_str(), L"tsf") == 0)
+        return true;
+    return !hasKnownManifest || managed.contains(relative.generic_wstring());
+}
+
+void loggedSecurity(std::string_view phase, const fs::path &path) {
+    loggedPhase(phase, [&] {
+        std::string detail;
+        try {
+            validateSecurity(path, &detail);
+        } catch (const std::system_error &error) {
+            if (!detail.empty())
+                logStep("upgrade phase=" + std::string(phase) +
+                            " detail=" + detail,
+                        DWORD(error.code().value()));
+            throw;
+        }
+    });
+}
+
 class NativeMachine : public Machine {
   public:
     explicit NativeMachine(fs::path root) : root_(std::move(root)) {}
-    void validate() override { validateInstallation(true); }
+    void setIncomingTarget(const Manifest *target) { incomingTarget_ = target; }
+    void skipNextTreeInspection() { skipNextTreeInspect_ = true; }
+    void validate() override {
+        const bool inspect = !skipNextTreeInspect_;
+        skipNextTreeInspect_ = false;
+        validateInstallation(inspect);
+    }
     void validateSuspension() override {
         validateInstallation(false);
-        validateSecurity(root_ / "setup/upgrades/current");
+        loggedSecurity("transaction directory security",
+                       root_ / "setup/upgrades/current");
     }
     void validateInstallation(bool inspectTree) {
         logEnvironment();
@@ -386,10 +431,8 @@ class NativeMachine : public Machine {
             if (root_ == root_.root_path())
                 fail(ERROR_ACCESS_DENIED);
         });
-        loggedPhase("installation root security",
-                    [&] { validateSecurity(root_); });
-        loggedPhase("setup directory security",
-                    [&] { validateSecurity(root_ / "setup"); });
+        loggedSecurity("installation root security", root_);
+        loggedSecurity("setup directory security", root_ / "setup");
         loggedPhase("registered installation root", [&] {
             if (!ipc::registeredInstallationRoot(root_))
                 fail(ERROR_ALREADY_EXISTS);
@@ -431,26 +474,73 @@ class NativeMachine : public Machine {
                 std::wstring_view(filesystem) != L"NTFS")
                 fail(ERROR_NOT_SUPPORTED);
         });
-        // Validate every active/control directory before allowing SYSTEM work.
+        // Validate every directory, control/TSF entry, and managed file before
+        // allowing SYSTEM work. Unmanaged data files outside setup/ and tsf/
+        // are not touched by SYSTEM during upgrades.
         if (inspectTree)
             loggedPhase("installation tree security", [&] {
+                bool hasKnownManifest = false;
+                std::set<std::wstring, InsensitivePathLess> managed;
+                const auto addManifest = [&](const Manifest &value) {
+                    hasKnownManifest = true;
+                    for (const auto &file : value.files)
+                        managed.insert(
+                            relativePath(file.path).generic_wstring());
+                };
+                const auto activeManifest =
+                    root_ / "setup" / "runtime-manifest.json";
+                if (fs::exists(activeManifest)) {
+                    loggedSecurity("active manifest security", activeManifest);
+                    addManifest(manifest(activeManifest));
+                }
+                const auto transactionManifest = root_ / "setup" / "upgrades" /
+                                                 "current" /
+                                                 "target-manifest.json";
+                if (hasTransaction(root_) && fs::exists(transactionManifest)) {
+                    loggedSecurity("transaction manifest security",
+                                   transactionManifest);
+                    addManifest(manifest(transactionManifest));
+                }
+                if (incomingTarget_)
+                    addManifest(*incomingTarget_);
+
                 size_t index = 0;
+                size_t skippedUnmanaged = 0;
                 for (const auto &entry :
                      fs::recursive_directory_iterator(root_)) {
+                    const auto relative =
+                        entry.path().lexically_relative(root_);
+                    const auto relativeText = relative.generic_wstring();
+                    std::string detail;
                     try {
-                        validatePath(entry.path());
-                        validateSecurity(entry.path());
+                        const auto attributes =
+                            GetFileAttributesW(entry.path().c_str());
+                        if (attributes == INVALID_FILE_ATTRIBUTES) {
+                            detail = "attributes-failed";
+                            fail();
+                        }
+                        if (requiresStrictTreeSecurity(relative, attributes,
+                                                       hasKnownManifest,
+                                                       managed)) {
+                            validateSecurity(entry.path(), &detail);
+                        } else {
+                            ++skippedUnmanaged;
+                        }
                     } catch (const std::system_error &error) {
-                        logStep(
+                        std::string message =
                             "upgrade installation tree entry failed index=" +
-                                std::to_string(index),
-                            DWORD(error.code().value()));
+                            std::to_string(index) +
+                            " path=" + utf8(relativeText);
+                        if (!detail.empty())
+                            message += " detail=" + detail;
+                        logStep(message, DWORD(error.code().value()));
                         throw;
                     }
                     ++index;
                 }
                 logMessage("upgrade installation tree entries=" +
-                           std::to_string(index));
+                           std::to_string(index) + " skipped-unmanaged=" +
+                           std::to_string(skippedUnmanaged));
             });
         loggedPhase("pending restart operations", [&] { pendingOperations(); });
     }
@@ -799,25 +889,93 @@ class NativeMachine : public Machine {
         });
         loggedPhase("upgrade transaction directory",
                     [&] { protectDirectory(root_ / "setup" / "upgrades"); });
+        {
+            std::error_code ignored;
+            for (const auto &entry : fs::directory_iterator(
+                     root_ / "setup" / "maintenance-host", ignored)) {
+                const auto name = entry.path().filename().wstring();
+                if (name.starts_with(L"Fcitx5Upgrade.exe.old."))
+                    DeleteFileW(entry.path().c_str());
+            }
+        }
         const auto source = modulePath();
         if (source.filename() != L"Fcitx5Upgrade.exe")
             fail(ERROR_INVALID_FUNCTION);
-        loggedPhase("temporary maintenance host security",
-                    [&] { validateSecurity(source); });
-        if (!fs::exists(host()) || sha256(host()) != sha256(source)) {
-            const auto temporary = host().wstring() + L".new";
+        Handle sourceFile;
+        loggedPhase("temporary maintenance host security", [&] {
+            std::string detail;
+            try {
+                sourceFile = openVerifiedExternalFile(source, true, &detail);
+            } catch (const std::system_error &error) {
+                if (!detail.empty())
+                    logStep("upgrade phase=temporary maintenance host security "
+                            "detail=" +
+                                detail,
+                            DWORD(error.code().value()));
+                throw;
+            }
+        });
+        const auto sourceHash = sha256(sourceFile.get());
+        if (!fs::exists(host()) || sha256(host()) != sourceHash) {
+            if (!hasTransaction(root_) &&
+                fs::exists(root_ / "setup" / "upgrade-result.json")) {
+                try {
+                    const auto savedId =
+                        load(root_ / "setup" / "upgrade-result.json")
+                            .get<std::string>("transactionId", "");
+                    if (!savedId.empty())
+                        configureShutdownService(root_, false, savedId);
+                } catch (...) {
+                }
+            }
+            const auto temporary = fs::path(host().wstring() + L".new");
             validatePath(temporary, true);
             loggedPhase("install maintenance host", [&] {
-                fs::copy_file(source, temporary,
-                              fs::copy_options::overwrite_existing);
+                DeleteFileW(temporary.c_str());
+                {
+                    Handle destination(CreateFileW(
+                        temporary.c_str(),
+                        GENERIC_READ | GENERIC_WRITE | WRITE_DAC | WRITE_OWNER,
+                        0, nullptr, CREATE_NEW, FILE_FLAG_OPEN_REPARSE_POINT,
+                        nullptr));
+                    if (!destination)
+                        fail();
+                    try {
+                        copyContents(sourceFile.get(), destination.get());
+                        protectFile(destination.get());
+                    } catch (...) {
+                        destination = Handle();
+                        DeleteFileW(temporary.c_str());
+                        throw;
+                    }
+                }
                 if (!MoveFileExW(temporary.c_str(), host().c_str(),
                                  MOVEFILE_REPLACE_EXISTING |
-                                     MOVEFILE_WRITE_THROUGH))
-                    fail();
+                                     MOVEFILE_WRITE_THROUGH)) {
+                    const auto error = GetLastError();
+                    if ((error == ERROR_ACCESS_DENIED ||
+                         error == ERROR_SHARING_VIOLATION) &&
+                        fs::exists(host())) {
+                        const auto retired =
+                            fs::path(host().wstring() + L".old." +
+                                     std::to_wstring(GetCurrentProcessId()));
+                        if (MoveFileExW(host().c_str(), retired.c_str(),
+                                        MOVEFILE_REPLACE_EXISTING |
+                                            MOVEFILE_WRITE_THROUGH) &&
+                            MoveFileExW(temporary.c_str(), host().c_str(),
+                                        MOVEFILE_REPLACE_EXISTING |
+                                            MOVEFILE_WRITE_THROUGH)) {
+                            DeleteFileW(retired.c_str());
+                            return;
+                        }
+                    }
+                    const auto finalError = GetLastError();
+                    DeleteFileW(temporary.c_str());
+                    fail(finalError ? finalError : error);
+                }
             });
         }
-        loggedPhase("installed maintenance host security",
-                    [&] { validateSecurity(host()); });
+        loggedSecurity("installed maintenance host security", host());
     }
     void checkTarget(const Manifest &value) {
         const auto current = regString(kUninstall, L"DisplayVersion");
@@ -887,6 +1045,8 @@ class NativeMachine : public Machine {
         }
     }
     fs::path root_;
+    const Manifest *incomingTarget_ = nullptr;
+    bool skipNextTreeInspect_ = false;
 };
 } // namespace
 
@@ -924,6 +1084,23 @@ DWORD runUpgrade(const fs::path &root, std::wstring_view command,
                         MB_OK | MB_ICONINFORMATION);
         return ERROR_SUCCESS;
     }
+    std::optional<Manifest> incomingManifest;
+    if (command == L"begin-stage" && !source.empty()) {
+        loggedPhase("incoming manifest load", [&] {
+            std::string detail;
+            try {
+                incomingManifest = manifestExternal(source, &detail);
+            } catch (const std::system_error &error) {
+                if (!detail.empty())
+                    logStep("upgrade phase=incoming manifest load detail=" +
+                                detail,
+                            DWORD(error.code().value()));
+                throw;
+            }
+        });
+        static_cast<NativeMachine &>(*machine).setIncomingTarget(
+            &*incomingManifest);
+    }
     loggedPhase("machine validation", [&] {
         if (command == L"suspend-upgrade" || command == L"resume-upgrade")
             machine->validateSuspension();
@@ -945,10 +1122,14 @@ DWORD runUpgrade(const fs::path &root, std::wstring_view command,
         return engine.resume();
     if (command == L"begin-stage") {
         auto &native = static_cast<NativeMachine &>(*machine);
-        loggedPhase("target package validation",
-                    [&] { native.checkTarget(manifest(source)); });
+        loggedPhase("target package validation", [&] {
+            if (!incomingManifest)
+                incomingManifest = manifestExternal(source);
+            native.checkTarget(*incomingManifest);
+        });
         DWORD result = ERROR_GEN_FAILURE;
         loggedPhase("create upgrade transaction", [&] {
+            native.skipNextTreeInspection();
             result = engine.begin(source, [&] {
                 // The old observer must be stopped before its executable is
                 // replaced by the current package's maintenance host.

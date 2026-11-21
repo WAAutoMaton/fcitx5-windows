@@ -117,9 +117,9 @@ UTF-8 JSON（`schemaVersion = 1`），记录包标识、四段版本、`architec
 
 ### 5.3 安全约束
 
-- 安装根、维护入口、暂存、备份、JSON 与计划任务仅允许 SYSTEM、Administrators 或 TrustedInstaller 写入；普通用户仅可读取状态。
-- 提交前重新校验 ACL、安装归属、文件摘要与路径。
-- 限定本地 NTFS、同卷暂存与提交；拒绝 UNC、可移动介质、reparse point、路径逃逸（`..`）、ADS、设备名、大小写碰撞和硬链接越界；通过已验证句柄执行文件操作。
+- 安装根、维护入口、暂存、备份、JSON、`tsf/`、全部目录、受管运行文件与计划任务仅允许 SYSTEM、Administrators、TrustedInstaller、域/企业管理员组或无低权限拆分进程的非拆分管理员写入，且所有者必须属于上述受信任主体；只读对象/条件 ACE 与指向受信任所有者的 `OWNER RIGHTS` 放行，普通用户与 UAC 拆分个人 SID 写入权限严格拒绝。不在运行清单且位于 `setup/`、`tsf/` 之外的非受管数据文件不阻断升级。
+- 提交前重新校验 ACL、安装归属、文件摘要与路径；校验失败时在 `installer-helper.log` 记录脱敏细因与安装根相对路径。
+- 限定本地 NTFS、同卷暂存与提交；拒绝 UNC、可移动介质、符号链接/挂载点及未知重解析点（仅放行已知非重定向的系统压缩标签 `IO_REPARSE_TAG_WOF`）、路径逃逸（`..`）、ADS、设备名、大小写碰撞和硬链接越界；外部 `{tmp}` 清单与临时维护程序通过句柄与叶子目录安全校验，不因用户 `%TEMP%` 祖先目录的管理员 junction 误拒。通过已验证句柄执行文件操作与维护程序复制，并以 `SetNamedSecurityInfoW` / `SetSecurityInfo` 归一化控制目录与维护程序安全描述符。
 - 计划不含任意 shell 命令；SYSTEM 阶段不执行 PowerShell、不访问用户配置、不启动 Core/Settings。
 - 校验磁盘剩余空间（预留旧版备份与发布临时空间）、文件数及大小上限；安装、升级、恢复与卸载统一通过 `InstallationLock` 协调。
 

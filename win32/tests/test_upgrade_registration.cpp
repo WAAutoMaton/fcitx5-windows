@@ -149,7 +149,33 @@ int main() {
     }
     strings[{uninstallKey, L"DisplayVersion"}] = L"old";
     reject(dual);
+
+    // Tiered installation-tree security scope: directories, reparse points,
+    // setup/**, tsf/**, managed manifest files, and unknown-manifest fallback
+    // require strict validation; unmanaged regular data files outside setup/
+    // and tsf/ are skipped.
+    std::set<std::wstring, upgrade::InsensitivePathLess> managed{
+        L"bin/Fcitx5.exe", L"share/fcitx5/data.conf"};
+    assert(upgrade::requiresStrictTreeSecurity(
+        L"plugins/custom", FILE_ATTRIBUTE_DIRECTORY, true, managed));
+    assert(upgrade::requiresStrictTreeSecurity(L"plugins/custom/link.yaml",
+                                               FILE_ATTRIBUTE_REPARSE_POINT,
+                                               true, managed));
+    assert(upgrade::requiresStrictTreeSecurity(
+        L"setup/extra.txt", FILE_ATTRIBUTE_ARCHIVE, true, managed));
+    assert(upgrade::requiresStrictTreeSecurity(
+        L"tsf/extra.dll", FILE_ATTRIBUTE_ARCHIVE, true, managed));
+    assert(upgrade::requiresStrictTreeSecurity(
+        L"bin/fcitx5.exe", FILE_ATTRIBUTE_ARCHIVE, true, managed));
+    assert(!upgrade::requiresStrictTreeSecurity(
+        L"plugins/fcitx5-rime/share/rime-data/custom.yaml",
+        FILE_ATTRIBUTE_ARCHIVE, true, managed));
+    assert(!upgrade::requiresStrictTreeSecurity(
+        L"share/fcitx5/user-note.txt", FILE_ATTRIBUTE_ARCHIVE, true, managed));
+    assert(upgrade::requiresStrictTreeSecurity(
+        L"share/fcitx5/user-note.txt", FILE_ATTRIBUTE_ARCHIVE, false, {}));
+
     std::cout
-        << "PASS: upgrade verifies both COM views and shared TSF metadata "
-           "without system registration\n";
+        << "PASS: upgrade verifies both COM views, shared TSF metadata and "
+           "tiered tree security scope without system registration\n";
 }

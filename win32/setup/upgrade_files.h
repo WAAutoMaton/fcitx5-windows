@@ -12,8 +12,24 @@ namespace fcitx::setup::upgrade {
 namespace fs = std::filesystem;
 
 namespace detail {
+struct PrincipalPolicy {
+    bool allowUnfilteredBuiltinAdmin = false;
+    bool uacDisabled = false;
+    PSID builtinAdminSid = nullptr;
+    PSID domainAdminsSid = nullptr;
+    PSID enterpriseAdminsSid = nullptr;
+    PSID currentAdminUserSid = nullptr;
+};
+
 bool trustedWritePrincipal(PSID sid);
-}
+bool trustedWritePrincipal(PSID sid, const PrincipalPolicy &policy);
+bool trustedOwnerPrincipal(PSID sid, const PrincipalPolicy &policy);
+bool allowedReparseTag(DWORD tag);
+bool validateSecurityDescriptor(PSECURITY_DESCRIPTOR descriptor,
+                                const PrincipalPolicy &policy,
+                                std::string *detail = nullptr);
+std::string sidCategory(PSID sid, const PrincipalPolicy &policy);
+} // namespace detail
 
 class Handle {
   public:
@@ -37,13 +53,20 @@ std::string utf8(std::wstring_view value);
 std::wstring wide(std::string_view value);
 fs::path relativePath(std::string_view value);
 bool runtimePath(const fs::path &path);
-void validatePath(const fs::path &path, bool allowMissing = false);
-void validateSecurity(const fs::path &path);
+void validatePath(const fs::path &path, bool allowMissing = false,
+                  std::string *detail = nullptr);
+void validateSecurity(const fs::path &path, std::string *detail = nullptr);
 void protectDirectory(const fs::path &path);
+void protectFile(HANDLE file);
 std::string sha256(const fs::path &path);
 std::string sha256(HANDLE file);
 void copyContents(HANDLE source, HANDLE destination);
 std::string readText(const fs::path &path, size_t limit = 16 * 1024 * 1024);
+std::string readExternalText(const fs::path &path,
+                             size_t limit = 16 * 1024 * 1024,
+                             std::string *detail = nullptr);
+Handle openVerifiedExternalFile(const fs::path &path, bool requireSecureParent,
+                                std::string *detail = nullptr);
 void writeText(const fs::path &path, std::string_view value);
 
 // Retains write access and denies new opens until every file has been updated.
