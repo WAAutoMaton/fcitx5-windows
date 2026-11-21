@@ -1,8 +1,8 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index d546c8f..b11bcef 100644
+index d546c8f..5a47e8c 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -8,20 +8,30 @@ option(BUILD_MOZC_ADDON "Build Mozc Fcitx5 Addon" ON)
+@@ -8,20 +8,46 @@ option(BUILD_MOZC_ADDON "Build Mozc Fcitx5 Addon" ON)
  
  include(GNUInstallDirs)
  set(CMAKE_CXX_STANDARD 20)
@@ -16,19 +16,37 @@ index d546c8f..b11bcef 100644
  set(MOZC_SRC_DIR "${PROJECT_SOURCE_DIR}/mozc/src")
  
  if (NOT DEFINED MOZC_TARGET)
+-    add_subdirectory(abseil-cpp)
 +    set(ABSL_PROPAGATE_CXX_STD ON)
-     add_subdirectory(abseil-cpp)
++    set(_mozc_saved_c_flags "${CMAKE_C_FLAGS}")
++    set(_mozc_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
++    set(_mozc_subdir_system)
++    if (WIN32)
++        if (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
++            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
++        endif()
++        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
++            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
++        endif()
++        if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.25)
++            set(_mozc_subdir_system SYSTEM)
++        endif()
++    endif()
++    add_subdirectory(abseil-cpp ${_mozc_subdir_system})
      # Not installing as we'll regenerate libabsl.a
  
      set(protobuf_INSTALL OFF)
      set(protobuf_BUILD_TESTS OFF)
      set(protobuf_BUILD_LIBUPB OFF) # No binary for iOS.
+-    add_subdirectory("protobuf")
+-    install(TARGETS utf8_validity DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+-    install(TARGETS libprotobuf DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 +    if (WIN32)
 +        set(protobuf_WITH_ZLIB OFF)
 +    endif()
-     add_subdirectory("protobuf")
--    install(TARGETS utf8_validity DESTINATION "${CMAKE_INSTALL_LIBDIR}")
--    install(TARGETS libprotobuf DESTINATION "${CMAKE_INSTALL_LIBDIR}")
++    add_subdirectory("protobuf" ${_mozc_subdir_system})
++    set(CMAKE_C_FLAGS "${_mozc_saved_c_flags}")
++    set(CMAKE_CXX_FLAGS "${_mozc_saved_cxx_flags}")
 +    if (NOT WIN32)
 +        install(TARGETS utf8_validity DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 +        install(TARGETS libprotobuf DESTINATION "${CMAKE_INSTALL_LIBDIR}")
@@ -126,10 +144,10 @@ index c1184bf..a2421e1 100644
      COMMENT "Generating pos_cost_map.inc"
  )
 diff --git a/cmake/mozc-static.cmake b/cmake/mozc-static.cmake
-index ed79ece..87ca697 100644
+index ed79ece..fdc48de 100644
 --- a/cmake/mozc-static.cmake
 +++ b/cmake/mozc-static.cmake
-@@ -22,6 +22,24 @@ target_include_directories(mozc-static PRIVATE
+@@ -22,6 +22,27 @@ target_include_directories(mozc-static PRIVATE
      "${PROJECT_BINARY_DIR}"
  )
  
@@ -142,6 +160,9 @@ index ed79ece..87ca697 100644
 +        UNICODE
 +        _UNICODE
 +    )
++    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
++        target_compile_options(mozc-static PRIVATE -w)
++    endif()
 +    target_link_libraries(mozc-static PUBLIC
 +        advapi32
 +        bcrypt
@@ -154,7 +175,7 @@ index ed79ece..87ca697 100644
  # Mozc requires char to be unsigned, as it's used as array index.
  target_compile_options(mozc-static PRIVATE -funsigned-char)
  
-@@ -36,4 +54,6 @@ target_compile_definitions(mozc-static PUBLIC
+@@ -36,4 +57,6 @@ target_compile_definitions(mozc-static PUBLIC
  
  add_dependencies(mozc-static gen)
  
@@ -193,10 +214,19 @@ index 38370c4..1e5d151 100644
 +}
  } // namespace mozc
 diff --git a/src/unix/fcitx5/CMakeLists.txt b/src/unix/fcitx5/CMakeLists.txt
-index de446b4..dc878cf 100644
+index de446b4..055ca13 100644
 --- a/src/unix/fcitx5/CMakeLists.txt
 +++ b/src/unix/fcitx5/CMakeLists.txt
-@@ -30,6 +30,15 @@ elseif (APPLE AND NOT IOS)
+@@ -14,6 +14,8 @@ add_fcitx5_addon(mozc ${FCITX5_MOZC_SRCS})
+ 
+ target_include_directories(mozc PRIVATE
+     "${PROJECT_SOURCE_DIR}/src"
++)
++target_include_directories(mozc SYSTEM PRIVATE
+     "${MOZC_SRC_DIR}"
+     "${PROJECT_BINARY_DIR}"
+     "${PROJECT_SOURCE_DIR}/protobuf/src"
+@@ -30,6 +32,15 @@ elseif (APPLE AND NOT IOS)
          "/Library/Input Methods/Fcitx5.app/Contents/include"
          "/Library/Input Methods/Fcitx5.app/Contents/include/Fcitx5/Module"
      )
@@ -212,7 +242,7 @@ index de446b4..dc878cf 100644
  endif()
  
  target_link_libraries(mozc
-@@ -37,7 +46,14 @@ target_link_libraries(mozc
+@@ -37,7 +48,14 @@ target_link_libraries(mozc
      ${MOZC_TARGET}
  )
  
