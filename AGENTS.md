@@ -37,7 +37,7 @@
 
 - Core 主线程拥有核心状态，Pipe 服务线程通过 `EventDispatcher` 投递请求。TSF 文档编辑必须在正确的 edit session 中执行，校验原始 context、代次和快照，拒绝迟到请求写入新焦点。
 - 按键测试回调只观察状态，不执行 IPC 或编辑；按键是否消费以 Core 回复为准。IPC 使用用户/session 范围 Named Pipe、ACL 与可取消 overlapped I/O，超时请求不重放，跨进程故障不提供 exactly-once 保证。
-- 当前 IPC 为 **v15**，覆盖输入法目录（含 `language` 元数据）、有序列表、引擎配置、全局语言/日志/快捷键/候选框布局、只读插件查询、候选动作及 context 状态菜单查询/动作。
+- 当前 IPC 为 **v16**，覆盖输入法目录（含 `language` 元数据）、有序列表、引擎配置、全局语言/日志/快捷键/候选框布局、只读插件查询、候选动作及 context 状态菜单查询/动作。
 - 桌面与 Sandboxie Pipe 名保留历史 `v2` 前缀；AppContainer 使用专用 `-input` 入口，服务端校验实际 token 并限制消息白名单与资源额度，拒绝状态菜单查询/动作和配置写入。
 - Sandboxie 和 AppContainer 均不启动本地 Core/Settings；Core 与 Settings 拒绝在受限或未知环境启动。Sandboxie 安全模式的匿名 token 兼容仅限已有用户 DACL 保护的管理入口。
 - 桌面管理入口支持同用户/session 的 UAC linked-token 登录匹配，`sameLogin()` 保持严格。提权或 elevation 查询失败的桌面 TSF 将服务操作路由给已运行的宿主 Core，连接失败不回退到本地提权启动。

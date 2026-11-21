@@ -221,7 +221,7 @@ try {
     $languageCombo = Find-Id 'UiLanguage'
     $expandChoices = $languageCombo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
     $expandChoices.Expand(); Start-Sleep -Milliseconds 150
-    foreach ($choice in @('Follow System Language', (Text @(0x7b80,0x4f53,0x4e2d,0x6587)), (Text @(0x7e41,0x9ad4,0x4e2d,0x6587)), 'English')) {
+    foreach ($choice in @('Follow System Language', (Text @(0x7b80,0x4f53,0x4e2d,0x6587)), (Text @(0x7e41,0x9ad4,0x4e2d,0x6587)), 'English', (Text @(0x65e5,0x672c,0x8a9e)))) {
         if (!(Find-Name $choice)) { throw "Missing language choice: $choice" }
     }
     $expandChoices.Collapse()
@@ -265,13 +265,20 @@ try {
     if (!(Find-Name (Text @(0x5168,0x57df,0x8a2d,0x5b9a)))) { throw 'Traditional translation missing.' }
     Capture 'global-traditional'
     Capture 'global-traditional-minimum' 720 480
-    Choose-Language 'English'
+    Choose-Language (Text @(0x65e5,0x672c,0x8a9e))
     Invoke (Find-Name (Text @(0x5957,0x7528))); Wait-Ready
     Close-Settings (Text @(0x95dc,0x9589)); Stop-Fixture
+    Start-Fixture; Open-Settings (Text @(0x5165,0x529b,0x30e1,0x30bd,0x30c3,0x30c9,0x306e,0x8a2d,0x5b9a)); Global
+    if (!(Find-Name (Text @(0x30b0,0x30ed,0x30fc,0x30d0,0x30eb,0x8a2d,0x5b9a)))) { throw 'Japanese translation missing.' }
+    Capture 'global-japanese'
+    Capture 'global-japanese-minimum' 720 480
+    Choose-Language 'English'
+    Invoke (Find-Name (Text @(0x9069,0x7528))); Wait-Ready
+    Close-Settings (Text @(0x9589,0x3058,0x308b)); Stop-Fixture
     Start-Fixture; Open-Settings 'Input Method Settings'; Global
     Capture 'global-english-restored'
     Close-Settings 'Close'
-    Write-Output "PASS: actual WinUI with isolated simulated Core; navigation placement, save/deferred language, draft cancel/discard, reset, simplified/traditional/English startup. Screenshots: $LogDirectory"
+    Write-Output "PASS: actual WinUI with isolated simulated Core; navigation placement, save/deferred language, draft cancel/discard, reset, simplified/traditional/Japanese/English startup. Screenshots: $LogDirectory"
 } finally {
     if ($settings -and !$settings.HasExited) { Stop-Process -Id $settings.Id; $settings.WaitForExit() }
     Stop-Fixture

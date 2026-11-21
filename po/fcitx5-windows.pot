@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: fcitx5-windows\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-29 20:14+0800\n"
+"POT-Creation-Date: 2026-11-21 21:01+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,592 +17,719 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: win32/settings/SettingsWindow.cpp:83 win32/settings/SettingsWindow.cpp:96
+#: win32/settings/SettingsWindow.cpp:84 win32/settings/SettingsWindow.cpp:97
 msgctxt "settings"
 msgid "Loaded"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:85
+#: win32/settings/SettingsWindow.cpp:86
 msgctxt "settings"
 msgid "Failed to load"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:87 win32/settings/SettingsWindow.cpp:98
+#: win32/settings/SettingsWindow.cpp:88 win32/settings/SettingsWindow.cpp:99
 msgctxt "settings"
 msgid "Disabled"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:89
+#: win32/settings/SettingsWindow.cpp:90
 msgctxt "settings"
 msgid "Loading"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:100
+#: win32/settings/SettingsWindow.cpp:101
 msgctxt "settings"
 msgid "Not loaded"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:105
+#: win32/settings/SettingsWindow.cpp:106
 msgctxt "settings"
 msgid "Ziranma"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:106
+#: win32/settings/SettingsWindow.cpp:107
 msgctxt "settings"
 msgid "Microsoft"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:107
+#: win32/settings/SettingsWindow.cpp:108
 msgctxt "settings"
 msgid "Ziguang"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:108
+#: win32/settings/SettingsWindow.cpp:109
 msgctxt "settings"
 msgid "Smart ABC"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:109
+#: win32/settings/SettingsWindow.cpp:110
 msgctxt "settings"
 msgid "Chinese Star"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:110
+#: win32/settings/SettingsWindow.cpp:111
 msgctxt "settings"
 msgid "Pinyin Jiajia"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:111
+#: win32/settings/SettingsWindow.cpp:112
 msgctxt "settings"
 msgid "Xiaohe"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:112
+#: win32/settings/SettingsWindow.cpp:113
 msgctxt "settings"
 msgid "GB Standard"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:113
+#: win32/settings/SettingsWindow.cpp:114
 msgctxt "settings"
 msgid "Existing custom profile"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:119
+#: win32/settings/SettingsWindow.cpp:120
 msgctxt "settings"
 msgid "Settings have changed. Reload before editing."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:122
+#: win32/settings/SettingsWindow.cpp:123
 msgctxt "settings"
 msgid "Keep at least one available input method. Add another before removing this one."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:126
+#: win32/settings/SettingsWindow.cpp:127
 msgctxt "settings"
 msgid "Cannot save settings. Check write permissions for the user configuration directory."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:130
+#: win32/settings/SettingsWindow.cpp:131
 msgctxt "settings"
 msgid "The input engine or input method is unavailable."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:133
+#: win32/settings/SettingsWindow.cpp:134
 msgctxt "settings"
 msgid "Cannot apply settings. Please retry."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:260
+#: win32/settings/SettingsWindow.cpp:261
 msgctxt "settings"
 msgid "Settings are being updated by another session. Please retry."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:266 win32/settings/SettingsWindow.cpp:619
+#: win32/settings/SettingsWindow.cpp:267 win32/settings/SettingsWindow.cpp:631
 msgctxt "settings"
 msgid "Input Method Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:269
+#: win32/settings/SettingsWindow.cpp:270
 msgctxt "settings"
 msgid "Input Methods"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:272 win32/settings/SettingsWindow.cpp:331
-msgctxt "settings"
-msgid "Add Input Method"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:275 win32/settings/SettingsWindow.cpp:320
-#: win32/settings/SettingsWindow.cpp:364
+#: win32/settings/SettingsWindow.cpp:273 win32/settings/SettingsWindow.cpp:323
+#: win32/settings/SettingsWindow.cpp:371
 msgctxt "settings"
 msgid "Global Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:278 win32/settings/SettingsWindow.cpp:318
+#: win32/settings/SettingsWindow.cpp:276 win32/settings/SettingsWindow.cpp:319
 msgctxt "settings"
 msgid "Language"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:281
+#: win32/settings/SettingsWindow.cpp:279 win32/settings/SettingsWindow.cpp:321
+msgctxt "settings"
+msgid "Candidate layout"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:282
 msgctxt "settings"
 msgid "Shortcuts"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:284 win32/settings/SettingsWindow.cpp:1174
+#: win32/settings/SettingsWindow.cpp:285 win32/settings/SettingsWindow.cpp:1349
 msgctxt "settings"
 msgid "General"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:287
+#: win32/settings/SettingsWindow.cpp:288
 msgctxt "settings"
 msgid "Plugins"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:290 win32/settings/SettingsWindow.cpp:292
+#: win32/settings/SettingsWindow.cpp:291 win32/settings/SettingsWindow.cpp:293
 msgctxt "settings"
 msgid "Open Personal Plugin Folder"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:295
+#: win32/settings/SettingsWindow.cpp:296
 msgctxt "settings"
 msgid "Developer options"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:298 win32/settings/SettingsWindow.cpp:312
+#: win32/settings/SettingsWindow.cpp:299 win32/settings/SettingsWindow.cpp:313
 msgctxt "settings"
 msgid "Enable detailed logging"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:302
+#: win32/settings/SettingsWindow.cpp:303
 msgctxt "settings"
 msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:307
+#: win32/settings/SettingsWindow.cpp:308
 msgctxt "settings"
 msgid "Log folder"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:310 win32/settings/SettingsWindow.cpp:316
+#: win32/settings/SettingsWindow.cpp:311 win32/settings/SettingsWindow.cpp:317
 msgctxt "settings"
 msgid "Open log folder"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:313
+#: win32/settings/SettingsWindow.cpp:314
 msgctxt "settings"
 msgid "On"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:314 win32/settings/SettingsWindow.cpp:1859
+#: win32/settings/SettingsWindow.cpp:315 win32/settings/SettingsWindow.cpp:2037
 msgctxt "settings"
 msgid "Off"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:322
-msgctxt "settings"
-msgid "Add"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:323
+#: win32/settings/SettingsWindow.cpp:325
 msgctxt "settings"
 msgid "Reset to Defaults"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:324
+#: win32/settings/SettingsWindow.cpp:326
 msgctxt "settings"
 msgid "Reload"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:325
+#: win32/settings/SettingsWindow.cpp:327
 msgctxt "settings"
 msgid "Close"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:326
+#: win32/settings/SettingsWindow.cpp:328
 msgctxt "settings"
 msgid "Apply"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:332
+#: win32/settings/SettingsWindow.cpp:333 win32/settings/SettingsWindow.cpp:1118
+#: win32/settings/SettingsWindow.cpp:1139
 msgctxt "settings"
-msgid "Remove"
-msgstr ""
-
-#: win32/settings/SettingsWindow.cpp:333
-msgctxt "settings"
-msgid "Move Up"
+msgid "Add Input Method"
 msgstr ""
 
 #: win32/settings/SettingsWindow.cpp:334
 msgctxt "settings"
+msgid "Remove"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:335
+msgctxt "settings"
+msgid "Move Up"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:336
+msgctxt "settings"
 msgid "Move Down"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:340
+#: win32/settings/SettingsWindow.cpp:342
 msgctxt "settings"
 msgid "Dictionaries"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:346
+#: win32/settings/SettingsWindow.cpp:348
 msgctxt "settings"
 msgid "Open Third-party Dictionary Folder"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:349
+#: win32/settings/SettingsWindow.cpp:351
 msgctxt "settings"
 msgid "Follow System Language"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:375 win32/settings/SettingsWindow.cpp:1820
-#: win32/settings/SettingsWindow.cpp:1861
+#: win32/settings/SettingsWindow.cpp:357
+msgctxt "settings"
+msgid "Vertical"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:358
+msgctxt "settings"
+msgid "Horizontal"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:384 win32/settings/SettingsWindow.cpp:1998
+#: win32/settings/SettingsWindow.cpp:2039
 msgctxt "settings"
 msgid "Starting"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:401
+#: win32/settings/SettingsWindow.cpp:412
 msgctxt "settings"
 msgid "Quick switches follow the input method order. Missing or unavailable entries are ignored. Empty shortcuts disable the action."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:407
+#: win32/settings/SettingsWindow.cpp:418
 msgctxt "settings"
 msgid "Switch input method"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:409
+#: win32/settings/SettingsWindow.cpp:420
 #, c++-format
 msgctxt "settings"
 msgid "Quick switch to input method {0}"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:456 win32/settings/SettingsWindow.cpp:458
+#: win32/settings/SettingsWindow.cpp:467 win32/settings/SettingsWindow.cpp:469
 msgctxt "settings"
 msgid "Record shortcut"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:487 win32/settings/SettingsWindow.cpp:536
-#: win32/settings/SettingsWindow.cpp:1409
-#: win32/settings/SettingsWindow.cpp:1473
-#: win32/settings/SettingsWindow.cpp:1599
-#: win32/settings/SettingsWindow.cpp:1633
-#: win32/settings/SettingsWindow.cpp:1728
+#: win32/settings/SettingsWindow.cpp:498 win32/settings/SettingsWindow.cpp:548
+#: win32/settings/SettingsWindow.cpp:1584
+#: win32/settings/SettingsWindow.cpp:1648
+#: win32/settings/SettingsWindow.cpp:1777
+#: win32/settings/SettingsWindow.cpp:1811
+#: win32/settings/SettingsWindow.cpp:1906
 msgctxt "settings"
 msgid "Cannot connect to Core."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:506
+#: win32/settings/SettingsWindow.cpp:517
 msgctxt "settings"
 msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:552
+#: win32/settings/SettingsWindow.cpp:564
 msgctxt "settings"
 msgid "Language saved. Restart services to apply it to Settings."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:572
+#: win32/settings/SettingsWindow.cpp:584
 msgctxt "settings"
 msgid "Save changes?"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:573
+#: win32/settings/SettingsWindow.cpp:585
 msgctxt "settings"
 msgid "Save"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:574
+#: win32/settings/SettingsWindow.cpp:586
 msgctxt "settings"
 msgid "Discard"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:575 win32/settings/SettingsWindow.cpp:1281
+#: win32/settings/SettingsWindow.cpp:587 win32/settings/SettingsWindow.cpp:1141
+#: win32/settings/SettingsWindow.cpp:1456
 msgctxt "settings"
 msgid "Cancel"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:917
+#: win32/settings/SettingsWindow.cpp:931
 msgctxt "settings"
 msgid "Loading..."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:943
+#: win32/settings/SettingsWindow.cpp:957
 msgctxt "settings"
 msgid "Cannot connect to Core. Check that it is running and retry."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1100
+#: win32/settings/SettingsWindow.cpp:1140
+msgctxt "settings"
+msgid "Add"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1194
+msgctxt "settings"
+msgid "Arabic"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1195
+msgctxt "settings"
+msgid "German"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1196
+msgctxt "settings"
+msgid "Greek"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1197
+msgctxt "settings"
+msgid "English"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1198
+msgctxt "settings"
+msgid "Spanish"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1199
+msgctxt "settings"
+msgid "French"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1200
+msgctxt "settings"
+msgid "Hebrew"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1201
+msgctxt "settings"
+msgid "Italian"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1202
+msgctxt "settings"
+msgid "Japanese"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1203
+msgctxt "settings"
+msgid "Korean"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1204
+msgctxt "settings"
+msgid "Portuguese"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1205
+msgctxt "settings"
+msgid "Russian"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1206
+msgctxt "settings"
+msgid "Thai"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1207
+msgctxt "settings"
+msgid "Turkish"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1208
+msgctxt "settings"
+msgid "Ukrainian"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1209
+msgctxt "settings"
+msgid "Vietnamese"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1210
+msgctxt "settings"
+msgid "Wu Chinese"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1211
+msgctxt "settings"
+msgid "Chinese"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1212
+msgctxt "settings"
+msgid "Chinese (Simplified)"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1213
+msgctxt "settings"
+msgid "Chinese (Hong Kong)"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1214
+msgctxt "settings"
+msgid "Chinese (Traditional)"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1215
+msgctxt "settings"
+msgid "Other"
+msgstr ""
+
+#: win32/settings/SettingsWindow.cpp:1275
 msgctxt "settings"
 msgid "Pinyin Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1101
+#: win32/settings/SettingsWindow.cpp:1276
 msgctxt "settings"
 msgid "Table Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1102
+#: win32/settings/SettingsWindow.cpp:1277
 msgctxt "settings"
 msgid "Keyboard Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1103
+#: win32/settings/SettingsWindow.cpp:1278
 msgctxt "settings"
 msgid "Settings"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1113
+#: win32/settings/SettingsWindow.cpp:1288
 msgctxt "settings"
 msgid "Keyboard layout: Windows"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1114
+#: win32/settings/SettingsWindow.cpp:1289
 msgctxt "settings"
 msgid "No settings available"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1120
+#: win32/settings/SettingsWindow.cpp:1295
 msgctxt "settings"
 msgid "Shuangpin Profile"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1121
+#: win32/settings/SettingsWindow.cpp:1296
 msgctxt "settings"
 msgid "Candidates Per Page"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1122
+#: win32/settings/SettingsWindow.cpp:1297
 msgctxt "settings"
 msgid "English Candidates"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1123
+#: win32/settings/SettingsWindow.cpp:1298
 msgctxt "settings"
 msgid "Symbol Candidates"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1124
+#: win32/settings/SettingsWindow.cpp:1299
 msgctxt "settings"
 msgid "Character Decomposition Candidates"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1125
+#: win32/settings/SettingsWindow.cpp:1300
 msgctxt "settings"
 msgid "Extended Chinese Characters"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1126
+#: win32/settings/SettingsWindow.cpp:1301
 msgctxt "settings"
 msgid "Stroke Candidates"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1127
+#: win32/settings/SettingsWindow.cpp:1302
 msgctxt "settings"
 msgid "Prediction"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1128
+#: win32/settings/SettingsWindow.cpp:1303
 msgctxt "settings"
 msgid "Preedit Mode"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1130
+#: win32/settings/SettingsWindow.cpp:1305
 msgctxt "settings"
 msgid "Keep Preedit Cursor at Beginning"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1131
+#: win32/settings/SettingsWindow.cpp:1306
 msgctxt "settings"
 msgid "Show Full Pinyin in Preedit"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1132
+#: win32/settings/SettingsWindow.cpp:1307
 msgctxt "settings"
 msgid "Show Shuangpin Mode"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1133
+#: win32/settings/SettingsWindow.cpp:1308
 msgctxt "settings"
 msgid "Common Mistakes"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1134
+#: win32/settings/SettingsWindow.cpp:1309
 msgctxt "settings"
 msgid "Match Letters in Lowercase"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1135
+#: win32/settings/SettingsWindow.cpp:1310
 msgctxt "settings"
 msgid "Inner Fuzzy Syllables (xian -> xi'an)"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1138
+#: win32/settings/SettingsWindow.cpp:1313
 msgctxt "settings"
 msgid "Inner Fuzzy Syllables for Short Pinyin (qie -> qi'e)"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1140
+#: win32/settings/SettingsWindow.cpp:1315
 msgctxt "settings"
 msgid "Match Incomplete Finals (e -> en, eng, ei)"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1142
+#: win32/settings/SettingsWindow.cpp:1317
 msgctxt "settings"
 msgid "Partial Shuangpin Matching for Input Longer Than 4"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1143
+#: win32/settings/SettingsWindow.cpp:1318
 msgctxt "settings"
 msgid "Automatically Select Candidates"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1145
+#: win32/settings/SettingsWindow.cpp:1320
 msgctxt "settings"
 msgid "Unique Candidate Auto-selection Length"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1146
+#: win32/settings/SettingsWindow.cpp:1321
 msgctxt "settings"
 msgid "Commit After Auto-selection"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1147
+#: win32/settings/SettingsWindow.cpp:1322
 msgctxt "settings"
 msgid "Commit When Deactivated"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1148
+#: win32/settings/SettingsWindow.cpp:1323
 msgctxt "settings"
 msgid "Use Full Width"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1149
+#: win32/settings/SettingsWindow.cpp:1324
 msgctxt "settings"
 msgid "Show Code Hints"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1150
+#: win32/settings/SettingsWindow.cpp:1325
 msgctxt "settings"
 msgid "Learn Word Frequency"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1151
+#: win32/settings/SettingsWindow.cpp:1326
 msgctxt "settings"
 msgid "Order by Context"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1152
+#: win32/settings/SettingsWindow.cpp:1327
 msgctxt "settings"
 msgid "Use System Language Model"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1153
+#: win32/settings/SettingsWindow.cpp:1328
 msgctxt "settings"
 msgid "Ordering Policy"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1154
+#: win32/settings/SettingsWindow.cpp:1329
 msgctxt "settings"
 msgid "Previous Page"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1155
+#: win32/settings/SettingsWindow.cpp:1330
 msgctxt "settings"
 msgid "Next Page"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1156
+#: win32/settings/SettingsWindow.cpp:1331
 msgctxt "settings"
 msgid "Previous Candidate"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1157
+#: win32/settings/SettingsWindow.cpp:1332
 msgctxt "settings"
 msgid "Next Candidate"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1158
-#: win32/settings/SettingsWindow.cpp:1161
+#: win32/settings/SettingsWindow.cpp:1333
+#: win32/settings/SettingsWindow.cpp:1336
 msgctxt "settings"
 msgid "Select Current Candidate"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1160
+#: win32/settings/SettingsWindow.cpp:1335
 msgctxt "settings"
 msgid "Choose Last Character from Phrase"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1173
+#: win32/settings/SettingsWindow.cpp:1348
 msgctxt "settings"
 msgid "Fuzzy Pinyin"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1280
+#: win32/settings/SettingsWindow.cpp:1455
 msgctxt "settings"
 msgid "Use shortcut"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1286
+#: win32/settings/SettingsWindow.cpp:1461
 msgctxt "settings"
 msgid "Recording..."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1288
+#: win32/settings/SettingsWindow.cpp:1463
 msgctxt "settings"
 msgid "Recorded shortcut"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1302
-#: win32/settings/SettingsWindow.cpp:1352
+#: win32/settings/SettingsWindow.cpp:1477
+#: win32/settings/SettingsWindow.cpp:1527
 msgctxt "settings"
 msgid "Cannot record shortcut."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1432
+#: win32/settings/SettingsWindow.cpp:1607
 msgctxt "settings"
 msgid "Check the setting values."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1640
+#: win32/settings/SettingsWindow.cpp:1818
 msgctxt "settings"
 msgid "Pinyin dictionaries are unavailable."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1642
+#: win32/settings/SettingsWindow.cpp:1820
 msgctxt "settings"
 msgid "Cannot read the dictionary directory."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1644
+#: win32/settings/SettingsWindow.cpp:1822
 msgctxt "settings"
 msgid "No third-party dictionaries"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1697
+#: win32/settings/SettingsWindow.cpp:1875
 msgctxt "settings"
 msgid "Cannot open the dictionary folder."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1733
+#: win32/settings/SettingsWindow.cpp:1911
 msgctxt "settings"
 msgid "No plugins"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1798
+#: win32/settings/SettingsWindow.cpp:1976
 msgctxt "settings"
 msgid "Cannot open the plugin folder."
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1857
+#: win32/settings/SettingsWindow.cpp:2035
 msgctxt "settings"
 msgid "Unavailable"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1862
+#: win32/settings/SettingsWindow.cpp:2040
 msgctxt "settings"
 msgid "Recording"
 msgstr ""
 
-#: win32/settings/SettingsWindow.cpp:1867
+#: win32/settings/SettingsWindow.cpp:2045
 #, c++-format
 msgctxt "settings"
 msgid "{0} log files, {1} bytes"
@@ -646,6 +773,16 @@ msgstr ""
 #: win32/tsf/langbaritem.cpp:34
 msgctxt "menu"
 msgid "About"
+msgstr ""
+
+#: win32/tsf/langbaritem.cpp:321 win32/tsf/langbaritem.cpp:376
+msgctxt "menu"
+msgid "Unable to read input method menu"
+msgstr ""
+
+#: win32/tsf/langbaritem.cpp:323 win32/tsf/langbaritem.cpp:378
+msgctxt "menu"
+msgid "Reading input method menu..."
 msgstr ""
 
 #: win32/tsf/aboutwindow.cpp:54
@@ -729,127 +866,27 @@ msgctxt "settings"
 msgid "Windows error: {0}"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:154
+#: src/windowsinputmethods.cpp:153
 msgctxt "input-method"
 msgid "English Keyboard"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:157
+#: src/windowsinputmethods.cpp:156
 msgctxt "input-method"
 msgid "Pinyin"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:161
+#: src/windowsinputmethods.cpp:160
 msgctxt "input-method"
 msgid "Shuangpin"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:165
+#: src/windowsinputmethods.cpp:164
 msgctxt "input-method"
 msgid "Wubi"
 msgstr ""
 
-#: src/windowsinputmethods.cpp:168
+#: src/windowsinputmethods.cpp:167
 msgctxt "input-method"
 msgid "Wubi Pinyin"
-msgstr ""
-
-msgctxt "settings"
-msgid "Arabic"
-msgstr ""
-
-msgctxt "settings"
-msgid "German"
-msgstr ""
-
-msgctxt "settings"
-msgid "Greek"
-msgstr ""
-
-msgctxt "settings"
-msgid "English"
-msgstr ""
-
-msgctxt "settings"
-msgid "Spanish"
-msgstr ""
-
-msgctxt "settings"
-msgid "French"
-msgstr ""
-
-msgctxt "settings"
-msgid "Hebrew"
-msgstr ""
-
-msgctxt "settings"
-msgid "Italian"
-msgstr ""
-
-msgctxt "settings"
-msgid "Japanese"
-msgstr ""
-
-msgctxt "settings"
-msgid "Korean"
-msgstr ""
-
-msgctxt "settings"
-msgid "Portuguese"
-msgstr ""
-
-msgctxt "settings"
-msgid "Russian"
-msgstr ""
-
-msgctxt "settings"
-msgid "Thai"
-msgstr ""
-
-msgctxt "settings"
-msgid "Turkish"
-msgstr ""
-
-msgctxt "settings"
-msgid "Ukrainian"
-msgstr ""
-
-msgctxt "settings"
-msgid "Vietnamese"
-msgstr ""
-
-msgctxt "settings"
-msgid "Chinese"
-msgstr ""
-
-msgctxt "settings"
-msgid "Chinese (Simplified)"
-msgstr ""
-
-msgctxt "settings"
-msgid "Chinese (Hong Kong)"
-msgstr ""
-
-msgctxt "settings"
-msgid "Chinese (Traditional)"
-msgstr ""
-
-msgctxt "settings"
-msgid "Other"
-msgstr ""
-
-msgctxt "settings"
-msgid "Wu Chinese"
-msgstr ""
-
-msgctxt "settings"
-msgid "Candidate layout"
-msgstr ""
-
-msgctxt "settings"
-msgid "Vertical"
-msgstr ""
-
-msgctxt "settings"
-msgid "Horizontal"
 msgstr ""

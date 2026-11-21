@@ -4,7 +4,7 @@
 
 ## 目标与选型
 
-Windows 自有 UI 统一采用 gettext 消息目录与 Boost.Locale 1.92，覆盖 Settings、语言栏右键菜单、关于窗口以及错误/提示/无障碍文案。支持跟随系统、简体中文、繁体中文和英文。
+Windows 自有 UI 统一采用 gettext 消息目录与 Boost.Locale 1.92，覆盖 Settings、语言栏右键菜单、关于窗口以及错误/提示/无障碍文案。支持跟随系统、简体中文、繁体中文、英文和日语。
 
 翻译源文件为 UTF-8 `.po`，运行时加载外置 `.mo`；代码中保留带上下文的英文原文，缺失译文自动回退英文。Core 的上游引擎沿用 libintl 与上游翻译目录。`win32/i18n/` 源码在 Core、TSF、Settings 三个工程中分别编译，不共享运行库二进制、C++ 对象或 locale 对象。
 
@@ -29,7 +29,7 @@ Windows 自有 UI 统一采用 gettext 消息目录与 Boost.Locale 1.92，覆�
   - **开发者选项**：详细日志开关与目录统计，见 [日志设计](windows-developer-logging-design.md)。
   - **插件**：只读 addon 状态与个人插件目录入口，见 [插件指南](windows-plugins.md)。
   - **快捷键**：轮换与直切第 1～5 项快捷键，见 [设置设计](windows-settings-design.md#快捷键录制)。
-- “跟随系统语言”与字段标签随当前窗口语言翻译；明确语言选项采用固定自称（`简体中文`、`繁體中文`、`English`），方便误选后恢复。
+- “跟随系统语言”与字段标签随当前窗口语言翻译；明确语言选项采用固定自称（`简体中文`、`繁體中文`、`English`、`日本語`），方便误选后恢复。
 - 全局页禁用删除/上移/下移；仍可点击添加，保存新输入法后跳转到新页面（添加前同样处理未保存全局草稿）。
 - **重置为默认值**仅重置当前页草稿：全局页恢复 `System` 语言、`Vertical` 候选框布局、关闭详细日志与默认快捷键，点击**应用**后保存。
 - 跨页导航沿用保存/放弃/取消提示；关闭窗口放弃未应用草稿；加载/保存期间禁用操作，失败保留草稿，冲突提示重新加载。
@@ -40,6 +40,7 @@ Windows 自有 UI 统一采用 gettext 消息目录与 Boost.Locale 1.92，覆�
 | 简体中文 | `SimplifiedChinese = 1` | `zh-Hans` | `zh-Hans` | `zh_CN` |
 | 繁體中文 | `TraditionalChinese = 2` | `zh-Hant` | `zh-Hant` | `zh_TW` |
 | English | `English = 3` | `en` | `en` | `en_US` |
+| 日本語 | `Japanese = 4` | `ja` | `ja` | `ja_JP` |
 
 枚举、配置值与下拉框索引显式映射，不保存本地化显示文本。
 
@@ -92,12 +93,13 @@ CandidateLayout=vertical
 
 ## IPC 扩展
 
-当前协议为 **v15**，`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId = 0`。AppContainer 仅允许只读 `GetGlobalSettings`。
+当前协议为 **v16**，`GetGlobalSettings`、`SetGlobalSettings` 和 `GlobalSettingsReply` 均要求 `contextId = 0`。AppContainer 仅允许只读 `GetGlobalSettings`。
 
 ```cpp
 enum class UiLanguage : uint8_t {
     System = 0, SimplifiedChinese = 1,
-    TraditionalChinese = 2, English = 3
+    TraditionalChinese = 2, English = 3,
+    Japanese = 4
 };
 
 enum class CandidateLayout : uint8_t { Vertical = 0, Horizontal = 1 };
@@ -113,8 +115,8 @@ struct GlobalSettings {
 struct GlobalSettingsReply {
     SettingsError error;
     GlobalSettings settings;
-    UiLanguage resolvedLanguage;   // 三种明确语言之一
-    UiLanguage coreActiveLanguage; // 三种明确语言之一
+    UiLanguage resolvedLanguage;   // 四种明确语言之一
+    UiLanguage coreActiveLanguage; // 四种明确语言之一
 };
 ```
 
@@ -128,9 +130,11 @@ struct GlobalSettingsReply {
 po/fcitx5-windows.pot
 po/zh_CN.po
 po/zh_TW.po
+po/ja.po
 
 share/locale/zh_CN/LC_MESSAGES/fcitx5-windows.mo
 share/locale/zh_TW/LC_MESSAGES/fcitx5-windows.mo
+share/locale/ja/LC_MESSAGES/fcitx5-windows.mo
 ```
 
 - 上游 `fcitx5.mo`、`fcitx5-chinese-addons.mo` 与 Windows domain 共存于 `share/locale`；英文回退源码原文。
@@ -144,7 +148,7 @@ share/locale/zh_TW/LC_MESSAGES/fcitx5-windows.mo
 `System` 模式调用 `GetUserPreferredUILanguages(MUI_LANGUAGE_NAME)` 按用户首选列表匹配受支持语言，最终回退英文：
 
 - 优先识别 script：`zh-Hans-*` → 简体，`zh-Hant-*` → 繁体。
-- 未指定 script 时：`zh-CN`、`zh-SG`、单独 `zh` → 简体；`zh-TW`、`zh-HK`、`zh-MO` → 繁体；`en-*` → 英文（大小写不敏感，白名单映射）。
+- 未指定 script 时：`zh-CN`、`zh-SG`、单独 `zh` → 简体；`zh-TW`、`zh-HK`、`zh-MO` → 繁体；`ja` / `ja-*` → 日语；`en-*` → 英文（大小写不敏感，白名单映射）。
 
 普通桌面 TSF 激活时启动后台配置读取，后续每约 1 秒检查一次（位于 `pollState()` 的焦点和 Core 可用性早退之前，Core 停止时仍可刷新）。后台任务独立持有 DLL 引用，完成后回到 TSF 所属线程校验激活代次再替换不可变快照；解析语言未变时复用现有 locale。
 
@@ -159,9 +163,9 @@ share/locale/zh_TW/LC_MESSAGES/fcitx5-windows.mo
 | 验证范围 | 覆盖内容 |
 | --- | --- |
 | 单元与配置 | `test_i18n`：语言映射、翻译/占位符/回退、v1–v4 迁移、原子替换、写锁、非法/损坏文件与后台快照刷新 |
-| IPC 协议 | `test_protocol`：v15 语言/日志/快捷键/候选框布局往返、非法值与错误编码 |
+| IPC 协议 | `test_protocol`：v16 语言/日志/快捷键/候选框布局往返、非法值与错误编码 |
 | TSF 菜单与关于 | `test_langbar`、`test_about`：HMENU/`InitMenu` 统一快照、停用竞态、Core 停止可用性与关于窗口复用刷新 |
-| 引擎翻译迁移 | `scripts/test-engine-localization.ps1`：简体/繁体/英文真实引擎描述与目录迁移验证 |
+| 引擎翻译迁移 | `scripts/test-engine-localization.ps1`：简体/繁体/英文/日语真实引擎描述与目录迁移验证 |
 | WinUI 自动化 | `scripts/test-ui-localization.ps1`（配合 `-UiTest` Settings 与 `ui_fixture`）：入口、语言切换、跨页草稿、重置与日志页；`scripts/test-settings-shortcuts.ps1`：快捷键、候选框布局切换与 v2→v4 迁移 |
 
 真实系统菜单重新请求时机、多宿主刷新、安装版服务重启、系统首选语言变更、DPI/文本缩放及漫游目录行为仍需实机验证。

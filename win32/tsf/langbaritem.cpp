@@ -315,8 +315,11 @@ STDMETHODIMP LangBarItem::OnClick(TfLBIClick click, POINT point, const RECT *) {
         const bool nodes = view->cache() && !view->cache()->reply.nodes.empty();
         if (statusContext_ && !restricted_ && !view->cache()) {
             const auto text = tr.wide(
-                "menu", statusCache_ ? "Unable to read input method menu"
-                                     : "Reading input method menu...");
+                "menu", statusCache_
+                            ? win32::i18n::mark(
+                                  "menu", "Unable to read input method menu")
+                            : win32::i18n::mark(
+                                  "menu", "Reading input method menu..."));
             if (!AppendMenuW(resources.menu, MF_STRING | MF_GRAYED, 0,
                              text.c_str()))
                 return E_FAIL;
@@ -366,8 +369,11 @@ STDMETHODIMP LangBarItem::InitMenu(ITfMenu *menu) {
         const bool loading = statusContext_ && !restricted_ && !view->cache();
         if (loading) {
             const auto text = tr.wide(
-                "menu", statusCache_ ? "Unable to read input method menu"
-                                     : "Reading input method menu...");
+                "menu", statusCache_
+                            ? win32::i18n::mark(
+                                  "menu", "Unable to read input method menu")
+                            : win32::i18n::mark(
+                                  "menu", "Reading input method menu..."));
             hr = menu->AddMenuItem(0, TF_LBMENUF_GRAYED, nullptr, nullptr,
                                    text.c_str(),
                                    static_cast<ULONG>(text.size()), nullptr);

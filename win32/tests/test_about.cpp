@@ -109,6 +109,12 @@ int main(int argc, char **argv) {
         assert(about.show() && about.handle() == window);
         assert(text(window) == L"\u95dc\u65bc Fcitx5");
         assert(text(GetDlgItem(window, IDOK)) == L"\u95dc\u9589");
+        auto japanese = std::make_shared<fcitx::win32::i18n::Translator>(
+            fcitx::win32::ipc::UiLanguage::Japanese);
+        about.setTranslation(japanese);
+        assert(about.show() && about.handle() == window);
+        assert(text(window) == L"Fcitx5 \u306b\u3064\u3044\u3066");
+        assert(text(GetDlgItem(window, IDOK)) == L"\u9589\u3058\u308b");
         about.setTranslation(
             std::make_shared<fcitx::win32::i18n::Translator>());
         assert(about.show() && text(window) == L"About Fcitx5");

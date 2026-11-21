@@ -352,6 +352,7 @@ void SettingsWindow::translateStatic() {
     language_.Items().Append(box_value(L"\u7b80\u4f53\u4e2d\u6587"));
     language_.Items().Append(box_value(L"\u7e41\u9ad4\u4e2d\u6587"));
     language_.Items().Append(box_value(L"English"));
+    language_.Items().Append(box_value(L"\u65e5\u672c\u8a9e"));
     language_.SelectedIndex(static_cast<int>(global_.settings.language));
     candidateLayout_.Items().Clear();
     candidateLayout_.Items().Append(box_value(tr("settings", "Vertical")));
@@ -509,7 +510,7 @@ Windows::Foundation::IAsyncOperation<bool> SettingsWindow::loadGlobal() {
 Windows::Foundation::IAsyncOperation<bool> SettingsWindow::saveGlobal() {
     const settings::diagnostic::Operation operation("save_global");
     const auto index = language_.SelectedIndex();
-    if (index < 0 || index > 3)
+    if (index < 0 || !ipc::validLanguage(static_cast<ipc::UiLanguage>(index)))
         co_return false;
     const auto request = globalDraft();
     if (!ipc::validShortcuts(request.shortcuts)) {
@@ -1130,18 +1131,19 @@ void SettingsWindow::openAddWindow() {
     <Button x:Name="AddCancel" Content="Cancel" AutomationProperties.AutomationId="AddInputMethodCancel"/>
     <Button x:Name="AddConfirm" Content="Add" Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="AddInputMethodConfirm"/>
   </StackPanel>
-</Grid>)").as<FrameworkElement>();
+</Grid>)")
+                    .as<FrameworkElement>();
     addLanguages_ = root.FindName(L"Languages").as<ListView>();
     addCandidates_ = root.FindName(L"Candidates").as<ListView>();
     addConfirm_ = root.FindName(L"AddConfirm").as<Button>();
     const auto cancel = root.FindName(L"AddCancel").as<Button>();
-    root.FindName(L"AddTitle").as<TextBlock>().Text(
-        tr("settings", "Add Input Method"));
+    root.FindName(L"AddTitle")
+        .as<TextBlock>()
+        .Text(tr("settings", "Add Input Method"));
     addConfirm_.Content(box_value(tr("settings", "Add")));
     cancel.Content(box_value(tr("settings", "Cancel")));
-    addLanguages_.SelectionChanged([this](auto &&, auto &&) {
-        renderAddCandidates();
-    });
+    addLanguages_.SelectionChanged(
+        [this](auto &&, auto &&) { renderAddCandidates(); });
     addCandidates_.SelectionChanged([this](auto &&, auto &&) {
         addConfirm_.IsEnabled(addCandidates_.SelectedIndex() >= 0);
     });
@@ -1171,8 +1173,8 @@ void SettingsWindow::openAddWindow() {
                       info.id) != catalog_.selection.enabled.end()) {
             continue;
         }
-        const auto language = info.language.empty() ? std::string("und")
-                                                    : info.language;
+        const auto language =
+            info.language.empty() ? std::string("und") : info.language;
         const auto [group, inserted] = groups.try_emplace(language, false);
         group->second = group->second || !info.keyboard;
         if (inserted) {
@@ -1215,7 +1217,7 @@ void SettingsWindow::openAddWindow() {
             {"und", win32::i18n::mark("settings", "Other")}};
         const auto found = names.find(code);
         return found == names.end() ? std::wstring(to_hstring(code))
-                                   : tr("settings", found->second);
+                                    : tr("settings", found->second);
     };
     for (const auto &code : addLanguageCodes_) {
         ListViewItem item;

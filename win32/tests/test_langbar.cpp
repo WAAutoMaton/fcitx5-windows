@@ -190,6 +190,7 @@ int main() {
     for (const auto language :
          {fcitx::win32::ipc::UiLanguage::SimplifiedChinese,
           fcitx::win32::ipc::UiLanguage::TraditionalChinese,
+          fcitx::win32::ipc::UiLanguage::Japanese,
           fcitx::win32::ipc::UiLanguage::English}) {
         TestMenu translated;
         translated.translation =

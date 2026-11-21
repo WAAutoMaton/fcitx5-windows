@@ -14,7 +14,7 @@ try {
 if ($LASTEXITCODE -ne 0) { throw 'Translation extraction failed.' }
 } finally { Pop-Location }
 if (!$ExtractOnly) {
-    foreach ($language in @('zh_CN', 'zh_TW')) {
+    foreach ($language in @('zh_CN', 'zh_TW', 'ja')) {
         & "$GettextDirectory/msgmerge.exe" --update --backup=none --no-wrap "$root/po/$language.po" $template
         if ($LASTEXITCODE -ne 0) { throw "Translation update failed: $language" }
     }

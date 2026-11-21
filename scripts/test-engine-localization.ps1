@@ -17,11 +17,12 @@ $core = $null
 try {
     $env:SKIP_FCITX_USER_PATH = '1'
     $env:LC_ALL = 'C.UTF-8'
-    foreach ($language in @('zh_CN', 'zh_TW', 'en_US')) {
+    foreach ($language in @('zh_CN', 'zh_TW', 'en_US', 'ja_JP')) {
         $setting = switch ($language) {
             'zh_CN' { 'zh-Hans' }
             'zh_TW' { 'zh-Hant' }
             'en_US' { 'en' }
+            'ja_JP' { 'ja' }
         }
         [IO.File]::WriteAllText($uiSettingsFile, "[General]`nVersion=1`nLanguage=$setting`nRevision=1`n")
         $core = Start-Process "$Prefix/bin/Fcitx5.exe" -WindowStyle Hidden -PassThru -WorkingDirectory "$Prefix/bin" `

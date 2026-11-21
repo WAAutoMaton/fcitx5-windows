@@ -21,7 +21,8 @@ i18n::Translator windowsTranslator() {
     return i18n::Translator(
         language == "zh_CN"   ? ipc::UiLanguage::SimplifiedChinese
         : language == "zh_TW" ? ipc::UiLanguage::TraditionalChinese
-                              : ipc::UiLanguage::English);
+        : (language == "ja_JP" || language == "ja") ? ipc::UiLanguage::Japanese
+                                                    : ipc::UiLanguage::English);
 }
 
 std::string field(const RawConfig &raw, const std::string &path) {

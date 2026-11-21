@@ -1,6 +1,6 @@
 # Windows 输入法设置设计与实现
 
-当前协议为 **v15**。设置程序为独立的 WinUI 3 应用（`Fcitx5Settings.exe`，C++/WinRT + XAML），最低支持 Windows 10 1809 x64（build 17763），通过用户/session 级 Named Pipe 与 Core 通信。Core 是所有配置的唯一写入者和运行时状态管理者。
+当前协议为 **v16**。设置程序为独立的 WinUI 3 应用（`Fcitx5Settings.exe`，C++/WinRT + XAML），最低支持 Windows 10 1809 x64（build 17763），通过用户/session 级 Named Pipe 与 Core 通信。Core 是所有配置的唯一写入者和运行时状态管理者。
 
 ## 当前方案
 
@@ -15,7 +15,7 @@
 - `win32/tsf/langbaritem.cpp`：实现 `ITfLangBarItemButton`，显示输入法图标/标签与名称，左键轮换，右键菜单与 `InitMenu`/`OnMenuSelect` 共享动态状态区和五项固定命令。
 - `win32/tsf/aboutwindow.cpp`：原生非模态“关于”窗口，显示架构、CI 构建信息、commit 及项目/许可证链接。
 - `win32/tsf/pollstate.cpp`、`servicecontrol.cpp`：TSF 消息调度、100 ms 状态轮询与后台服务/目录控制。
-- `win32/ipc/protocol.h`、`inputmethodprotocol.h`、`statusmenuprotocol.h`：v15 协议 framing、输入法目录与语言元数据、引擎选项描述、全局语言/日志/快捷键/候选框布局、词库/插件查询、候选动作、状态菜单与宿主命令。
+- `win32/ipc/protocol.h`、`inputmethodprotocol.h`、`statusmenuprotocol.h`：v16 协议 framing、输入法目录与语言元数据、引擎选项描述、全局语言/日志/快捷键/候选框布局、词库/插件查询、候选动作、状态菜单与宿主命令。
 - `src/main.cpp`、`windowsinputmethods.cpp`：Core 初始化、拼音预热、内存输入法组建立、目录枚举、共享面板声明、配置校验与列表轮换。
 - `src/windowssettings.cpp`、`windowsfrontend.cpp`：权威配置持久化、引擎配置应用与 context 同步。
 - `src/windowsdictionaries.cpp`、`windowsplugins.cpp`：第三方词库目录扫描与重载、独立插件发现与只读 addon 状态查询。
@@ -84,7 +84,7 @@ flowchart LR
 
 ## IPC 与配置所有权
 
-v15 协议中以下全局消息强制 `contextId = 0`；`CycleInputMethod`、`SelectInputMethod`、候选动作和状态菜单校验 context 归属与焦点。AppContainer 输入入口仅开放输入、`GetGlobalSettings` 及限流的 `OpenSettings`。`KeyReply` 返回当前条目、子模式显示信息、详细日志状态、候选代次、候选框布局和状态菜单 revision。
+v16 协议中以下全局消息强制 `contextId = 0`；`CycleInputMethod`、`SelectInputMethod`、候选动作和状态菜单校验 context 归属与焦点。AppContainer 输入入口仅开放输入、`GetGlobalSettings` 及限流的 `OpenSettings`。`KeyReply` 返回当前条目、子模式显示信息、详细日志状态、候选代次、候选框布局和状态菜单 revision。
 
 | 请求 | 内容与回复 |
 | --- | --- |
@@ -112,7 +112,7 @@ Settings 直接编译 `win32/tsf/pipeclient.cpp` 复用协议/传输头，通过
 - `patches/chinese-addons-windows-table.patch` 在 Windows 启用仓颉并将内置码表路径解析到 `share/libime`。
 - 引擎选项即时生效；UI 语言在重启服务后更新 Core/Settings，原生菜单与关于窗口后台刷新。
 - **中英文标点**：在输入法状态菜单切换，由上游 `punctuation` 模块管理并保存到 `conf/punctuation.conf`（拼音、双拼及使用该模块的码表共享）。Settings 不提供重复选项；旧 `windows.conf` 中的 `Options/pinyin/WindowsPunctuation` 读取时忽略、下次保存时清除。保留上游“字母或数字后输入半角标点”规则。TSF 在非键盘输入法空闲时将 OEM 标点键与 Shift+数字送交 Core 决定转换与消费（不改变 Ctrl/Alt/Win 快捷键路由）。
-  - 回归测试：`scripts/test-punctuation.ps1`（`FCITX5_UI_TEST` Core/TSF 与 `SKIP_FCITX_USER_PATH=1`）和 `scripts/test-settings-punctuation.ps1`（真实 Core + WinUI Settings，支持 `zh-Hans`/`zh-Hant`/`en`）。
+  - 回归测试：`scripts/test-punctuation.ps1`（`FCITX5_UI_TEST` Core/TSF 与 `SKIP_FCITX_USER_PATH=1`）和 `scripts/test-settings-punctuation.ps1`（真实 Core + WinUI Settings，支持 `zh-Hans`/`zh-Hant`/`en`/`ja`）。
 
 ## 开发日志与全局选项
 

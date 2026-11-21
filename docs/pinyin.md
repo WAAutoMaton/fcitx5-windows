@@ -30,7 +30,7 @@ run inside TSF edit sessions on the TSF owning thread.
 | [src/windowsplugins.cpp](../src/windowsplugins.cpp) | Plugin package discovery, DLL search directories and addon status |
 | [src/windowsstatusmenu.cpp](../src/windowsstatusmenu.cpp) | Generic `StatusArea` / `Action/Menu` snapshot and activation bridge |
 | [src/windowslogging.cpp](../src/windowslogging.cpp) | Persistent Fcitx5 engine log sink and dynamic Info/Debug threshold |
-| [win32/ipc/protocol.h](../win32/ipc/protocol.h) | Shared v15 framing and snapshot format |
+| [win32/ipc/protocol.h](../win32/ipc/protocol.h) | Shared v16 framing and snapshot format |
 | [win32/tsf/pipeclient.cpp](../win32/tsf/pipeclient.cpp) | TSF pipe client and bounded overlapped I/O |
 | [win32/tsf/EditSession.cpp](../win32/tsf/EditSession.cpp) | Composition and document edits |
 | [win32/tsf/langbaritem.cpp](../win32/tsf/langbaritem.cpp) | Input mode button, dynamic/fixed menus and lifetime |
@@ -259,7 +259,7 @@ build in a separate directory. See
 
 ## Protocol and Behavior
 
-Protocol **v15** uses a Named Pipe scoped to the user's SID and Windows session
+Protocol **v16** uses a Named Pipe scoped to the user's SID and Windows session
 (retaining the historical `fcitx5-windows-v2-` prefix). Its ACL permits only the
 current user, rejects remote clients, isolates context IDs per connection and
 supports multiple concurrent clients. Clients use cancellable overlapped I/O

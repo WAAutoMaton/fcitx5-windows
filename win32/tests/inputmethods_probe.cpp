@@ -88,30 +88,46 @@ int main(int argc, char **argv) {
             const auto expected =
                 language == "zh_CN"   ? UiLanguage::SimplifiedChinese
                 : language == "zh_TW" ? UiLanguage::TraditionalChinese
+                : language == "ja_JP" ? UiLanguage::Japanese
                                       : UiLanguage::English;
             require((language == "zh_CN" || language == "zh_TW" ||
-                     language == "en_US") &&
+                     language == "en_US" || language == "ja_JP") &&
                         global.coreActiveLanguage == expected,
                     "unexpected active language");
+            if (expected == UiLanguage::Japanese) {
+                auto found = std::find_if(
+                    catalog.methods.begin(), catalog.methods.end(),
+                    [](const auto &item) { return item.id == "keyboard-us"; });
+                require(found != catalog.methods.end() &&
+                            found->name ==
+                                "\u82f1\u8a9e\u30ad\u30fc\u30dc\u30fc\u30c9",
+                        "Japanese Windows catalog translation missing");
+            }
             const struct {
                 const char *method;
                 const char *path;
                 const char *english;
                 const char *simplified;
                 const char *traditional;
+                const char *japanese;
             } labels[] = {
+                {"pinyin", "PrevPage", "Previous Page", "\u4e0a\u4e00\u9875",
+                 "\u4e0a\u4e00\u9801", "\u524d\u306e\u30da\u30fc\u30b8"},
                 {"pinyin", "CurrentCandidate", "Select Current Candidate",
                  "\u9009\u62e9\u5f53\u524d\u5019\u9009\u8bcd",
-                 "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e"},
+                 "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e",
+                 "Select Current Candidate"},
                 {"shuangpin", "CommitRawInput", "Commit Raw Input",
                  "\u63d0\u4ea4\u539f\u59cb\u5b57\u7b26\u4e32",
-                 "\u63d0\u4ea4\u539f\u59cb\u5b57\u4e32"},
+                 "\u63d0\u4ea4\u539f\u59cb\u5b57\u4e32", "Commit Raw Input"},
                 {"wbx", "DefaultCandidate", "Select Current Candidate",
                  "\u9009\u62e9\u5f53\u524d\u5019\u9009\u8bcd",
-                 "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e"},
+                 "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e",
+                 "Select Current Candidate"},
                 {"wbx", "SecondCandidate", "Select Second Candidate",
                  "\u9009\u62e9\u7b2c\u4e8c\u4e2a\u5019\u9009\u8bcd",
-                 "\u9078\u64c7\u7b2c\u4e8c\u500b\u5019\u9078\u8a5e"}};
+                 "\u9078\u64c7\u7b2c\u4e8c\u500b\u5019\u9078\u8a5e",
+                 "Select Second Candidate"}};
             for (const auto &label : labels) {
                 MethodConfigReply config;
                 require(client.getMethodConfig(label.method, config) &&
@@ -124,6 +140,8 @@ int main(int argc, char **argv) {
                                        ? label.simplified
                                    : expected == UiLanguage::TraditionalChinese
                                        ? label.traditional
+                                   : expected == UiLanguage::Japanese
+                                       ? label.japanese
                                        : label.english),
                         "engine config translation missing");
             }

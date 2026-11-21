@@ -2,7 +2,7 @@
 
 ## 当前状态与边界
 
-AppContainer 输入传输、TSF 候选 UIElement/Behavior、敏感 context 透传和可选登录启动均已接入，当前 IPC 为 **v15**。自动化覆盖真实 AppContainer token 和免注册 TSF context；已注册 TIP 派发、签名部署与真实 UWP 应用矩阵见文末验收表。
+AppContainer 输入传输、TSF 候选 UIElement/Behavior、敏感 context 透传和可选登录启动均已接入，当前 IPC 为 **v16**。自动化覆盖真实 AppContainer token 和免注册 TSF context；已注册 TIP 派发、签名部署与真实 UWP 应用矩阵见文末验收表。
 
 支持范围为 Windows 10 1809+ / Windows 11 x64 的普通文本输入（Terminal、Full Trust WinUI/XAML 和 AppContainer 按实际 token 分别验收）。x86 TSF 已有构建与桌面 probe，现代应用的真实 x86 派发、安全桌面、完整密码输入、触摸键盘专用布局、搜索集成、完整无障碍和 ARM64 TSF 尚待实现或验收。
 
@@ -37,7 +37,7 @@ flowchart LR
 
 ### Endpoint 与身份校验
 
-- 桌面与 Sandboxie 使用 `\\.\pipe\fcitx5-windows-v2-<SID>-<session>`（`v2` 为历史命名，协议为 v15）；AppContainer 使用同名加 `-input`。两入口均采用 message mode、拒绝远程客户端、首实例保护、overlapped I/O 与有限超时取消，客户端使用 `SECURITY_IDENTIFICATION` SQOS。
+- 桌面与 Sandboxie 使用 `\\.\pipe\fcitx5-windows-v2-<SID>-<session>`（`v2` 为历史命名，协议为 v16）；AppContainer 使用同名加 `-input`。两入口均采用 message mode、拒绝远程客户端、首实例保护、overlapped I/O 与有限超时取消，客户端使用 `SECURITY_IDENTIFICATION` SQOS。
 - 普通桌面管理入口支持 UAC linked-token 身份兼容（见 [UAC 方案](windows-uac-ipc-design.md)）和 Sandboxie 安全模式匿名 token 兼容（见 [Sandboxie 进程策略](windows-sandboxie-design.md#进程策略)）；AppContainer `-input` 入口始终严格匹配同一登录身份。
 - `-input` 入口 DACL 授予当前用户完整权限、`ALL APPLICATION PACKAGES` 仅客户端权限（`0x100183`，不含 `FILE_CREATE_PIPE_INSTANCE`）并设置低完整性 `NW` label。服务端读取有界 Hello 后模拟对端 token 校验用户 SID、session、`AuthenticationId` 与 AppContainer 身份，随即解除模拟（解除失败不得复用该线程）。
 - **服务端反向认证（`AuthenticateServer`）**：因 AppContainer 无法直接打开宿主 token，已认证服务端复制仅含 `PROCESS_QUERY_LIMITED_INFORMATION | READ_CONTROL` 的自身进程句柄给客户端；客户端核对内核 Pipe PID/session、句柄 PID、进程对象 owner 及安装树固定 `bin/Fcitx5.exe` 路径后再发送输入（依赖安装树写保护）。

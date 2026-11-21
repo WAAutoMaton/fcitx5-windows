@@ -1,7 +1,7 @@
 find_program(WINDOWS_MSGFMT NAMES msgfmt
     HINTS "C:/msys64/clang64/bin" "C:/msys64/usr/bin" REQUIRED)
 set(WINDOWS_LOCALE_OUTPUT "${CMAKE_BINARY_DIR}/share/locale" CACHE PATH "Windows translation output")
-foreach(language zh_CN zh_TW)
+foreach(language zh_CN zh_TW ja)
     set(output "${WINDOWS_LOCALE_OUTPUT}/${language}/LC_MESSAGES/fcitx5-windows.mo")
     add_custom_command(OUTPUT "${output}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${WINDOWS_LOCALE_OUTPUT}/${language}/LC_MESSAGES"

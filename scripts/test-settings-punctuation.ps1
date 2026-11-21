@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Prefix,
-    [ValidateSet('en', 'zh-Hans', 'zh-Hant')][string]$Language = 'zh-Hans',
+    [ValidateSet('en', 'zh-Hans', 'zh-Hant', 'ja')][string]$Language = 'zh-Hans',
     [string]$LogDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -16,6 +16,7 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
 function Text([int[]]$Codes) { -join ([char[]]$Codes) }
 $apply = if ($Language -eq 'en') { 'Apply' }
     elseif ($Language -eq 'zh-Hans') { Text @(0x5e94,0x7528) }
+    elseif ($Language -eq 'ja') { Text @(0x9069,0x7528) }
     else { Text @(0x5957,0x7528) }
 $coreProcess = $null; $settingsProcess = $null
 $oldSkipUser = $env:SKIP_FCITX_USER_PATH

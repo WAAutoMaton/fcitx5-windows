@@ -12,25 +12,37 @@ int main() {
     assert(i18n::matchLanguage(L"ZH-HANS-SG") == UiLanguage::SimplifiedChinese);
     assert(i18n::matchLanguage(L"zh-TW") == UiLanguage::TraditionalChinese);
     assert(i18n::matchLanguage(L"en-GB") == UiLanguage::English);
+    assert(i18n::matchLanguage(L"ja-JP") == UiLanguage::Japanese);
+    assert(i18n::matchLanguage(L"JA") == UiLanguage::Japanese);
     assert(i18n::matchLanguage(L"fr-FR") == UiLanguage::System);
+    assert(std::string_view(i18n::localeName(UiLanguage::Japanese)) == "ja_JP");
     i18n::Translator english;
     i18n::Translator simplified(UiLanguage::SimplifiedChinese);
     i18n::Translator traditional(UiLanguage::TraditionalChinese);
+    i18n::Translator japanese(UiLanguage::Japanese);
     assert(english.wide("settings", "Global Settings") == L"Global Settings");
     assert(simplified.wide("settings", "Global Settings") ==
            L"\u5168\u5c40\u8bbe\u7f6e");
     assert(traditional.wide("settings", "Global Settings") ==
            L"\u5168\u57df\u8a2d\u5b9a");
+    assert(japanese.wide("settings", "Global Settings") ==
+           L"\u30b0\u30ed\u30fc\u30d0\u30eb\u8a2d\u5b9a");
     assert(simplified.wide("settings", "Choose Last Character from Phrase") ==
            L"\u9009\u8bcd\u672b\u5b57");
     assert(traditional.wide("settings", "Choose Last Character from Phrase") ==
            L"\u9078\u8a5e\u672b\u5b57");
+    assert(
+        japanese.wide("settings", "Choose Last Character from Phrase") ==
+        L"\u8a9e\u53e5\u306e\u672b\u5c3e\u306e\u6587\u5b57\u3092\u9078\u629e");
     assert(simplified.text("unknown-context", "Global Settings") ==
            "Global Settings");
     assert(traditional.text("settings", "Missing message") ==
            "Missing message");
+    assert(japanese.text("settings", "Missing message") == "Missing message");
     assert(simplified.format("settings", "Windows error: {0}", 42) ==
            L"Windows \u9519\u8bef\uff1a42");
+    assert(japanese.format("settings", "Windows error: {0}", 42) ==
+           L"Windows \u30a8\u30e9\u30fc: 42");
     i18n::Translator missing(UiLanguage::SimplifiedChinese,
                              L"nonexistent-localization-directory");
     assert(missing.text("settings", "Global Settings") == "Global Settings");
@@ -173,6 +185,13 @@ int main() {
     assert(i18n::readSettings(file, reloaded) && reloaded == actual &&
            reloaded.revision == 25 && reloaded.shortcuts == request.shortcuts &&
            reloaded.candidateLayout == request.candidateLayout);
+    request = reloaded;
+    request.language = UiLanguage::Japanese;
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::None);
+    assert(i18n::readSettings(file, reloaded) && reloaded == actual &&
+           reloaded.language == UiLanguage::Japanese &&
+           reloaded.revision == 26);
     request.candidateLayout = ipc::CandidateLayout::Vertical;
     assert(i18n::saveSettings(file, request, actual) ==
            ipc::SettingsError::Conflict);

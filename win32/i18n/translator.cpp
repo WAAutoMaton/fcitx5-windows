@@ -30,10 +30,24 @@ Translator::Translator(UiLanguage language,
     try {
         const auto path = directory.empty() ? resourceDirectory() : directory;
         boost::locale::gnu_gettext::messages_info info;
-        info.language = language_ == UiLanguage::English ? "en" : "zh";
-        info.country = language_ == UiLanguage::SimplifiedChinese    ? "CN"
-                       : language_ == UiLanguage::TraditionalChinese ? "TW"
-                                                                     : "US";
+        switch (language_) {
+        case UiLanguage::SimplifiedChinese:
+            info.language = "zh";
+            info.country = "CN";
+            break;
+        case UiLanguage::TraditionalChinese:
+            info.language = "zh";
+            info.country = "TW";
+            break;
+        case UiLanguage::Japanese:
+            info.language = "ja";
+            info.country = "JP";
+            break;
+        default:
+            info.language = "en";
+            info.country = "US";
+            break;
+        }
         info.encoding = "UTF-8";
         info.domains.emplace_back("fcitx5-windows");
         info.paths.emplace_back(".");

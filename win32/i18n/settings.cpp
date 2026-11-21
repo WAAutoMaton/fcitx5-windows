@@ -18,7 +18,9 @@ struct Handle {
             CloseHandle(value);
     }
 };
-constexpr const char *names[] = {"system", "zh-Hans", "zh-Hant", "en"};
+constexpr const char *names[] = {"system", "zh-Hans", "zh-Hant", "en", "ja"};
+static_assert(std::size(names) ==
+              static_cast<size_t>(UiLanguage::Japanese) + 1);
 constexpr const char *candidateLayouts[] = {"vertical", "horizontal"};
 } // namespace
 
@@ -30,6 +32,8 @@ UiLanguage matchLanguage(std::wstring_view name) {
     tag += L'-';
     if (tag.starts_with(L"en-"))
         return UiLanguage::English;
+    if (tag.starts_with(L"ja-"))
+        return UiLanguage::Japanese;
     if (tag.starts_with(L"zh-hant-"))
         return UiLanguage::TraditionalChinese;
     if (tag.starts_with(L"zh-hans-"))
@@ -75,6 +79,8 @@ const char *localeName(UiLanguage language) {
         return "zh_CN";
     case UiLanguage::TraditionalChinese:
         return "zh_TW";
+    case UiLanguage::Japanese:
+        return "ja_JP";
     default:
         return "en_US";
     }
@@ -125,8 +131,9 @@ bool readSettings(const std::filesystem::path &path,
         const bool hasCandidateLayout = version == "4";
         if (tree.size() != (hasShortcuts ? 2 : 1) ||
             (!hasShortcuts && version != "1" && version != "2") ||
-            tree.get_child("General").size() !=
-                (version == "1" ? 3 : hasCandidateLayout ? 5 : 4))
+            tree.get_child("General").size() != (version == "1"       ? 3
+                                                 : hasCandidateLayout ? 5
+                                                                      : 4))
             return false;
         const auto language = tree.get<std::string>("General.Language");
         const auto revision = tree.get<std::string>("General.Revision");
@@ -163,7 +170,8 @@ bool readSettings(const std::filesystem::path &path,
                 return false;
         }
         if (hasCandidateLayout) {
-            const auto layout = tree.get<std::string>("General.CandidateLayout");
+            const auto layout =
+                tree.get<std::string>("General.CandidateLayout");
             const auto found = std::find(std::begin(candidateLayouts),
                                          std::end(candidateLayouts), layout);
             if (found == std::end(candidateLayouts))
