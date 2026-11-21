@@ -121,14 +121,30 @@ try {
     Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'nested submodules are not initialized'
     New-Item -ItemType Directory -Force "$temporary/plugins/fcitx5-mozc/mozc/src/build_tools",
         "$temporary/plugins/fcitx5-mozc/abseil-cpp", "$temporary/plugins/fcitx5-mozc/protobuf" | Out-Null
-    Copy-Item -LiteralPath "$root/plugins/fcitx5-mozc/mozc/src/build_tools/embed_file.py" `
-        -Destination "$temporary/plugins/fcitx5-mozc/mozc/src/build_tools/embed_file.py" -Force
+    # Keep the test self-contained when CI or local checkouts omit submodules.
+    [IO.File]::WriteAllText("$temporary/plugins/fcitx5-mozc/mozc/src/build_tools/embed_file.py", @'
+import argparse
+import pathlib
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--input', required=True)
+parser.add_argument('--name', required=True)
+parser.add_argument('--output', required=True)
+args = parser.parse_args()
+size = len(pathlib.Path(args.input).read_bytes())
+pathlib.Path(args.output).write_text(
+    f'constexpr unsigned char {args.name}_data[{size}] = {{}};\n'
+    f'constexpr EmbeddedFile {args.name} = {{{args.name}_data, {size}}};\n',
+    encoding='utf-8',
+)
+'@)
     foreach ($sub in @('mozc', 'abseil-cpp', 'protobuf')) {
         [IO.File]::WriteAllText("$temporary/plugins/fcitx5-mozc/$sub/LICENSE", "$sub license")
     }
     $mozcFixtureData = "$temporary/mozc-fixture.data"
     $mozcMagic = [byte[]]@(0xEF, 0x4D, 0x4F, 0x5A, 0x43, 0x0D, 0x0A)
-    [IO.File]::WriteAllBytes($mozcFixtureData, ($mozcMagic + [Text.Encoding]::ASCII.GetBytes('FIXTURE')))
+    $mozcFixtureBytes = $mozcMagic + [Text.Encoding]::ASCII.GetBytes('FIXTURE')
+    [IO.File]::WriteAllBytes($mozcFixtureData, $mozcFixtureBytes)
     [IO.File]::WriteAllText("$temporary/cmake/pinyin-lock.json",
         (@{ mozcData = @{ file = 'mozc.data'; url = 'https://example.invalid/mozc.data' } } | ConvertTo-Json -Depth 4))
     $badMozcData = "$temporary/mozc-bad.data"
@@ -136,8 +152,12 @@ try {
     Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 -MozcData $badMozcData } 'Invalid Mozc data header'
     & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 -MozcData $mozcFixtureData | Out-Null
     $generatedInc = "$buildRoot/fcitx5-mozc/data_manager/oss/mozc_data.inc"
-    if (!(Test-Path -LiteralPath $generatedInc -PathType Leaf) -or
-        ([IO.File]::ReadAllText($generatedInc) -notlike '*kOssMozcDataSet*')) {
+    if (!(Test-Path -LiteralPath $generatedInc -PathType Leaf)) {
+        throw 'Mozc data header was not generated from mozc.data.'
+    }
+    $generatedText = [IO.File]::ReadAllText($generatedInc)
+    if ($generatedText -notlike '*kOssMozcDataSet*' -or
+        $generatedText -notlike "*$($mozcFixtureBytes.Length)*") {
         throw 'Mozc data header was not generated from mozc.data.'
     }
     foreach ($relative in @('licenses/LICENSE', 'licenses/mozc/LICENSE', 'licenses/abseil-cpp/LICENSE', 'licenses/protobuf/LICENSE')) {
