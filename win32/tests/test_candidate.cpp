@@ -52,6 +52,20 @@ struct CandidateWindowTestAccess {
     static bool usesDc(const CandidateWindow &view) {
         return view.useDcTarget_ && view.dcTarget_ && !view.target_;
     }
+    static RECT prepareDc(CandidateWindow &view, UINT dpi) {
+        view.dpi_ = dpi;
+        assert(view.layout());
+        const auto width = std::max(
+            1L, static_cast<LONG>(std::ceil(view.width_ * dpi / 96.f)));
+        const auto height = std::max(
+            1L, static_cast<LONG>(std::ceil(view.height_ * dpi / 96.f)));
+        assert(SetWindowPos(view.window_, nullptr, 0, 0, width, height,
+                            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOZORDER));
+        RECT client{};
+        assert(GetClientRect(view.window_, &client));
+        assert(client.right == width && client.bottom == height);
+        return client;
+    }
     static HRESULT drawDc(CandidateWindow &view, HDC dc, UINT dpi) {
         view.dpi_ = dpi;
         auto result = view.createTarget(dc);
@@ -486,8 +500,13 @@ void fallbackTests(IWICImagingFactory *factory) {
                        Access::bounds(view, 0).top);
             }
             const auto window = Access::window(view);
-            RECT client{};
-            assert(GetClientRect(window, &client));
+            // Resize the popup and relayout for the simulated DPI so BindDC
+            // covers the full scaled candidate surface even on 96-DPI hosts.
+            const auto client = Access::prepareDc(view, dpi);
+            if (horizontal) {
+                assert(Access::bounds(view, 1).top ==
+                       Access::bounds(view, 0).top);
+            }
             const auto dc = CreateCompatibleDC(nullptr);
             BITMAPINFO info{};
             info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
