@@ -58,6 +58,7 @@ class SettingsWindow : public std::enable_shared_from_this<SettingsWindow> {
                  fallback,
              std::string path);
     const ipc::InputMethodInfo *method(const std::string &id) const;
+    bool isMethodEnabled(const std::string &id) const;
     winrt::fire_and_forget refreshDictionaries();
     winrt::fire_and_forget openDictionaryFolder();
     winrt::fire_and_forget refreshPlugins();

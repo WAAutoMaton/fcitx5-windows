@@ -1279,6 +1279,12 @@ SettingsWindow::method(const std::string &id) const {
     return found == catalog_.methods.end() ? nullptr : &*found;
 }
 
+bool SettingsWindow::isMethodEnabled(const std::string &id) const {
+    return std::find(catalog_.selection.enabled.begin(),
+                     catalog_.selection.enabled.end(),
+                     id) != catalog_.selection.enabled.end();
+}
+
 void SettingsWindow::renderMethods(const std::string &selected) {
     if (closed_.load(std::memory_order_acquire) || !methods_) {
         return;
@@ -1336,10 +1342,7 @@ void SettingsWindow::renderMethods(const std::string &selected) {
         }
     }
     for (const auto &info : catalog_.methods) {
-        if (info.available &&
-            std::find(catalog_.selection.enabled.begin(),
-                      catalog_.selection.enabled.end(),
-                      info.id) == catalog_.selection.enabled.end()) {
+        if (info.available && !isMethodEnabled(info.id)) {
             availableIds_.push_back(info.id);
         }
     }
@@ -1347,6 +1350,9 @@ void SettingsWindow::renderMethods(const std::string &selected) {
         catalog_.selection.enabled.empty() ? -1 : selectedIndex;
     methods_.SelectedIndex(page_ == PageKind::Global ? -1 : targetIndex);
     rendering_ = false;
+    if (addWindow_) {
+        renderAddCandidates();
+    }
 }
 
 void SettingsWindow::renderAddCandidates() {
@@ -1361,15 +1367,14 @@ void SettingsWindow::renderAddCandidates() {
         return;
     }
     const auto &language = addLanguageCodes_[index];
+    int firstSelectable = -1;
     for (const auto &info : catalog_.methods) {
         if (!info.available ||
-            std::find(catalog_.selection.enabled.begin(),
-                      catalog_.selection.enabled.end(),
-                      info.id) != catalog_.selection.enabled.end() ||
             (info.language.empty() ? std::string("und") : info.language) !=
                 language) {
             continue;
         }
+        const bool alreadyAdded = isMethodEnabled(info.id);
         StackPanel row;
         row.Orientation(Orientation::Horizontal);
         row.Spacing(12);
@@ -1379,19 +1384,34 @@ void SettingsWindow::renderAddCandidates() {
         icon.FontSize(18);
         name.Text(to_hstring(info.name));
         name.TextTrimming(TextTrimming::CharacterEllipsis);
+        if (alreadyAdded) {
+            if (const auto style =
+                    addCandidates_.Resources()
+                        .TryLookup(box_value(L"DisabledCandidateTextStyle"))
+                        .try_as<Style>()) {
+                icon.Style(style);
+                name.Style(style);
+            } else {
+                row.Opacity(0.45);
+            }
+        }
         row.Children().Append(icon);
         row.Children().Append(name);
         row.Padding({0, 8, 0, 8});
         ListViewItem item;
         item.Content(row);
+        item.IsEnabled(!alreadyAdded);
         Automation::AutomationProperties::SetName(item, to_hstring(info.name));
         Automation::AutomationProperties::SetAutomationId(
             item, to_hstring("add-method:" + info.id));
         addCandidates_.Items().Append(item);
+        if (!alreadyAdded && firstSelectable < 0) {
+            firstSelectable = static_cast<int>(addCandidateIds_.size());
+        }
         addCandidateIds_.push_back(info.id);
     }
-    addCandidates_.SelectedIndex(addCandidateIds_.empty() ? -1 : 0);
-    addConfirm_.IsEnabled(!addCandidateIds_.empty());
+    addCandidates_.SelectedIndex(firstSelectable);
+    addConfirm_.IsEnabled(firstSelectable >= 0);
 }
 
 void SettingsWindow::openAddWindow() {
@@ -1412,7 +1432,13 @@ void SettingsWindow::openAddWindow() {
   <Grid Grid.Row="1" ColumnSpacing="16">
     <Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
     <ListView x:Name="Languages" SelectionMode="Single" AutomationProperties.AutomationId="AddInputMethodLanguages"/>
-    <ListView x:Name="Candidates" Grid.Column="1" SelectionMode="Single" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="AddInputMethodCandidates"/>
+    <ListView x:Name="Candidates" Grid.Column="1" SelectionMode="Single" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="AddInputMethodCandidates">
+      <ListView.Resources>
+        <Style x:Key="DisabledCandidateTextStyle" TargetType="TextBlock">
+          <Setter Property="Foreground" Value="{ThemeResource TextFillColorDisabledBrush}"/>
+        </Style>
+      </ListView.Resources>
+    </ListView>
   </Grid>
   <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
     <Button x:Name="AddCancel" Content="Cancel" AutomationProperties.AutomationId="AddInputMethodCancel"/>
@@ -1438,9 +1464,19 @@ void SettingsWindow::openAddWindow() {
     addCandidates_.SelectionChanged([weak](auto &&, auto &&) {
         if (auto self = weak.lock();
             self && !self->closed_.load(std::memory_order_acquire) &&
-            self->addCandidates_ && self->addConfirm_)
-            self->addConfirm_.IsEnabled(self->addCandidates_.SelectedIndex() >=
-                                        0);
+            self->addCandidates_ && self->addConfirm_) {
+            const auto index = self->addCandidates_.SelectedIndex();
+            const bool selectable =
+                index >= 0 &&
+                index < static_cast<int>(self->addCandidateIds_.size()) &&
+                !self->isMethodEnabled(self->addCandidateIds_[index]);
+            if (index >= 0 && !selectable) {
+                self->addCandidates_.SelectedIndex(-1);
+                self->addConfirm_.IsEnabled(false);
+                return;
+            }
+            self->addConfirm_.IsEnabled(selectable);
+        }
     });
     cancel.Click([weak](auto &&, auto &&) {
         if (auto self = weak.lock())
@@ -1453,7 +1489,8 @@ void SettingsWindow::openAddWindow() {
             return;
         const auto index = self->addCandidates_.SelectedIndex();
         if (index < 0 ||
-            index >= static_cast<int>(self->addCandidateIds_.size()))
+            index >= static_cast<int>(self->addCandidateIds_.size()) ||
+            self->isMethodEnabled(self->addCandidateIds_[index]))
             return;
         self->pendingAddId_ = self->addCandidateIds_[index];
         self->closeAddWindow();
@@ -1479,10 +1516,7 @@ void SettingsWindow::openAddWindow() {
     addLanguageCodes_.clear();
     std::map<std::string, bool> groups;
     for (const auto &info : catalog_.methods) {
-        if (!info.available ||
-            std::find(catalog_.selection.enabled.begin(),
-                      catalog_.selection.enabled.end(),
-                      info.id) != catalog_.selection.enabled.end()) {
+        if (!info.available) {
             continue;
         }
         const auto language =
@@ -2093,10 +2127,7 @@ fire_and_forget SettingsWindow::changeSelection(int action) try {
     const auto index = methods_.SelectedIndex();
     std::string selected = config_.id;
     if (action == 0) {
-        if (pendingAddId_.empty() ||
-            std::find(catalog_.selection.enabled.begin(),
-                      catalog_.selection.enabled.end(),
-                      pendingAddId_) != catalog_.selection.enabled.end()) {
+        if (pendingAddId_.empty() || isMethodEnabled(pendingAddId_)) {
             co_return;
         }
         next.enabled.push_back(pendingAddId_);
