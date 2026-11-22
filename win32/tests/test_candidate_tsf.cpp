@@ -17,6 +17,15 @@ struct CandidateWindowTestAccess {
     static std::wstring text(const CandidateWindow &view) {
         return view.rows_.front().text.value;
     }
+    static win32::ipc::CandidateLayout layout(const CandidateWindow &view) {
+        return view.candidateLayout_;
+    }
+    static size_t count(const CandidateWindow &view) {
+        return view.placements_.size();
+    }
+    static D2D1_RECT_F bounds(const CandidateWindow &view, size_t index) {
+        return view.placements_[index].bounds;
+    }
 };
 
 struct TsfCandidateTestAccess {
@@ -164,10 +173,10 @@ Reply snapshot(uint64_t revision, const char *preedit, const char *candidate) {
 }
 
 void tests() {
-    CComPtr<ITfThreadMgr> manager;
+    CComPtr<ITfThreadMgrEx> manager;
     assert(SUCCEEDED(manager.CoCreateInstance(CLSID_TF_ThreadMgr)));
     TfClientId client = TF_CLIENTID_NULL;
-    assert(SUCCEEDED(manager->Activate(&client)));
+    assert(SUCCEEDED(manager->ActivateEx(&client, TF_TMAE_NOACTIVATETIP)));
     CComPtr<fcitx::test::TextStore> store;
     store.Attach(new fcitx::test::TextStore);
     ShowWindow(store->window(), SW_SHOWNOACTIVATE);
@@ -347,14 +356,93 @@ void tests() {
     assert(Access::submit(*tsf, snapshot(10, "", nullptr)));
     assert(!window.visible() && store->text == L"committed");
 
-    assert(Access::submit(*tsf, snapshot(11, "n", "owner")));
+    // Horizontal layout through TSF edit sessions, deferred layout updates,
+    // and dynamic switching back to vertical layout.
+    auto layoutReply = snapshot(11, "ni", "first");
+    layoutReply.candidates = {{"\xe4\xbd\xa0\xe5\xa5\xbd", "1", "ni hao"},
+                              {"\xe4\xb8\x96\xe7\x95\x8c", "2", "shi jie"},
+                              {"\xe6\xb5\x8b\xe8\xaf\x95", "3", ""},
+                              {"\xe6\xa8\xaa\xe6\x8e\x92", "4", "horizontal"}};
+    layoutReply.selected = 1;
+    assert(Access::submit(*tsf, layoutReply));
+    assert(window.visible() &&
+           WindowAccess::layout(window) ==
+               fcitx::win32::ipc::CandidateLayout::Vertical);
+    RECT verticalRect{};
+    assert(GetWindowRect(WindowAccess::window(window), &verticalRect));
+
+    layoutReply.revision = 12;
+    layoutReply.candidateLayout =
+        fcitx::win32::ipc::CandidateLayout::Horizontal;
+    assert(Access::submit(*tsf, layoutReply));
+    assert(window.visible() &&
+           WindowAccess::layout(window) ==
+               fcitx::win32::ipc::CandidateLayout::Horizontal &&
+           WindowAccess::count(window) == 4);
+    const auto h0 = WindowAccess::bounds(window, 0);
+    for (size_t i = 1; i < 4; ++i) {
+        const auto current = WindowAccess::bounds(window, i);
+        const auto previous = WindowAccess::bounds(window, i - 1);
+        assert(current.top == h0.top && current.bottom == h0.bottom &&
+               current.left == previous.right);
+    }
+    RECT horizontalRect{};
+    assert(GetWindowRect(WindowAccess::window(window), &horizontalRect));
+    assert(horizontalRect.bottom - horizontalRect.top <
+           verticalRect.bottom - verticalRect.top);
+
+    // Deferred layout keeps the physical anchor while applying horizontal
+    // candidate updates, then repositions on layout notification.
+    store->geometryResult = TS_E_NOLAYOUT;
+    layoutReply.revision = 13;
+    layoutReply.preedit = "nih";
+    layoutReply.preeditCursor = 3;
+    layoutReply.candidates[0].text = "updated";
+    assert(Access::submit(*tsf, layoutReply));
+    assert(window.visible() &&
+           WindowAccess::layout(window) ==
+               fcitx::win32::ipc::CandidateLayout::Horizontal &&
+           WindowAccess::text(window) == L"updated");
+    RECT deferredRect{};
+    assert(GetWindowRect(WindowAccess::window(window), &deferredRect));
+    assert(deferredRect.left == horizontalRect.left &&
+           deferredRect.top == horizontalRect.top);
+    store->geometryResult = S_OK;
+    const auto savedAnchorX = store->anchorX;
+    store->anchorX = savedAnchorX + 40;
+    assert(SUCCEEDED(store->notifyLayout()));
+    pump();
+    RECT movedRect{};
+    assert(GetWindowRect(WindowAccess::window(window), &movedRect));
+    assert(window.visible() &&
+           WindowAccess::layout(window) ==
+               fcitx::win32::ipc::CandidateLayout::Horizontal &&
+           movedRect.left != deferredRect.left);
+    store->anchorX = savedAnchorX;
+
+    layoutReply.revision = 14;
+    layoutReply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Vertical;
+    assert(Access::submit(*tsf, layoutReply));
+    assert(window.visible() &&
+           WindowAccess::layout(window) ==
+               fcitx::win32::ipc::CandidateLayout::Vertical);
+    assert(WindowAccess::bounds(window, 1).top ==
+           WindowAccess::bounds(window, 0).bottom);
+    RECT restoredRect{};
+    assert(GetWindowRect(WindowAccess::window(window), &restoredRect));
+    assert(restoredRect.bottom - restoredRect.top >
+           horizontalRect.bottom - horizontalRect.top);
+    assert(Access::submit(*tsf, snapshot(15, "", nullptr)));
+    assert(!window.visible());
+
+    assert(Access::submit(*tsf, snapshot(16, "n", "owner")));
     ShowWindow(store->window(), SW_HIDE);
     store->geometryResult = TS_E_NOLAYOUT;
     Access::refresh(*tsf);
     assert(!window.visible());
     ShowWindow(store->window(), SW_SHOWNOACTIVATE);
     store->geometryResult = S_OK;
-    assert(Access::submit(*tsf, snapshot(12, "ni", "focus")));
+    assert(Access::submit(*tsf, snapshot(17, "ni", "focus")));
     assert(window.visible());
     store->denyReadSynchronous = true;
     Access::refresh(*tsf);
@@ -498,6 +586,13 @@ void tests() {
         assert(window.visible());
         assert(DestroyWindow(inputSite));
     }
+    hosted.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    ++hosted.revision;
+    assert(Access::submit(*tsf, hosted));
+    assert(window.visible() &&
+           WindowAccess::layout(window) ==
+               fcitx::win32::ipc::CandidateLayout::Horizontal &&
+           hostedList->GetCount(&count) == S_OK && count == 1);
     assert(ui.element->Show(FALSE) == S_OK && !window.visible());
     ++hosted.revision;
     assert(Access::submit(*tsf, hosted));

@@ -130,17 +130,20 @@ and
 - **`test_candidate`** (default CTest, no Core or registration):
   - Runs the production draw routine on a software WIC target at 96/120/144/192/
     288 DPI; verifies color emoji vs. monochrome controls, VS15, ellipsis,
-    layout reuse and vertical/single-row horizontal layout.
+    layout reuse, vertical/single-row horizontal layout, horizontal highlight
+    bounds isolation and per-item clip containment.
   - Injects `DXGI_ERROR_NOT_CURRENTLY_AVAILABLE` into HWND-target creation to
     verify software DC fallback pixels, target reuse, resize, DPI changes and
-    failure recovery.
+    failure recovery for both vertical and horizontal layouts.
   - Covers three owner awareness modes, thread-state restoration, focus, owner
-    lifetime, work-area bounds, immediate paint, device-loss retries, zero-sized
-    per-monitor input sites and child-edit overflow into top-level coordinates.
+    lifetime, work-area bounds, dynamic vertical/horizontal switching, immediate
+    paint, device-loss retries, zero-sized per-monitor input sites and
+    child-edit overflow into top-level coordinates.
 - **`test_candidate_tsf`** (default CTest, in-memory `ITextStoreACP`, no Core or
   registration):
   - Covers `TS_E_NOLAYOUT` anchor retention, merged read-only layout sessions,
-    applied vs. queued snapshots, clipped-composition caret fallback, clipped
+    applied vs. queued snapshots, vertical/horizontal layout switching and
+    deferred horizontal updates, clipped-composition caret fallback, clipped
     carets overlapping document bounds, point anchors (including negative
     coordinates, clipped points and the all-zero sentinel), timeout/recovery,
     hidden owners, late sessions and host UIElement show/hide without an HWND.
@@ -153,8 +156,8 @@ and
   ./build/all/tsf/tests/test_candidate.exe build/candidate-preview
   ```
 
-  Produces five synthetic-DPI offscreen PNGs and a native HWND capture via
-  `PrintWindow(PW_RENDERFULLCONTENT)`.
+  Produces synthetic-DPI offscreen PNGs (vertical and horizontal) and native
+  HWND captures via `PrintWindow(PW_RENDERFULLCONTENT)`.
 
 For the full CTest list and real engine probes, see
 [TSF tests](pinyin.md#build-and-test-tsf).

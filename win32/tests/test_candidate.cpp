@@ -266,6 +266,38 @@ size_t coloredPixels(IWICBitmapSource *bitmap) {
     return colored;
 }
 
+RECT dipRectToPixels(const D2D1_RECT_F &bounds, UINT dpi, LONG inset = 1) {
+    return {static_cast<LONG>(std::ceil(bounds.left * dpi / 96.f)) + inset,
+            static_cast<LONG>(std::ceil(bounds.top * dpi / 96.f)) + inset,
+            static_cast<LONG>(std::floor(bounds.right * dpi / 96.f)) - inset,
+            static_cast<LONG>(std::floor(bounds.bottom * dpi / 96.f)) - inset};
+}
+
+size_t matchingPixels(IWICBitmapSource *bitmap, const RECT &region,
+                      COLORREF expected, bool invert = false) {
+    UINT width = 0, height = 0;
+    assert(SUCCEEDED(bitmap->GetSize(&width, &height)));
+    std::vector<BYTE> pixels(width * height * 4);
+    assert(SUCCEEDED(bitmap->CopyPixels(
+        nullptr, width * 4, static_cast<UINT>(pixels.size()), pixels.data())));
+    const auto left = std::clamp(region.left, 0L, static_cast<LONG>(width));
+    const auto top = std::clamp(region.top, 0L, static_cast<LONG>(height));
+    const auto right = std::clamp(region.right, left, static_cast<LONG>(width));
+    const auto bottom =
+        std::clamp(region.bottom, top, static_cast<LONG>(height));
+    size_t count = 0;
+    for (LONG y = top; y < bottom; ++y) {
+        for (LONG x = left; x < right; ++x) {
+            const auto offset =
+                (static_cast<size_t>(y) * width + static_cast<size_t>(x)) * 4;
+            const auto color =
+                RGB(pixels[offset + 2], pixels[offset + 1], pixels[offset]);
+            count += invert ? (color != expected) : (color == expected);
+        }
+    }
+    return count;
+}
+
 Reply fixture() {
     Reply reply;
     reply.selected = 1;
@@ -435,66 +467,83 @@ void windowTests() {
 void fallbackTests(IWICImagingFactory *factory) {
     const auto previous = SetThreadDpiAwarenessContext(
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    for (const UINT dpi : {96u, 192u, 288u}) {
-        CComPtr<FailingHwndFactory> failing;
-        failing.Attach(new FailingHwndFactory);
-        fcitx::CandidateWindow view;
-        Access::factory(view, failing);
-        view.show(fixture(), nullptr, {100, 100, 101, 120});
-        assert(view.visible() && Access::usesDc(view));
-        assert(failing->hwndAttempts == 1 && failing->dcAttempts == 1);
-        const auto window = Access::window(view);
-        RECT client{};
-        assert(GetClientRect(window, &client));
-        const auto dc = CreateCompatibleDC(nullptr);
-        BITMAPINFO info{};
-        info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        info.bmiHeader.biWidth = client.right;
-        info.bmiHeader.biHeight = -client.bottom;
-        info.bmiHeader.biPlanes = 1;
-        info.bmiHeader.biBitCount = 32;
-        void *pixels = nullptr;
-        const auto bitmap =
-            CreateDIBSection(dc, &info, DIB_RGB_COLORS, &pixels, nullptr, 0);
-        assert(dc && bitmap && pixels);
-        const auto old = SelectObject(dc, bitmap);
-        assert(SUCCEEDED(Access::drawDc(view, dc, dpi)));
-        GdiFlush();
-        CComPtr<IWICBitmap> rendered;
-        assert(SUCCEEDED(factory->CreateBitmapFromMemory(
-            client.right, client.bottom, GUID_WICPixelFormat32bppBGR,
-            client.right * 4, client.right * client.bottom * 4,
-            static_cast<BYTE *>(pixels), &rendered)));
-        assert(coloredPixels(rendered) > 30);
-        const auto *bytes = static_cast<const BYTE *>(pixels);
-        size_t textPixels = 0, selectedPixels = 0;
-        for (LONG i = 0; i < client.right * client.bottom; ++i) {
-            const auto color =
-                RGB(bytes[i * 4 + 2], bytes[i * 4 + 1], bytes[i * 4]);
-            textPixels += color == GetSysColor(COLOR_WINDOWTEXT);
-            selectedPixels += color == GetSysColor(COLOR_HIGHLIGHT);
+    for (const auto layout : {fcitx::win32::ipc::CandidateLayout::Vertical,
+                              fcitx::win32::ipc::CandidateLayout::Horizontal}) {
+        const bool horizontal =
+            layout == fcitx::win32::ipc::CandidateLayout::Horizontal;
+        for (const UINT dpi : {96u, 192u, 288u}) {
+            CComPtr<FailingHwndFactory> failing;
+            failing.Attach(new FailingHwndFactory);
+            fcitx::CandidateWindow view;
+            Access::factory(view, failing);
+            auto initialReply = fixture();
+            initialReply.candidateLayout = layout;
+            view.show(initialReply, nullptr, {100, 100, 101, 120});
+            assert(view.visible() && Access::usesDc(view));
+            assert(failing->hwndAttempts == 1 && failing->dcAttempts == 1);
+            if (horizontal) {
+                assert(Access::bounds(view, 1).top ==
+                       Access::bounds(view, 0).top);
+            }
+            const auto window = Access::window(view);
+            RECT client{};
+            assert(GetClientRect(window, &client));
+            const auto dc = CreateCompatibleDC(nullptr);
+            BITMAPINFO info{};
+            info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            info.bmiHeader.biWidth = client.right;
+            info.bmiHeader.biHeight = -client.bottom;
+            info.bmiHeader.biPlanes = 1;
+            info.bmiHeader.biBitCount = 32;
+            void *pixels = nullptr;
+            const auto bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS,
+                                                 &pixels, nullptr, 0);
+            assert(dc && bitmap && pixels);
+            const auto old = SelectObject(dc, bitmap);
+            assert(SUCCEEDED(Access::drawDc(view, dc, dpi)));
+            GdiFlush();
+            CComPtr<IWICBitmap> rendered;
+            assert(SUCCEEDED(factory->CreateBitmapFromMemory(
+                client.right, client.bottom, GUID_WICPixelFormat32bppBGR,
+                client.right * 4, client.right * client.bottom * 4,
+                static_cast<BYTE *>(pixels), &rendered)));
+            assert(coloredPixels(rendered) > 30);
+            const auto *bytes = static_cast<const BYTE *>(pixels);
+            size_t textPixels = 0, selectedPixels = 0;
+            for (LONG i = 0; i < client.right * client.bottom; ++i) {
+                const auto color =
+                    RGB(bytes[i * 4 + 2], bytes[i * 4 + 1], bytes[i * 4]);
+                textPixels += color == GetSysColor(COLOR_WINDOWTEXT);
+                selectedPixels += color == GetSysColor(COLOR_HIGHLIGHT);
+            }
+            assert(textPixels > 30 && selectedPixels > 100);
+            // Bind back to the window before releasing the temporary DC.
+            InvalidateRect(window, nullptr, FALSE);
+            UpdateWindow(window);
+            SelectObject(dc, old);
+            DeleteObject(bitmap);
+            DeleteDC(dc);
+            assert(view.visible());
+            auto reply = fixture();
+            reply.candidateLayout = layout;
+            reply.candidates.resize(2);
+            view.show(reply, nullptr, {200, 200, 201, 220});
+            assert(view.visible() && Access::usesDc(view));
+            assert(failing->dcAttempts == 1);
+            if (horizontal) {
+                assert(Access::bounds(view, 1).top ==
+                       Access::bounds(view, 0).top);
+            }
+            Access::discardTarget(view);
+            InvalidateRect(window, nullptr, FALSE);
+            UpdateWindow(window);
+            assert(view.visible() && Access::usesDc(view));
+            assert(failing->hwndAttempts == 1 && failing->dcAttempts == 2);
+            std::printf("DC fallback %s DPI %u: text pixels = %zu, selected "
+                        "pixels = %zu\n",
+                        horizontal ? "horizontal" : "vertical", dpi, textPixels,
+                        selectedPixels);
         }
-        assert(textPixels > 30 && selectedPixels > 100);
-        // Bind back to the window before releasing the temporary DC.
-        InvalidateRect(window, nullptr, FALSE);
-        UpdateWindow(window);
-        SelectObject(dc, old);
-        DeleteObject(bitmap);
-        DeleteDC(dc);
-        assert(view.visible());
-        auto reply = fixture();
-        reply.candidates.resize(2);
-        view.show(reply, nullptr, {200, 200, 201, 220});
-        assert(view.visible() && Access::usesDc(view));
-        assert(failing->dcAttempts == 1);
-        Access::discardTarget(view);
-        InvalidateRect(window, nullptr, FALSE);
-        UpdateWindow(window);
-        assert(view.visible() && Access::usesDc(view));
-        assert(failing->hwndAttempts == 1 && failing->dcAttempts == 2);
-        std::printf(
-            "DC fallback DPI %u: text pixels = %zu, selected pixels = %zu\n",
-            dpi, textPixels, selectedPixels);
     }
     CComPtr<FailingHwndFactory> failing;
     failing.Attach(new FailingHwndFactory);
@@ -691,6 +740,70 @@ void preview(IWICImagingFactory *factory,
     ReleaseDC(nullptr, screen);
     std::printf("Native candidate: %ld x %ld pixels, DPI %u\n", width, height,
                 GetDpiForWindow(window));
+
+    // Also capture native HWND output for horizontal layout.
+    reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    reply.selected = 1;
+    view.show(reply, nullptr, {240, 240, 241, 280});
+    UpdateWindow(window);
+    assert(view.visible());
+    const auto horizontalPresentation = GetTickCount64() + 300;
+    while (GetTickCount64() < horizontalPresentation) {
+        pump();
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+    }
+    assert(SUCCEEDED(DwmFlush()));
+    RECT hBounds{};
+    assert(GetWindowRect(window, &hBounds));
+    const auto hWidth = hBounds.right - hBounds.left;
+    const auto hHeight = hBounds.bottom - hBounds.top;
+    const auto hScreen = GetDC(nullptr);
+    const auto hMemory = CreateCompatibleDC(hScreen);
+    BITMAPINFO hInfo{};
+    hInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    hInfo.bmiHeader.biWidth = hWidth;
+    hInfo.bmiHeader.biHeight = -hHeight;
+    hInfo.bmiHeader.biPlanes = 1;
+    hInfo.bmiHeader.biBitCount = 32;
+    void *hPixels = nullptr;
+    const auto hBitmap =
+        CreateDIBSection(hScreen, &hInfo, DIB_RGB_COLORS, &hPixels, nullptr, 0);
+    assert(hBitmap && hPixels);
+    const auto hOld = SelectObject(hMemory, hBitmap);
+    assert(PrintWindow(window, hMemory, 2));
+    GdiFlush();
+    CComPtr<IWICBitmap> hCaptured;
+    assert(SUCCEEDED(factory->CreateBitmapFromMemory(
+        hWidth, hHeight, GUID_WICPixelFormat32bppBGR, hWidth * 4,
+        hWidth * hHeight * 4, static_cast<BYTE *>(hPixels), &hCaptured)));
+    if (!directory.empty()) {
+        save(factory, hCaptured,
+             directory / L"candidates-horizontal-native.png");
+    }
+    std::printf("Native horizontal colored pixels = %zu\n",
+                coloredPixels(hCaptured));
+    assert(coloredPixels(hCaptured) > 30);
+    const auto hDpi = GetDpiForWindow(window);
+    auto selectedTopStrip = dipRectToPixels(Access::bounds(view, 1), hDpi, 2);
+    selectedTopStrip.bottom =
+        std::min(selectedTopStrip.bottom, selectedTopStrip.top + 3);
+    auto unselectedTopStrip = dipRectToPixels(Access::bounds(view, 0), hDpi, 2);
+    unselectedTopStrip.bottom =
+        std::min(unselectedTopStrip.bottom, unselectedTopStrip.top + 3);
+    assert(matchingPixels(hCaptured, selectedTopStrip, highlight) > 0);
+    if (highlight != GetSysColor(COLOR_WINDOW)) {
+        assert(matchingPixels(hCaptured, unselectedTopStrip, highlight) == 0);
+    }
+    SelectObject(hMemory, hOld);
+    DeleteObject(hBitmap);
+    DeleteDC(hMemory);
+    ReleaseDC(nullptr, hScreen);
+    std::printf("Native horizontal candidate: %ld x %ld pixels, DPI %u\n",
+                hWidth, hHeight, hDpi);
+    reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Vertical;
+    view.show(reply, nullptr, {240, 240, 241, 280});
+    UpdateWindow(window);
+
     std::vector<double> elapsed;
     for (size_t i = 0; i < 100; ++i) {
         reply.selected = i % reply.candidates.size();
@@ -810,23 +923,213 @@ void horizontalLayoutTests(IWICImagingFactory *factory,
     assert(Access::commentLeft(view, 0) - Access::textLeft(view, 0) < 40.f);
     assert(Access::render(view, factory));
 
-    // 5. Realistic wide horizontal page stays on one row without wrapping.
+    // 5. Realistic wide horizontal page stays on one row without wrapping,
+    // renders color emoji, and isolates selection highlight to the selected
+    // cell across DPIs.
     auto horizontalFixture = fixture();
     horizontalFixture.candidateLayout =
         fcitx::win32::ipc::CandidateLayout::Horizontal;
-    Access::prepare(view, horizontalFixture, 96);
-    for (size_t i = 1; i < horizontalFixture.candidates.size(); ++i) {
-        assert(Access::bounds(view, i).top == Access::bounds(view, 0).top);
-    }
-    if (!directory.empty()) {
-        save(factory, Access::render(view, factory),
-             directory / L"candidates-horizontal-fixture.png");
+    const auto highlight = GetSysColor(COLOR_HIGHLIGHT);
+    const auto background = GetSysColor(COLOR_WINDOW);
+    for (const UINT dpi : {96u, 192u}) {
+        Access::prepare(view, horizontalFixture, dpi);
+        for (size_t i = 1; i < horizontalFixture.candidates.size(); ++i) {
+            assert(Access::bounds(view, i).top == Access::bounds(view, 0).top);
+            assert(Access::bounds(view, i).bottom ==
+                   Access::bounds(view, 0).bottom);
+        }
+        auto bitmap = Access::render(view, factory);
+        assert(coloredPixels(bitmap) > 30);
+        // Check the top padding strip inside selected and unselected cells so
+        // text/emoji strokes do not interfere with highlight color checks.
+        auto selectedStrip = dipRectToPixels(Access::bounds(view, 1), dpi, 2);
+        selectedStrip.bottom =
+            std::min(selectedStrip.bottom, selectedStrip.top + 3);
+        assert(matchingPixels(bitmap, selectedStrip, highlight) > 0);
+        if (highlight != background) {
+            for (const size_t unselected : {size_t{0}, size_t{2}, size_t{3}}) {
+                auto strip =
+                    dipRectToPixels(Access::bounds(view, unselected), dpi, 2);
+                strip.bottom = std::min(strip.bottom, strip.top + 3);
+                assert(matchingPixels(bitmap, strip, highlight) == 0);
+            }
+        }
+        if (dpi == 96 && !directory.empty()) {
+            save(factory, bitmap,
+                 directory / L"candidates-horizontal-fixture.png");
+        }
     }
 
-    // 6. Switching back to vertical restores stacked rows.
+    // 6. Per-item axis-aligned clipping keeps glyphs from bleeding into an
+    // adjacent empty horizontal cell even when neighbors are squeezed.
+    Reply clipped;
+    clipped.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    clipped.selected = UINT32_MAX;
+    clipped.candidates = {{std::string(200, 'W'), "1", "long comment"},
+                          {"", "", ""},
+                          {std::string(200, 'M'), "3", "long comment"}};
+    for (const UINT dpi : {96u, 192u}) {
+        Access::prepare(view, clipped, dpi);
+        assert(Access::bounds(view, 1).top == Access::bounds(view, 0).top);
+        assert(Access::bounds(view, 2).top == Access::bounds(view, 0).top);
+        auto bitmap = Access::render(view, factory);
+        const auto leftCell = dipRectToPixels(Access::bounds(view, 0), dpi, 1);
+        const auto middleCell =
+            dipRectToPixels(Access::bounds(view, 1), dpi, 1);
+        const auto rightCell = dipRectToPixels(Access::bounds(view, 2), dpi, 1);
+        assert(matchingPixels(bitmap, leftCell, background, true) > 30);
+        assert(matchingPixels(bitmap, rightCell, background, true) > 30);
+        assert(matchingPixels(bitmap, middleCell, background, true) == 0);
+    }
+
+    // 7. Label-less horizontal items omit the label gap while labeled items
+    // reserve it.
+    Reply labelCheck;
+    labelCheck.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    labelCheck.selected = 0;
+    labelCheck.candidates = {{"alpha", "", ""}, {"beta", "2", ""}};
+    Access::prepare(view, labelCheck, 96);
+    assert(std::fabs(Access::textLeft(view, 0) -
+                     (Access::bounds(view, 0).left + 8.f)) < .01f);
+    assert(Access::textLeft(view, 1) > Access::bounds(view, 1).left + 12.f);
+
+    // 8. Switching back to vertical restores stacked rows.
     reply.candidateLayout = fcitx::win32::ipc::CandidateLayout::Vertical;
     Access::prepare(view, reply, 96);
     assert(Access::bounds(view, 1).top == Access::bounds(view, 0).bottom);
+}
+
+void horizontalWindowTests() {
+    const auto initial = GetThreadDpiAwarenessContext();
+    Reply compactHorizontal;
+    compactHorizontal.candidateLayout =
+        fcitx::win32::ipc::CandidateLayout::Horizontal;
+    compactHorizontal.selected = 1;
+    compactHorizontal.candidates = {{"\xe4\xbd\xa0\xe5\xa5\xbd", "1", "ni hao"},
+                                    {"\xe4\xb8\x96\xe7\x95\x8c", "2", ""},
+                                    {"\xe6\xb5\x8b\xe8\xaf\x95", "3", ""}};
+    for (const auto context :
+         {DPI_AWARENESS_CONTEXT_UNAWARE, DPI_AWARENESS_CONTEXT_SYSTEM_AWARE,
+          DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2}) {
+        assert(SetThreadDpiAwarenessContext(context));
+        const auto owner =
+            CreateWindowExW(0, L"STATIC", L"Horizontal candidate test owner",
+                            WS_OVERLAPPEDWINDOW, 100, 100, 600, 400, nullptr,
+                            nullptr, GetModuleHandleW(nullptr), nullptr);
+        assert(owner);
+        ShowWindow(owner, SW_SHOWNOACTIVATE);
+        const auto foreground = GetForegroundWindow();
+        POINT point{40, 60};
+        assert(ClientToScreen(owner, &point));
+        RECT anchor{point.x, point.y, point.x + 1, point.y + 20};
+        POINT physical{anchor.left, anchor.bottom};
+        assert(LogicalToPhysicalPointForPerMonitorDPI(owner, &physical));
+        fcitx::CandidateWindow view;
+        auto reply = compactHorizontal;
+        view.show(reply, owner, anchor);
+        assert(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),
+                                            context));
+        assert(view.visible());
+        const auto window = Access::window(view);
+        assert(!GetUpdateRect(window, nullptr, FALSE));
+        assert(AreDpiAwarenessContextsEqual(
+            GetWindowDpiAwarenessContext(window),
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+        assert(GetForegroundWindow() == foreground);
+        assert(SendMessageW(window, WM_MOUSEACTIVATE, 0, 0) == MA_NOACTIVATE);
+        assert(GetWindowLongPtrW(window, GWLP_HWNDPARENT) ==
+               reinterpret_cast<LONG_PTR>(owner));
+        assert(Access::bounds(view, 1).top == Access::bounds(view, 0).top &&
+               Access::bounds(view, 2).top == Access::bounds(view, 0).top);
+        assert(SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+        RECT bounds{};
+        assert(GetWindowRect(window, &bounds));
+        assert(bounds.left == physical.x && bounds.top == physical.y);
+        CComPtr<IDWriteTextLayout> previous = Access::text(view, 0);
+        assert(SetThreadDpiAwarenessContext(context));
+        reply.selected = 2;
+        view.show(reply, owner, anchor);
+        assert(previous == Access::text(view, 0));
+        assert(view.update(reply));
+        assert(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),
+                                            context));
+
+        // Dynamic switching between vertical and horizontal via update().
+        auto full = fixture();
+        view.show(full, owner, anchor);
+        assert(SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+        RECT vertBounds{};
+        assert(GetWindowRect(window, &vertBounds));
+        assert(SetThreadDpiAwarenessContext(context));
+        full.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+        assert(view.update(full));
+        assert(Access::bounds(view, 5).top == Access::bounds(view, 0).top);
+        assert(SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+        RECT horizBounds{};
+        assert(GetWindowRect(window, &horizBounds));
+        assert(horizBounds.bottom - horizBounds.top <
+               vertBounds.bottom - vertBounds.top);
+        MONITORINFO monitor{sizeof(MONITORINFO)};
+        assert(GetMonitorInfoW(
+            MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor));
+        if (monitor.rcWork.right - monitor.rcWork.left >
+            (vertBounds.right - vertBounds.left) + 20) {
+            assert(horizBounds.right - horizBounds.left >
+                   vertBounds.right - vertBounds.left);
+        }
+        assert(SetThreadDpiAwarenessContext(context));
+        full.candidateLayout = fcitx::win32::ipc::CandidateLayout::Vertical;
+        assert(view.update(full));
+        assert(SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+        RECT restoredBounds{};
+        assert(GetWindowRect(window, &restoredBounds));
+        assert(restoredBounds.bottom - restoredBounds.top ==
+               vertBounds.bottom - vertBounds.top);
+        assert(restoredBounds.right - restoredBounds.left ==
+               vertBounds.right - vertBounds.left);
+        assert(SetThreadDpiAwarenessContext(context));
+        DestroyWindow(owner);
+        assert(!Access::window(view));
+    }
+
+    // Work-area clamping, right/bottom edge flip, and large single-row page.
+    assert(SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+    fcitx::CandidateWindow view;
+    MONITORINFO monitor{sizeof(MONITORINFO)};
+    RECT anchor{0, 0, 1, 1};
+    assert(GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST),
+                           &monitor));
+    anchor = {monitor.rcWork.right - 2, monitor.rcWork.bottom - 2,
+              monitor.rcWork.right - 1, monitor.rcWork.bottom - 1};
+    auto wide = fixture();
+    wide.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    view.show(wide, nullptr, anchor);
+    assert(view.visible());
+    RECT bounds{};
+    assert(GetWindowRect(Access::window(view), &bounds));
+    assert(bounds.left >= monitor.rcWork.left &&
+           bounds.right <= monitor.rcWork.right);
+    assert(bounds.top >= monitor.rcWork.top && bounds.bottom <= anchor.top);
+    assert(Access::bounds(view, 5).top == Access::bounds(view, 0).top);
+
+    auto many = fixture();
+    many.candidateLayout = fcitx::win32::ipc::CandidateLayout::Horizontal;
+    many.candidates.resize(32, many.candidates.front());
+    view.show(many, nullptr, anchor);
+    assert(view.visible());
+    assert(GetWindowRect(Access::window(view), &bounds));
+    assert(bounds.left >= monitor.rcWork.left &&
+           bounds.right <= monitor.rcWork.right);
+    assert(bounds.top >= monitor.rcWork.top &&
+           bounds.bottom <= monitor.rcWork.bottom);
+    assert(Access::bounds(view, 31).top == Access::bounds(view, 0).top);
+    view.hide();
+    assert(SetThreadDpiAwarenessContext(initial));
 }
 } // namespace
 
@@ -843,6 +1146,7 @@ int main(int argc, char **argv) {
         renderTests(factory, directory);
         horizontalLayoutTests(factory, directory);
         windowTests();
+        horizontalWindowTests();
         fallbackTests(factory);
         inputSiteWindowTests();
         childExtentWindowTest();
