@@ -145,6 +145,45 @@ pathlib.Path(args.output).write_text(
     $mozcMagic = [byte[]]@(0xEF, 0x4D, 0x4F, 0x5A, 0x43, 0x0D, 0x0A)
     $mozcFixtureBytes = $mozcMagic + [Text.Encoding]::ASCII.GetBytes('FIXTURE')
     [IO.File]::WriteAllBytes($mozcFixtureData, $mozcFixtureBytes)
+    $tokens = $null
+    $parseErrors = $null
+    $mozcAst = [Management.Automation.Language.Parser]::ParseFile(
+        $entry, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count) { throw "Parse error in $entry" }
+    foreach ($fnName in @('Test-MozcDataHeader', 'Assert-MozcDataValid', 'Resolve-MozcDataFile')) {
+        $fnAst = $mozcAst.Find({ param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $fnName
+        }, $true)
+        . ([scriptblock]::Create($fnAst.Extent.Text))
+    }
+    $mozcAttempts = [Collections.Generic.List[string]]::new()
+    function Invoke-PluginCommand {
+        param($Executable, $Arguments)
+        $targetUrl = $Arguments[-1]
+        $outputIndex = [Array]::IndexOf($Arguments, '--output')
+        $outputPath = $Arguments[$outputIndex + 1]
+        $script:mozcAttempts.Add($targetUrl)
+        if ($targetUrl -eq 'https://primary.invalid/mozc.data') {
+            throw 'curl.exe failed (28): Connection timed out'
+        }
+        if ($targetUrl -eq 'https://fallback.invalid/mozc.data') {
+            [IO.File]::WriteAllBytes($outputPath, $script:mozcFixtureBytes)
+            return
+        }
+        throw "Unexpected Mozc URL: $targetUrl"
+    }
+    [IO.File]::WriteAllText("$temporary/cmake/pinyin-lock.json",
+        (@{ mozcData = @{
+            file = 'mozc.data'
+            url = 'https://primary.invalid/mozc.data'
+            fallbackUrls = @('https://fallback.invalid/mozc.data')
+        } } | ConvertTo-Json -Depth 4))
+    $resolvedMozc = Resolve-MozcDataFile $temporary '' 3>$null
+    if ($resolvedMozc -ne "$temporary/build/mozc-data/mozc.data" -or
+        ($mozcAttempts -join '|') -ne 'https://primary.invalid/mozc.data|https://fallback.invalid/mozc.data') {
+        throw "Mozc fallback download failed: $($mozcAttempts -join ', ')"
+    }
+    Remove-Item -LiteralPath "$temporary/build/mozc-data" -Recurse -Force
     [IO.File]::WriteAllText("$temporary/cmake/pinyin-lock.json",
         (@{ mozcData = @{ file = 'mozc.data'; url = 'https://example.invalid/mozc.data' } } | ConvertTo-Json -Depth 4))
     $badMozcData = "$temporary/mozc-bad.data"

@@ -16,6 +16,12 @@
   "prebuiltData": {
     "file": "libime-1.1.17-1-x86_64.pkg.tar.zst",
     "url": "https://archive.archlinux.org/packages/l/libime/libime-1.1.17-1-x86_64.pkg.tar.zst",
+    "fallbackUrls": [
+      "https://geo.mirror.pkgbuild.com/pool/packages/libime-1.1.17-1-x86_64.pkg.tar.zst",
+      "https://fastly.mirror.pkgbuild.com/pool/packages/libime-1.1.17-1-x86_64.pkg.tar.zst",
+      "https://mirrors.kernel.org/archlinux/pool/packages/libime-1.1.17-1-x86_64.pkg.tar.zst",
+      "https://mirror.rackspace.com/archlinux/pool/packages/libime-1.1.17-1-x86_64.pkg.tar.zst"
+    ],
     "sha256": "82b8a0cad9cba17b8423b3f9b41fbdb4acb5f76211ff408e11b10ecb0a8dd2ea"
   },
   "mozcData": {

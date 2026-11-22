@@ -174,7 +174,9 @@ locally (high time/memory cost; not validated end to end locally):
 
 Prebuilt archives are cached in `build/pinyin-data` and reused across
 `-BuildRoot` values after SHA256 verification (checking `build/deps` and
-`build/pinyin-data`). The script recursively copies required MSYS2 runtime DLLs
+`build/pinyin-data`). When downloading, `build-pinyin.ps1` tries
+`prebuiltData.url` and then `prebuiltData.fallbackUrls` from
+`cmake/pinyin-lock.json` until a SHA256-verified archive is obtained. The script recursively copies required MSYS2 runtime DLLs
 into `bin/`. Always launch the deployed `dist/pinyin/bin/Fcitx5.exe` with `bin`,
 `lib` and `share` kept together. User dictionaries remain under Fcitx5's user
 data directories.

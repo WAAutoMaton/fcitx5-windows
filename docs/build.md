@@ -120,7 +120,10 @@ source strings). Run `scripts/update-translations.ps1` when adding messages (or
 
 Precompiled dictionary/model data is cached in `build/pinyin-data`. Before
 downloading, the script checks local `libime*.pkg.tar.zst` files in `build/deps`
-and `build/pinyin-data` against the locked SHA256 in `cmake/pinyin-lock.json`.
+and `build/pinyin-data` against the locked SHA256 in `cmake/pinyin-lock.json`,
+and falls back across `prebuiltData.fallbackUrls` if the primary archive URL
+fails or fails checksum verification. CI caches the locked archives under
+`build/pinyin-data` and `build/mozc-data`.
 
 For individual Core, TSF and Settings builds, see
 [input-method integration](pinyin.md#build-and-deploy-core).

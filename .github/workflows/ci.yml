@@ -59,6 +59,33 @@ jobs:
             mingw-w64-clang-x86_64-librime-data
           Add-Content $env:GITHUB_PATH 'C:/msys64/clang64/bin'
 
+      - name: Read locked data metadata
+        id: data-lock
+        shell: pwsh
+        run: |
+          $lock = Get-Content cmake/pinyin-lock.json -Raw | ConvertFrom-Json
+          $mozcKey = if ($lock.mozcData.PSObject.Properties['sha256'] -and $lock.mozcData.sha256) {
+            $lock.mozcData.sha256.ToLowerInvariant()
+          } else {
+            $lock.repositories.'fcitx5-mozc'
+          }
+          "prebuilt_file=$($lock.prebuiltData.file)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "prebuilt_sha256=$($lock.prebuiltData.sha256.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "mozc_file=$($lock.mozcData.file)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "mozc_key=$mozcKey" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache prebuilt Pinyin data
+        uses: actions/cache@v6
+        with:
+          path: build/pinyin-data/${{ steps.data-lock.outputs.prebuilt_file }}
+          key: pinyin-prebuilt-data-${{ steps.data-lock.outputs.prebuilt_sha256 }}
+
+      - name: Cache Mozc data
+        uses: actions/cache@v6
+        with:
+          path: build/mozc-data/${{ steps.data-lock.outputs.mozc_file }}
+          key: mozc-data-${{ steps.data-lock.outputs.mozc_key }}
+
       - name: Build base Release runtime tree without tests
         run: |
           ./scripts/build-and-deploy.ps1 -Prefix ./dist/ci-runtime -BuildRoot ./build/ci-x64 `

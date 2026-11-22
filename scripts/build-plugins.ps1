@@ -112,17 +112,30 @@ function Resolve-MozcDataFile([string]$Root, [string]$ExplicitPath) {
         }
     }
     New-Item -ItemType Directory -Force $cacheDir | Out-Null
-    $temp = "$cached.tmp.$([guid]::NewGuid().ToString('N'))"
-    try {
-        Invoke-PluginCommand 'curl.exe' @('--fail', '--location', '--retry', '3',
-            '--connect-timeout', '30', '--max-time', '600', '--silent', '--show-error',
-            '--output', $temp, $spec.url)
-        Assert-MozcDataValid $temp $expectedHash
-        Move-Item -LiteralPath $temp -Destination $cached -Force
-    } finally {
-        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+    $urls = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($candidate in @($spec.url) + $(if ($spec.PSObject.Properties['fallbackUrls'] -and $spec.fallbackUrls) { @($spec.fallbackUrls) } else { @() })) {
+        if ($candidate -and $seen.Add($candidate)) { $urls.Add($candidate) }
     }
-    return $cached
+    $errors = [Collections.Generic.List[string]]::new()
+    foreach ($url in $urls) {
+        $temp = "$cached.tmp.$([guid]::NewGuid().ToString('N'))"
+        try {
+            Invoke-PluginCommand 'curl.exe' @('--fail', '--location', '--retry', '2',
+                '--connect-timeout', '20', '--max-time', '600', '--silent', '--show-error',
+                '--output', $temp, $url)
+            Assert-MozcDataValid $temp $expectedHash
+            Move-Item -LiteralPath $temp -Destination $cached -Force
+            return $cached
+        } catch {
+            $message = $_.Exception.Message
+            $errors.Add("${url}: $message")
+            Write-Warning "Mozc data download failed from ${url}: $message"
+        } finally {
+            if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    throw "Failed to download verified Mozc data after $($urls.Count) source(s): $($errors -join '; ')"
 }
 
 $oldPath = $env:PATH

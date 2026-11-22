@@ -101,8 +101,65 @@ endif()
     [IO.File]::WriteAllText($destination, 'corrupt cache')
     Get-VerifiedArchive 'https://unused.invalid' $destination $hash @($validArchive)
     if ((Get-FileHash -LiteralPath $destination).Hash -ne $hash) { throw 'Corrupt cache was not repaired.' }
-    Assert-Failure { Get-VerifiedArchive 'https://unused.invalid' $destination ('0' * 64) @($invalidArchive) } 'Unexpected network download'
+    Assert-Failure { Get-VerifiedArchive 'https://unused.invalid' $destination ('0' * 64) @($invalidArchive) 3>$null } 'Unexpected network download'
     if ($downloadCalls -ne 1) { throw 'Unverified local archives were accepted.' }
+    $lock = Get-Content -LiteralPath "$root/cmake/pinyin-lock.json" -Raw | ConvertFrom-Json
+    $prebuiltUrls = @($lock.prebuiltData.url) + @($lock.prebuiltData.fallbackUrls)
+    if ($prebuiltUrls.Count -lt 2) { throw 'Expected fallbackUrls for prebuiltData in cmake/pinyin-lock.json.' }
+    if (@($prebuiltUrls | Select-Object -Unique).Count -ne $prebuiltUrls.Count) {
+        throw 'Duplicate URLs in prebuiltData url/fallbackUrls.'
+    }
+    foreach ($url in $prebuiltUrls) {
+        if ($url -notlike 'https://*') { throw "Prebuilt archive URL must use HTTPS: $url" }
+    }
+    $attemptedUrls = [Collections.Generic.List[string]]::new()
+    function Invoke-Checked {
+        param($Executable, $Arguments)
+        $targetUrl = $Arguments[-1]
+        $outputIndex = [Array]::IndexOf($Arguments, '-o')
+        $outputPath = $Arguments[$outputIndex + 1]
+        $script:attemptedUrls.Add($targetUrl)
+        if ($targetUrl -eq 'https://primary.invalid/archive.zst') {
+            throw 'curl.exe failed (28): Connection timed out'
+        }
+        if ($targetUrl -eq 'https://corrupt.invalid/archive.zst') {
+            [IO.File]::WriteAllText($outputPath, 'corrupt fallback payload')
+            return
+        }
+        if ($targetUrl -eq 'https://fallback.invalid/archive.zst') {
+            Copy-Item -LiteralPath $script:validArchive -Destination $outputPath -Force
+            return
+        }
+        throw "Unexpected URL: $targetUrl"
+    }
+    $fallbackDestination = Join-Path $temporary 'fallback.pkg.tar.zst'
+    Get-VerifiedArchive @(
+        'https://primary.invalid/archive.zst',
+        'https://corrupt.invalid/archive.zst',
+        'https://corrupt.invalid/archive.zst',
+        'https://fallback.invalid/archive.zst'
+    ) $fallbackDestination $hash @() 3>$null
+    if ((Get-FileHash -LiteralPath $fallbackDestination -Algorithm SHA256).Hash -ne $hash) {
+        throw 'Fallback download did not produce verified archive.'
+    }
+    if (Test-Path -LiteralPath "$fallbackDestination.download") {
+        throw 'Temporary download file remained after fallback success.'
+    }
+    $expectedAttempts = @(
+        'https://primary.invalid/archive.zst',
+        'https://corrupt.invalid/archive.zst',
+        'https://fallback.invalid/archive.zst'
+    )
+    if (($attemptedUrls -join '|') -ne ($expectedAttempts -join '|')) {
+        throw "Unexpected fallback attempt sequence: $($attemptedUrls -join ', ')"
+    }
+    $failedDestination = Join-Path $temporary 'failed.pkg.tar.zst'
+    Assert-Failure {
+        Get-VerifiedArchive @('https://primary.invalid/archive.zst', 'https://corrupt.invalid/archive.zst') $failedDestination $hash @() 3>$null
+    } 'after 2 source(s)'
+    if ((Test-Path -LiteralPath $failedDestination) -or (Test-Path -LiteralPath "$failedDestination.download")) {
+        throw 'Failed archive download left partial output behind.'
+    }
     Push-Location $temporary
     try {
         $buildRoot = Join-Path $temporary 'build'
@@ -138,7 +195,7 @@ endif()
             Assert-Failure { & $entry -Prefix $prefix -BuildRoot $buildRoot } 'file is in use or not writable'
         } finally { [IO.File]::SetAttributes($locked, $attributes) }
         if ([IO.File]::ReadAllText($locked) -ne 'fixture; never loaded') { throw 'Preflight changed the file.' }
-        Write-Output 'PASS: multiple tools in PATH, RC compiler path round-trip, archive reuse/hash rejection/cache repair, parsing, arbitrary-CWD/space/quote paths, WhatIf, environment preservation, invalid arguments, locked and read-only deployment rejection.'
+        Write-Output 'PASS: multiple tools in PATH, RC compiler path round-trip, archive reuse/hash rejection/cache repair/fallback download, parsing, arbitrary-CWD/space/quote paths, WhatIf, environment preservation, invalid arguments, locked and read-only deployment rejection.'
     } finally { Pop-Location }
 } finally {
     # Delete only this test's verified unique workspace directory.

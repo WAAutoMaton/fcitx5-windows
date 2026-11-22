@@ -36,7 +36,7 @@ function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
     if ($status -ne 0) { throw "$Executable failed ($status): $($Arguments -join ' ')" }
 }
 
-function Get-VerifiedArchive([string]$Url, [string]$Destination, [string]$Hash,
+function Get-VerifiedArchive([string[]]$Urls, [string]$Destination, [string]$Hash,
                              [string[]]$LocalArchives = @()) {
     if ((Test-Path -LiteralPath $Destination -PathType Leaf) -and
         (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash -eq $Hash) {
@@ -51,11 +51,37 @@ function Get-VerifiedArchive([string]$Url, [string]$Destination, [string]$Hash,
             return
         }
     }
-    Invoke-Checked 'curl.exe' @('-fL', '--retry', '3', '--connect-timeout', '20', '--max-time', '1200', '-o', "$Destination.download", $Url)
-    if ((Get-FileHash "$Destination.download" -Algorithm SHA256).Hash -ne $Hash) {
-        throw "SHA256 mismatch: $Url"
+    $candidates = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($candidate in $Urls) {
+        if ($candidate -and $seen.Add($candidate)) { $candidates.Add($candidate) }
     }
-    Move-Item -LiteralPath "$Destination.download" -Destination $Destination -Force
+    if (!$candidates.Count) {
+        throw "No download URL configured for $Destination"
+    }
+    $download = "$Destination.download"
+    $errors = [Collections.Generic.List[string]]::new()
+    foreach ($url in $candidates) {
+        if (Test-Path -LiteralPath $download) {
+            Remove-Item -LiteralPath $download -Force -ErrorAction SilentlyContinue
+        }
+        try {
+            Invoke-Checked 'curl.exe' @('-fL', '--retry', '2', '--connect-timeout', '15', '--max-time', '1200', '-o', $download, $url)
+            if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash -ne $Hash) {
+                throw "SHA256 mismatch: $url"
+            }
+            Move-Item -LiteralPath $download -Destination $Destination -Force
+            return
+        } catch {
+            if (Test-Path -LiteralPath $download) {
+                Remove-Item -LiteralPath $download -Force -ErrorAction SilentlyContinue
+            }
+            $message = $_.Exception.Message
+            $errors.Add("${url}: $message")
+            Write-Warning "Archive download failed from ${url}: $message"
+        }
+    }
+    throw "Failed to download verified archive for $Destination after $($candidates.Count) source(s): $($errors -join '; ')"
 }
 
 & "$PSScriptRoot/apply-pinyin-patches.ps1"
@@ -79,7 +105,11 @@ try {
 
     if ($DataMode -eq 'Source') {
         foreach ($data in $lock.sourceData) {
-            Get-VerifiedArchive "https://download.fcitx-im.org/data/$($data.file)" "$root/libime/data/$($data.file)" $data.sha256
+            $sourceUrls = @("https://download.fcitx-im.org/data/$($data.file)")
+            if ($data.PSObject.Properties['fallbackUrls'] -and $data.fallbackUrls) {
+                $sourceUrls += @($data.fallbackUrls)
+            }
+            Get-VerifiedArchive $sourceUrls "$root/libime/data/$($data.file)" $data.sha256
         }
     }
     $dependencyOptions = @("-DCMAKE_TOOLCHAIN_FILE=$root/cmake/pinyin-toolchain.cmake",
@@ -110,7 +140,11 @@ try {
                 }
             }
         }
-        Get-VerifiedArchive $lock.prebuiltData.url $cachedArchive $lock.prebuiltData.sha256 $localArchives
+        $prebuiltUrls = @($lock.prebuiltData.url)
+        if ($lock.prebuiltData.PSObject.Properties['fallbackUrls'] -and $lock.prebuiltData.fallbackUrls) {
+            $prebuiltUrls += @($lock.prebuiltData.fallbackUrls)
+        }
+        Get-VerifiedArchive $prebuiltUrls $cachedArchive $lock.prebuiltData.sha256 $localArchives
         $DataArchive = (Resolve-Path -LiteralPath $cachedArchive).Path
         Push-Location $cache
         try {
