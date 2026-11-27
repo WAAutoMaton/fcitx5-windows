@@ -29,6 +29,12 @@ function cmake {
             [IO.File]::WriteAllText("$($project.Stage)/bin/libzhuyin.dll", 'dependency fixture')
             [IO.File]::WriteAllText("$($project.Stage)/licenses/libpinyin/COPYING", 'dependency license')
         }
+        if ($project.Name -eq 'skk-deps') {
+            New-Item -ItemType Directory -Force "$($project.Stage)/bin", "$($project.Stage)/share/libskk/rules/default", "$($project.Stage)/licenses/libskk" | Out-Null
+            [IO.File]::WriteAllText("$($project.Stage)/bin/libskk.dll", 'dependency fixture')
+            [IO.File]::WriteAllText("$($project.Stage)/share/libskk/rules/default/metadata.json", '{"name":"Default"}')
+            [IO.File]::WriteAllText("$($project.Stage)/licenses/libskk/COPYING", 'libskk license')
+        }
     }
     $status = if ($testState.FailBuild -and $args[0] -eq '--build') { 9 } else { 0 }
     Set-Variable -Name LASTEXITCODE -Value $status -Scope 1
@@ -66,7 +72,7 @@ try {
     [IO.File]::WriteAllText("$msys2/clang64/share/rime-data/default.yaml", 'rime fixture')
     New-Item -ItemType Directory -Force "$msys2/clang64/share/opencc" | Out-Null
     [IO.File]::WriteAllText("$msys2/clang64/share/opencc/t2s.json", 'opencc fixture')
-    foreach ($name in @('glib2', 'db')) {
+    foreach ($name in @('glib2', 'db', 'libgee', 'json-glib')) {
         New-Item -ItemType Directory -Force "$msys2/clang64/share/licenses/$name" | Out-Null
         [IO.File]::WriteAllText("$msys2/clang64/share/licenses/$name/COPYING", 'fixture license')
     }
@@ -203,6 +209,33 @@ pathlib.Path(args.output).write_text(
         if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-mozc/$relative")) { throw "Missing Mozc dependency output: $relative" }
     }
     Remove-Item -LiteralPath "$temporary/plugins/fcitx5-mozc" -Recurse -Force
+    New-Item -ItemType Directory -Force "$temporary/plugins/fcitx5-skk" | Out-Null
+    [IO.File]::WriteAllText("$temporary/plugins/fcitx5-skk/CMakeLists.txt", 'fixture')
+    $skkFixtureJisyo = "$temporary/SKK-JISYO.L"
+    [IO.File]::WriteAllText($skkFixtureJisyo, ";; okuri-ari entries.`n;; okuri-nasi entries.`n")
+    $skkFixtureHash = (Get-FileHash -LiteralPath $skkFixtureJisyo -Algorithm SHA256).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText("$temporary/cmake/pinyin-lock.json",
+        (@{ skkJisyo = @{
+            file = 'SKK-JISYO.L'
+            url = 'https://example.invalid/SKK-JISYO.L'
+            sha256 = $skkFixtureHash
+        } } | ConvertTo-Json -Depth 4))
+    $badSkkJisyo = "$temporary/SKK-JISYO.bad"
+    [IO.File]::WriteAllText($badSkkJisyo, 'corrupted')
+    Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 -SkkJisyo $badSkkJisyo } 'SKK-JISYO SHA256 mismatch'
+    & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 -SkkJisyo $skkFixtureJisyo | Out-Null
+    foreach ($relative in @('bin/libskk.dll', 'share/libskk/rules/default/metadata.json', 'share/skk/SKK-JISYO.L',
+            'licenses/libskk/COPYING', 'licenses/glib2/COPYING', 'licenses/libgee/COPYING', 'licenses/json-glib/COPYING')) {
+        if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-skk/$relative")) { throw "Missing SKK dependency output: $relative" }
+    }
+    $skkSource = [IO.Path]::GetFullPath("$temporary/plugins/fcitx5-skk")
+    $skkConfigure = @($testState.Calls | Where-Object {
+        $_ -contains $skkSource -and $_ -contains '-DENABLE_QT=OFF' -and $_ -contains '-DSKK_PATH=$XDG_DATA_DIRS/skk'
+    })
+    if (!$skkConfigure.Count) {
+        throw 'SKK did not configure with ENABLE_QT=OFF and relocatable SKK_PATH.'
+    }
+    Remove-Item -LiteralPath "$temporary/plugins/fcitx5-skk" -Recurse -Force
     $testState.FailLfs = $true
     Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'git failed (1)'
     $testState.FailLfs = $false

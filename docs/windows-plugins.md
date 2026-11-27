@@ -63,6 +63,7 @@ plugins/
 - **`fcitx5-wenzhounese`**：温州话引擎，CI addon probe 验证 `nyi` 候选提交。
 - **`fcitx5-zhuyin`**：依赖 `clang64` GLib（`glib2`）与 Berkeley DB（`db`）。`cmake/zhuyin-deps` 从 SHA256 固定的 libpinyin 2.10.3 源码构建 libzhuyin 及三个原生数据工具（`patches/libpinyin-windows.patch`），编译固定模型至 `share/fcitx5/zhuyin`；引擎补丁位于 `patches/fcitx5-zhuyin-windows.patch`。CI 验证标准注音 `su3` 候选与 Enter 提交、模型连续保存/重载及 `full`/`base` 清单差异。
 - **`fcitx5-mozc`**：日语输入法引擎（进程内 Direct Client），由 `fcitx-contrib/fcitx5-mozc` 及其嵌套 `mozc`/`abseil-cpp`/`protobuf` 子模块构建，补丁位于 `patches/fcitx5-mozc-windows.patch`（配合上游 `protobuf.patch`）。构建时根据 `cmake/pinyin-lock.json` 获取 `mozc.data`（可用 `-MozcData` 指定本地文件，校验数据集魔数头，配置 `sha256` 时额外核对哈希），经 `embed_file.py` 生成嵌入式数据后编入 `libmozc.dll`（不依赖额外第三方运行库 DLL 或独立 `mozc_server` 进程）。CI 验证 `nihon` 候选与 Enter 提交及 `full`/`base` 清单差异。
+- **`fcitx5-skk`**：日语 SKK 输入法引擎。依赖 `clang64` GLib（`glib2`）、`libgee` 与 `json-glib`。`cmake/skk-deps` 从 SHA256 固定的 `libskk 1.1.1` 发布包预生成 C 源码构建 `libskk.dll`（`patches/libskk-windows.patch` 使用 `GMappedFile` 和 `XDG_DATA_DIRS` 查找规则，并通过 `Fcitx5::Utils` 提供精简 `xkbcommon` 垫片，无需 `valac` 或 `libxkbcommon`）；引擎补丁位于 `patches/fcitx5-skk-windows.patch`。构建时根据 `cmake/pinyin-lock.json` 校验并部署 `SKK-JISYO.L`（可用 `-SkkJisyo` 指定本地词典）及 `libskk` 规则目录与依赖许可证。CI 验证 `Kanji     ` 候选提交及 `full`/`base` 清单差异。
 
 ## ABI 与插件 SDK
 

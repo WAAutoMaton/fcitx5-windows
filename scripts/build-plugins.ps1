@@ -13,6 +13,7 @@ param(
     [string]$MSYS2Root = 'C:/msys64',
     [string]$DependencyPrefix = '',
     [string]$MozcData = '',
+    [string]$SkkJisyo = '',
     [ValidateRange(1, 256)][int]$Jobs = 6
 )
 
@@ -22,7 +23,7 @@ if (!$BuildRoot) { $BuildRoot = "$root/build/plugins" }
 if (!$DependencyPrefix -and (Test-Path -LiteralPath "$root/build/deps/clang64")) {
     $DependencyPrefix = "$root/build/deps/clang64"
 }
-foreach ($name in @('CorePrefix', 'Prefix', 'BuildRoot', 'MSYS2Root', 'DependencyPrefix', 'MozcData')) {
+foreach ($name in @('CorePrefix', 'Prefix', 'BuildRoot', 'MSYS2Root', 'DependencyPrefix', 'MozcData', 'SkkJisyo')) {
     $value = Get-Variable -Name $name -ValueOnly
     if ($value) {
         Set-Variable -Name $name -Value ($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($value).Replace('\', '/')) -WhatIf:$false
@@ -138,6 +139,69 @@ function Resolve-MozcDataFile([string]$Root, [string]$ExplicitPath) {
     throw "Failed to download verified Mozc data after $($urls.Count) source(s): $($errors -join '; ')"
 }
 
+function Assert-SkkJisyoValid([string]$Path, [string]$ExpectedHash) {
+    if ($ExpectedHash) {
+        $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $ExpectedHash) {
+            throw "SKK-JISYO SHA256 mismatch for '$Path': expected $ExpectedHash, got $actual"
+        }
+    }
+}
+
+function Resolve-SkkJisyoFile([string]$Root, [string]$ExplicitPath) {
+    $lockPath = "$Root/cmake/pinyin-lock.json"
+    if (!(Test-Path -LiteralPath $lockPath -PathType Leaf)) {
+        throw "Missing SKK dictionary lock file: $lockPath"
+    }
+    $spec = (Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json).skkJisyo
+    if (!$spec -or !$spec.file -or !$spec.url) {
+        throw "Missing skkJisyo metadata in $lockPath"
+    }
+    $expectedHash = if ($spec.PSObject.Properties['sha256'] -and $spec.sha256) {
+        $spec.sha256.ToLowerInvariant()
+    } else { '' }
+    if ($ExplicitPath) {
+        if (!(Test-Path -LiteralPath $ExplicitPath -PathType Leaf)) {
+            throw "SkkJisyo file was not found: $ExplicitPath"
+        }
+        Assert-SkkJisyoValid $ExplicitPath $expectedHash
+        return $ExplicitPath
+    }
+    $cacheDir = "$Root/build/skk-data"
+    $cached = "$cacheDir/$($spec.file)"
+    if (Test-Path -LiteralPath $cached -PathType Leaf) {
+        if (!$expectedHash -or
+            ((Get-FileHash -LiteralPath $cached -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expectedHash)) {
+            return $cached
+        }
+    }
+    New-Item -ItemType Directory -Force $cacheDir | Out-Null
+    $urls = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($candidate in @($spec.url) + $(if ($spec.PSObject.Properties['fallbackUrls'] -and $spec.fallbackUrls) { @($spec.fallbackUrls) } else { @() })) {
+        if ($candidate -and $seen.Add($candidate)) { $urls.Add($candidate) }
+    }
+    $errors = [Collections.Generic.List[string]]::new()
+    foreach ($url in $urls) {
+        $temp = "$cached.tmp.$([guid]::NewGuid().ToString('N'))"
+        try {
+            Invoke-PluginCommand 'curl.exe' @('--fail', '--location', '--retry', '2',
+                '--connect-timeout', '20', '--max-time', '600', '--silent', '--show-error',
+                '--output', $temp, $url)
+            Assert-SkkJisyoValid $temp $expectedHash
+            Move-Item -LiteralPath $temp -Destination $cached -Force
+            return $cached
+        } catch {
+            $message = $_.Exception.Message
+            $errors.Add("${url}: $message")
+            Write-Warning "SKK dictionary download failed from ${url}: $message"
+        } finally {
+            if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    throw "Failed to download verified SKK dictionary after $($urls.Count) source(s): $($errors -join '; ')"
+}
+
 $oldPath = $env:PATH
 $oldRoot = $env:MSYS2_ROOT
 $oldPkgConfig = $env:PKG_CONFIG_PATH
@@ -157,6 +221,7 @@ try {
         $stage = "$build/prefix"
         $pluginDependencies = $DependencyPrefix
         $pluginOptions = @()
+        $env:PKG_CONFIG_PATH = "$DependencyPrefix/lib/pkgconfig;$sysroot/lib/pkgconfig"
         if ($plugin.Name -eq 'fcitx5-mozc') {
             $embedScript = "$($plugin.FullName)/mozc/src/build_tools/embed_file.py"
             if (!(Test-Path -LiteralPath $embedScript -PathType Leaf)) {
@@ -172,6 +237,25 @@ try {
                 $python = Resolve-PythonExecutable $sysroot
                 Invoke-PluginCommand $python @($embedScript, '--input', $mozcDataFile, '--name', 'kOssMozcDataSet', '--output', $mozcDataInc)
             }
+        }
+        if ($plugin.Name -eq 'fcitx5-skk') {
+            $skkJisyoFile = Resolve-SkkJisyoFile $root $SkkJisyo
+            $skkDependencyBuild = "$BuildRoot/skk-deps"
+            $skkPrefix = "$skkDependencyBuild/prefix"
+            $env:PATH = ($runtimeDirectories -join ';') + ";$oldPath"
+            Invoke-PluginCommand 'cmake' @('-S', "$root/cmake/skk-deps", '-B', $skkDependencyBuild, '-G', 'Ninja',
+                "-DCMAKE_TOOLCHAIN_FILE=$root/cmake/windows-addon-toolchain.cmake",
+                "-DFCITX5_WINDOWS_SDK=$CorePrefix",
+                "-DWINDOWS_DEPENDENCY_PREFIX=$DependencyPrefix", "-DCMAKE_INSTALL_PREFIX=$skkPrefix",
+                '-DARCH=AMD64', '-DCMAKE_BUILD_TYPE=Release',
+                "-DCMAKE_C_COMPILER=$sysroot/bin/clang.exe", "-DCMAKE_CXX_COMPILER=$sysroot/bin/clang++.exe",
+                "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe")
+            Invoke-PluginCommand 'cmake' @('--build', $skkDependencyBuild, '-j', "$Jobs")
+            Invoke-PluginCommand 'cmake' @('--install', $skkDependencyBuild)
+            $pluginDependencies = (@($skkPrefix, $DependencyPrefix) | Where-Object { $_ }) -join ';'
+            $env:PKG_CONFIG_PATH = "$skkPrefix/lib/pkgconfig;$DependencyPrefix/lib/pkgconfig;$sysroot/lib/pkgconfig"
+            $runtimeDirectories = @("$skkPrefix/bin") + $runtimeDirectories
+            $pluginOptions += @('-DENABLE_QT=OFF', '-DSKK_PATH=$XDG_DATA_DIRS/skk')
         }
         if ($plugin.Name -eq 'fcitx5-zhuyin') {
             $dependencyBuild = "$BuildRoot/zhuyin-deps"
@@ -238,6 +322,20 @@ try {
                 }
                 New-Item -ItemType Directory -Force "$destination/licenses/$submodule" | Out-Null
                 Copy-Item -LiteralPath $license -Destination "$destination/licenses/$submodule/LICENSE" -Force
+            }
+        }
+        if ($plugin.Name -eq 'fcitx5-skk') {
+            New-Item -ItemType Directory -Force "$destination/bin", "$destination/share/libskk", "$destination/share/skk", "$destination/licenses" | Out-Null
+            Copy-Item -LiteralPath "$skkPrefix/bin/libskk.dll" -Destination "$destination/bin" -Force
+            Copy-Item -LiteralPath "$skkPrefix/share/libskk/rules" -Destination "$destination/share/libskk" -Recurse -Force
+            Copy-Item -LiteralPath $skkJisyoFile -Destination "$destination/share/skk/SKK-JISYO.L" -Force
+            Copy-Item -LiteralPath "$skkPrefix/licenses/libskk" -Destination "$destination/licenses" -Recurse -Force
+            foreach ($dependency in @('glib2', 'libgee', 'json-glib')) {
+                $license = @($DependencyPrefix, $sysroot) | Where-Object { $_ } |
+                    ForEach-Object { "$_/share/licenses/$dependency" } |
+                    Where-Object { Test-Path -LiteralPath $_ -PathType Container } | Select-Object -First 1
+                if (!$license) { throw "Missing $dependency dependency license." }
+                Copy-Item -LiteralPath $license -Destination "$destination/licenses" -Recurse -Force
             }
         }
         if ($plugin.Name -eq 'fcitx5-zhuyin') {

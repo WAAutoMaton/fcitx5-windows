@@ -9,8 +9,9 @@ validation and development registration.
 
 The CI/Nightly workflow publishes four x64 installers for Windows 10 version
 1809 (build 17763) or later: `base` (`fcitx5-chinese-addons`) and `full` (all
-bundled plugins under `plugins/`: `fcitx5-chinese-addons`, `fcitx5-rime`,
-`fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`), each with or
+bundled plugins under `plugins/`: `fcitx5-chinese-addons`, `fcitx5-mozc`,
+`fcitx5-rime`, `fcitx5-skk`, `fcitx5-table-extra`, `fcitx5-wenzhounese` and
+`fcitx5-zhuyin`), each with or
 without bundled Visual C++ and Windows App Runtime installers. See
 [Install in the README](../README.md#install) and
 [installer implementation](windows-installer-design.md).
@@ -24,7 +25,7 @@ tools and runtimes are already installed):
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
 | Core / input methods | MSYS2 `clang64` Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; pinned libime/`fcitx5-chinese-addons` data supplies Pinyin, Shuangpin and base table methods |
-| Full plugin edition | Git LFS; matching `clang64` `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` for Rime; `clang64` `glib2` and `db` for Zhuyin |
+| Full plugin edition | Git LFS; matching `clang64` `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` for Rime; `clang64` `glib2` and `db` for Zhuyin; `clang64` `glib2`, `libgee` and `json-glib` for SKK |
 | TSF | Standalone LLVM (`clang`, `clang++`, `llvm-rc`; LLVM 22+ required with MSVC 14.52+, CI pins `22.1.8`), Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
@@ -123,7 +124,7 @@ downloading, the script checks local `libime*.pkg.tar.zst` files in `build/deps`
 and `build/pinyin-data` against the locked SHA256 in `cmake/pinyin-lock.json`,
 and falls back across `prebuiltData.fallbackUrls` if the primary archive URL
 fails or fails checksum verification. CI caches the locked archives under
-`build/pinyin-data` and `build/mozc-data`.
+`build/pinyin-data`, `build/mozc-data` and `build/skk-data`.
 
 For individual Core, TSF and Settings builds, see
 [input-method integration](pinyin.md#build-and-deploy-core).
@@ -131,10 +132,10 @@ For individual Core, TSF and Settings builds, see
 ## Independent Input-Method Plugins
 
 Bundled plugin submodules live under `plugins/`: `fcitx5-chinese-addons`,
-`fcitx5-mozc`, `fcitx5-rime`, `fcitx5-table-extra`, `fcitx5-wenzhounese` and
-`fcitx5-zhuyin`. `fcitx5-chinese-addons` is built by `build-pinyin.ps1` as part
-of `base`. To build and deploy every additional plugin against the same build's
-SDK:
+`fcitx5-mozc`, `fcitx5-rime`, `fcitx5-skk`, `fcitx5-table-extra`,
+`fcitx5-wenzhounese` and `fcitx5-zhuyin`. `fcitx5-chinese-addons` is built by
+`build-pinyin.ps1` as part of `base`. To build and deploy every additional
+plugin against the same build's SDK:
 
 ```powershell
 ./scripts/build-plugins.ps1 -CorePrefix ./build/all/prefix -Prefix ./dist/pinyin
@@ -144,9 +145,9 @@ SDK:
 `git lfs pull`, builds each CMake project with
 `cmake/windows-addon-toolchain.cmake`, audits private DLL imports, copies needed
 shared runtime DLLs and installs into `Prefix/plugins/<name>`. It also supports
-`-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-MozcData`, `-Jobs` and
-`-WhatIf`. Apply pinned Windows patches (`scripts/apply-pinyin-patches.ps1`)
-before standalone plugin builds.
+`-BuildRoot`, `-MSYS2Root`, `-DependencyPrefix`, `-MozcData`, `-SkkJisyo`,
+`-Jobs` and `-WhatIf`. Apply pinned Windows patches
+(`scripts/apply-pinyin-patches.ps1`) before standalone plugin builds.
 
 Plugin specifics:
 
@@ -156,6 +157,12 @@ Plugin specifics:
   (plus SHA256 when configured), generates `mozc_data.inc` via `embed_file.py`
   and builds the self-contained in-process `libmozc.dll` with bundled
   dependency licenses.
+- **`fcitx5-skk`**: requires `clang64` GLib (`glib2`), `libgee` and
+  `json-glib`. `cmake/skk-deps` builds `libskk.dll` from SHA256-pinned
+  `libskk 1.1.1` pre-generated C sources (`patches/libskk-windows.patch`) with
+  a minimal `Fcitx5::Utils`-backed `xkbcommon` shim, downloads/verifies
+  `SKK-JISYO.L` into `build/skk-data` (or uses `-SkkJisyo`), and deploys
+  `libskk` rules, `SKK-JISYO.L`, required DLLs and dependency licenses.
 
 - **`fcitx5-table-extra`**: resource-only package reusing the base `table`
   engine. The SDK's native `libime_tabledict.exe` compiles all 25 tables

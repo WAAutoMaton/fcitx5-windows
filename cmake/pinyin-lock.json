@@ -6,6 +6,7 @@
     "fcitx5-mozc": "d55a0517e127c24def4d498d2428c39f956525ae",
     "fcitx5-mozc-protobuf": "4b0c3aacf0657fbf38253b38918d3358dd4319ec",
     "fcitx5-rime": "f5048611ea60e53955d5f013f608551e85d38f09",
+    "fcitx5-skk": "81fa6bdf4bd16d3df20481b545543a448d224061",
     "fcitx5-zhuyin": "24717651c0293464bb4252c13b6852769cb72c5b"
   },
   "sourceData": [
@@ -27,5 +28,13 @@
   "mozcData": {
     "file": "mozc.data",
     "url": "https://github.com/fcitx-contrib/fcitx5-mozc/releases/download/latest/mozc.data"
+  },
+  "skkJisyo": {
+    "file": "SKK-JISYO.L",
+    "url": "https://raw.githubusercontent.com/skk-dev/dict/0a164e6b990c5eb5b59eb7d8789f08865dc2f644/SKK-JISYO.L",
+    "fallbackUrls": [
+      "https://cdn.jsdelivr.net/gh/skk-dev/dict@0a164e6b990c5eb5b59eb7d8789f08865dc2f644/SKK-JISYO.L"
+    ],
+    "sha256": "c791f578d1b4040fce282db29bc22b2cc7ea46f83e269fab2e0fa779e2967e40"
   }
 }

@@ -1,0 +1,18 @@
+#ifndef LIBSKK_WINDOWS_CONFIG_H
+#define LIBSKK_WINDOWS_CONFIG_H
+
+#define GETTEXT_PACKAGE "libskk"
+#define PACKAGE "libskk"
+#define PACKAGE_NAME "libskk"
+#define PACKAGE_STRING "libskk @VERSION@"
+#define PACKAGE_TARNAME "libskk"
+#define PACKAGE_VERSION "@VERSION@"
+#define VERSION "@VERSION@"
+#define HAVE_STDINT_H 1
+#define HAVE_STDLIB_H 1
+#define HAVE_STRING_H 1
+#define HAVE_SYS_STAT_H 1
+#define HAVE_SYS_TYPES_H 1
+#define STDC_HEADERS 1
+
+#endif

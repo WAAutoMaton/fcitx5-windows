@@ -25,3 +25,6 @@
 [submodule "plugins/fcitx5-mozc"]
 	path = plugins/fcitx5-mozc
 	url = https://github.com/fcitx-contrib/fcitx5-mozc
+[submodule "plugins/fcitx5-skk"]
+	path = plugins/fcitx5-skk
+	url = https://github.com/fcitx/fcitx5-skk

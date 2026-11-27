@@ -54,6 +54,8 @@ jobs:
             mingw-w64-clang-x86_64-boost `
             mingw-w64-clang-x86_64-zstd `
             mingw-w64-clang-x86_64-glib2 `
+            mingw-w64-clang-x86_64-libgee `
+            mingw-w64-clang-x86_64-json-glib `
             mingw-w64-clang-x86_64-db `
             mingw-w64-clang-x86_64-librime `
             mingw-w64-clang-x86_64-librime-data
@@ -73,6 +75,8 @@ jobs:
           "prebuilt_sha256=$($lock.prebuiltData.sha256.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "mozc_file=$($lock.mozcData.file)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "mozc_key=$mozcKey" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "skk_file=$($lock.skkJisyo.file)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "skk_sha256=$($lock.skkJisyo.sha256.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Cache prebuilt Pinyin data
         uses: actions/cache@v6
@@ -85,6 +89,12 @@ jobs:
         with:
           path: build/mozc-data/${{ steps.data-lock.outputs.mozc_file }}
           key: mozc-data-${{ steps.data-lock.outputs.mozc_key }}
+
+      - name: Cache SKK dictionary
+        uses: actions/cache@v6
+        with:
+          path: build/skk-data/${{ steps.data-lock.outputs.skk_file }}
+          key: skk-jisyo-${{ steps.data-lock.outputs.skk_sha256 }}
 
       - name: Build base Release runtime tree without tests
         run: |
@@ -132,6 +142,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Bundled Mozc probe failed.' }
             & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default mozc --absent
             if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains Mozc.' }
+            & ./dist/ci-runtime-full/bin/addon_probe.exe "$PWD/dist/ci-runtime-full" --default skk 'Kanji     '
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled SKK probe failed.' }
+            & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default skk --absent
+            if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains SKK.' }
             $env:PATH = "$PWD/dist/ci-runtime-full/bin;$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/bin;$env:PATH"
             & ./build/ci-x64/plugins/zhuyin-deps/zhuyin_model_probe.exe "$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/share/fcitx5/zhuyin"
             if ($LASTEXITCODE -ne 0) { throw 'Zhuyin model save/reload probe failed.' }
@@ -420,6 +434,16 @@ jobs:
             "$mozc/share/locale/ja/LC_MESSAGES/fcitx5-mozc.mo",
             "$mozc/share/locale/zh_CN/LC_MESSAGES/fcitx5-mozc.mo",
             "$mozc/share/locale/zh_TW/LC_MESSAGES/fcitx5-mozc.mo")
+          $skk = 'plugins/fcitx5-skk'
+          $expected += @("$skk/lib/fcitx5/skk.dll", "$skk/bin/libskk.dll",
+            "$skk/share/fcitx5/addon/skk.conf", "$skk/share/fcitx5/inputmethod/skk.conf",
+            "$skk/share/fcitx5/skk/dictionary_list", "$skk/share/skk/SKK-JISYO.L",
+            "$skk/share/libskk/rules/default/metadata.json",
+            "$skk/licenses/LICENSES/GPL-3.0-or-later.txt", "$skk/licenses/libskk/COPYING",
+            "$skk/licenses/glib2/COPYING", "$skk/licenses/libgee/COPYING", "$skk/licenses/json-glib/COPYING",
+            "$skk/share/locale/ja/LC_MESSAGES/fcitx5-skk.mo",
+            "$skk/share/locale/zh_CN/LC_MESSAGES/fcitx5-skk.mo",
+            "$skk/share/locale/zh_TW/LC_MESSAGES/fcitx5-skk.mo")
           foreach ($path in $expected) {
             $count = @($manifest.files | Where-Object path -eq $path).Count
             $required = if ('${{ matrix.edition }}' -eq 'full') { 1 } else { 0 }

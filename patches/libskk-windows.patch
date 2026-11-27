@@ -1,0 +1,150 @@
+diff --git a/libskk/util.c b/libskk/util.c
+index 65677f3..1d8ae0c 100644
+--- a/libskk/util.c
++++ b/libskk/util.c
+@@ -27,7 +27,9 @@
+ #include "libskk/libskk.h"
+ #include <config.h>
+ #include <gio/gio.h>
++#ifndef _WIN32
+ #include <sys/mman.h>
++#endif
+ #include <fcntl.h>
+ #include <sys/types.h>
+ #include <sys/stat.h>
+@@ -195,6 +197,9 @@ struct _SkkMemoryMappedFilePrivate {
+ 	void* _memory;
+ 	gsize _length;
+ 	GFile* file;
++#ifdef _WIN32
++	GMappedFile* mapped_file;
++#endif
+ };
+ 
+ typedef enum  {
+@@ -1122,6 +1127,30 @@ skk_util_build_data_path (const gchar* subdir,
+ 		_tmp7_ = _tmp6_;
+ 		gee_abstract_collection_add ((GeeAbstractCollection*) _tmp4_, _tmp7_);
+ 		_g_free0 (_tmp7_);
++#ifdef _WIN32
++		{
++			const gchar* xdg = g_getenv ("XDG_DATA_DIRS");
++			if (xdg != NULL && xdg[0] != '\0') {
++				gchar** xdg_dirs = g_strsplit (xdg, G_SEARCHPATH_SEPARATOR_S, 0);
++				for (gint i = 0; xdg_dirs && xdg_dirs[i]; i++) {
++					if (xdg_dirs[i][0] != '\0') {
++						gchar* candidate = g_build_filename (xdg_dirs[i], PACKAGE_NAME, subdir, NULL);
++						gee_abstract_collection_add ((GeeAbstractCollection*) dirs, candidate);
++						g_free (candidate);
++					}
++				}
++				g_strfreev (xdg_dirs);
++			}
++			const gchar* const* sys_dirs = g_get_system_data_dirs ();
++			for (gint i = 0; sys_dirs && sys_dirs[i]; i++) {
++				if (sys_dirs[i][0] != '\0') {
++					gchar* candidate = g_build_filename (sys_dirs[i], PACKAGE_NAME, subdir, NULL);
++					gee_abstract_collection_add ((GeeAbstractCollection*) dirs, candidate);
++					g_free (candidate);
++				}
++			}
++		}
++#endif
+ 		_tmp8_ = dirs;
+ 		_tmp9_ = g_build_filename (PKGDATADIR, subdir, NULL);
+ 		_tmp10_ = _tmp9_;
+@@ -1137,7 +1166,7 @@ skk_util_build_data_path (const gchar* subdir,
+ 		gchar** _tmp14_;
+ 		gint _tmp14__length1;
+ 		_tmp11_ = path;
+-		_tmp13_ = _tmp12_ = g_strsplit (_tmp11_, ":", 0);
++		_tmp13_ = _tmp12_ = g_strsplit (_tmp11_, G_SEARCHPATH_SEPARATOR_S, 0);
+ 		elements = _tmp13_;
+ 		elements_length1 = _vala_array_length (_tmp12_);
+ 		_elements_size_ = elements_length1;
+@@ -1727,6 +1756,15 @@ skk_memory_mapped_file_remap (SkkMemoryMappedFile* self,
+ 	void* _tmp0_;
+ 	GError* _inner_error0_ = NULL;
+ 	g_return_if_fail (self != NULL);
++#ifdef _WIN32
++	if (self->priv->mapped_file != NULL) {
++		g_mapped_file_unref (self->priv->mapped_file);
++		self->priv->mapped_file = NULL;
++	}
++	self->priv->_memory = NULL;
++	self->priv->_length = (gsize) 0;
++	(void) _tmp0_;
++#else
+ 	_tmp0_ = self->priv->_memory;
+ 	if (_tmp0_ != NULL) {
+ 		void* _tmp1_;
+@@ -1734,6 +1772,7 @@ skk_memory_mapped_file_remap (SkkMemoryMappedFile* self,
+ 		munmap (_tmp1_, self->priv->_length);
+ 		self->priv->_memory = NULL;
+ 	}
++#endif
+ 	skk_memory_mapped_file_map (self, &_inner_error0_);
+ 	if (G_UNLIKELY (_inner_error0_ != NULL)) {
+ 		if (_inner_error0_->domain == SKK_SKK_DICT_ERROR) {
+@@ -1751,6 +1790,30 @@ static void
+ skk_memory_mapped_file_map (SkkMemoryMappedFile* self,
+                             GError** error)
+ {
++#ifdef _WIN32
++	gchar* filename = NULL;
++	GError* map_error = NULL;
++	GMappedFile* mapped = NULL;
++	g_return_if_fail (self != NULL);
++	filename = g_file_get_path (self->priv->file);
++	if (filename == NULL) {
++		g_set_error_literal (error, SKK_SKK_DICT_ERROR, SKK_SKK_DICT_ERROR_NOT_READABLE, "can't resolve file path");
++		return;
++	}
++	mapped = g_mapped_file_new (filename, FALSE, &map_error);
++	if (mapped == NULL) {
++		g_set_error (error, SKK_SKK_DICT_ERROR, SKK_SKK_DICT_ERROR_NOT_READABLE,
++		             "can't map %s: %s", filename, map_error ? map_error->message : "unknown error");
++		g_clear_error (&map_error);
++		g_free (filename);
++		return;
++	}
++	g_free (filename);
++	self->priv->mapped_file = mapped;
++	self->priv->_memory = g_mapped_file_get_contents (mapped);
++	self->priv->_length = g_mapped_file_get_length (mapped);
++	return;
++#else
+ 	gint fd = 0;
+ 	GFile* _tmp0_;
+ 	gchar* _tmp1_;
+@@ -1831,6 +1894,7 @@ skk_memory_mapped_file_map (SkkMemoryMappedFile* self,
+ 	}
+ 	_tmp17_ = stat;
+ 	self->priv->_length = _tmp17_.st_size;
++#endif
+ }
+ 
+ void*
+@@ -1872,6 +1936,9 @@ skk_memory_mapped_file_instance_init (SkkMemoryMappedFile * self,
+ 	self->priv = skk_memory_mapped_file_get_instance_private (self);
+ 	self->priv->_memory = NULL;
+ 	self->priv->_length = (gsize) 0;
++#ifdef _WIN32
++	self->priv->mapped_file = NULL;
++#endif
+ }
+ 
+ static void
+@@ -1879,6 +1946,12 @@ skk_memory_mapped_file_finalize (GObject * obj)
+ {
+ 	SkkMemoryMappedFile * self;
+ 	self = G_TYPE_CHECK_INSTANCE_CAST (obj, SKK_TYPE_MEMORY_MAPPED_FILE, SkkMemoryMappedFile);
++#ifdef _WIN32
++	if (self->priv->mapped_file != NULL) {
++		g_mapped_file_unref (self->priv->mapped_file);
++		self->priv->mapped_file = NULL;
++	}
++#endif
+ 	_g_object_unref0 (self->priv->file);
+ 	G_OBJECT_CLASS (skk_memory_mapped_file_parent_class)->finalize (obj);
+ }

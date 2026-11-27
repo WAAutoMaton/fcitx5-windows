@@ -1,0 +1,117 @@
+diff --git a/src/skk.cpp b/src/skk.cpp
+index 7df0188..554d610 100644
+--- a/src/skk.cpp
++++ b/src/skk.cpp
+@@ -12,6 +12,7 @@
+ #include <cstdint>
+ #include <cstdio>
+ #include <cstring>
++#include <filesystem>
+ #include <istream>
+ #include <memory>
+ #include <stdexcept>
+@@ -57,6 +58,11 @@ namespace {
+ 
+ FCITX_DEFINE_LOG_CATEGORY(skk_logcategory, "skk");
+ 
++std::string pathToUtf8(const std::filesystem::path &path) {
++    const auto value = path.generic_u8string();
++    return {reinterpret_cast<const char *>(value.data()), value.size()};
++}
++
+ Text skkContextGetPreedit(SkkContext *context) {
+     Text preedit;
+ 
+@@ -182,6 +188,7 @@ public:
+         skk_candidate_list_select_at(
+             skkCandidates,
+             idx_ % skk_candidate_list_get_page_size(skkCandidates));
++        state->commitOutput();
+     }
+ 
+ private:
+@@ -539,13 +546,20 @@ void SkkEngine::loadDictionary() {
+ 
+             std::string_view partialpath = path;
+             if (stringutils::consumePrefix(partialpath, "$FCITX_CONFIG_DIR/")) {
+-                path = StandardPaths::global().userDirectory(
+-                           StandardPathsType::PkgData) /
+-                       partialpath;
++                const auto userDir = StandardPaths::global().userDirectory(
++                    StandardPathsType::PkgData);
++                if (userDir.empty()) {
++                    continue;
++                }
++                path = pathToUtf8(userDir / partialpath);
+             } else if (stringutils::consumePrefix(partialpath,
+                                                   "$XDG_DATA_DIRS/")) {
+-                path = StandardPaths::global().locate(StandardPathsType::Data,
+-                                                      partialpath);
++                const auto located = StandardPaths::global().locate(
++                    StandardPathsType::Data, partialpath);
++                if (located.empty()) {
++                    continue;
++                }
++                path = pathToUtf8(located);
+             }
+ 
+             if (mode == 1) {
+@@ -641,28 +655,29 @@ SkkState::~SkkState() {
+ 
+ void SkkState::keyEvent(KeyEvent &keyEvent) {
+     KeyEventScope keyEventScope(*this);
+-    if (handleCandidate(keyEvent)) {
+-        return;
+-    }
+-
+-    uint32_t modifiers = static_cast<uint32_t>(keyEvent.rawKey().states() &
+-                                               KeyState::SimpleMask);
++    if (!handleCandidate(keyEvent)) {
++        uint32_t modifiers = static_cast<uint32_t>(keyEvent.rawKey().states() &
++                                                   KeyState::SimpleMask);
+ 
+-    if (keyEvent.isRelease()) {
+-        modifiers |= SKK_MODIFIER_TYPE_RELEASE_MASK;
+-    }
++        if (keyEvent.isRelease()) {
++            modifiers |= SKK_MODIFIER_TYPE_RELEASE_MASK;
++        }
+ 
+-    GObjectUniquePtr<SkkKeyEvent> key{skk_key_event_new_from_x_keysym(
+-        keyEvent.rawKey().sym(), static_cast<SkkModifierType>(modifiers),
+-        nullptr)};
+-    if (!key) {
+-        return;
+-    }
++        GObjectUniquePtr<SkkKeyEvent> key{skk_key_event_new_from_x_keysym(
++            keyEvent.rawKey().sym(), static_cast<SkkModifierType>(modifiers),
++            nullptr)};
++        if (!key) {
++            return;
++        }
+ 
+-    if (skk_context_process_key_event(context_.get(), key.get())) {
+-        keyEvent.filterAndAccept();
++        if (skk_context_process_key_event(context_.get(), key.get())) {
++            keyEvent.filterAndAccept();
++        }
+     }
++    commitOutput();
++}
+ 
++void SkkState::commitOutput() {
+     if (auto str =
+             UniqueCPtr<char, g_free>{skk_context_poll_output(context_.get())}) {
+         if (str && str.get()[0]) {
+diff --git a/src/skk.h b/src/skk.h
+index b1df10c..bd34d19 100644
+--- a/src/skk.h
++++ b/src/skk.h
+@@ -209,6 +209,7 @@ public:
+     ~SkkState();
+ 
+     void keyEvent(KeyEvent &keyEvent);
++    void commitOutput();
+     void updateUI();
+     void doUpdateUI();
+     SkkContext *context() { return context_.get(); }
