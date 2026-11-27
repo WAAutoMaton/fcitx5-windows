@@ -1,6 +1,6 @@
 # Fcitx5 Windows
 
-[中文文档](README_zh-cn.md)
+[中文文档](README_zh-cn.md) | [日本語](README_ja.md)
 
 An in-progress Windows port of Fcitx5 for AMD64. Core runs in a separate
 process, x64 and x86 TSF DLLs integrate with applications, and a WinUI 3

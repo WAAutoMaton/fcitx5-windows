@@ -1,6 +1,6 @@
 # Fcitx5 Windows
 
-[English](README.md)
+[English](README.md) | [日本語](README_ja.md)
 
 面向 AMD64 的 Fcitx5 Windows 移植版本（持续开发中）。Core 在独立进程中运行，x64 与 x86 TSF DLL 负责与应用程序集成，WinUI 3 设置程序管理输入法列表和引擎配置。
 
