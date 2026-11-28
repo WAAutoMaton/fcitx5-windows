@@ -11,7 +11,7 @@
 namespace fcitx::win32::ipc {
 
 constexpr uint32_t kMagic = 0x46574358;
-constexpr uint16_t kVersion = 16;
+constexpr uint16_t kVersion = 17;
 constexpr uint32_t kMaxPayloadSize = 1024 * 1024;
 constexpr size_t kHeaderSize = 28;
 
@@ -100,6 +100,7 @@ enum class UiLanguage : uint8_t {
     TraditionalChinese = 2,
     English = 3,
     Japanese = 4,
+    Korean = 5,
 };
 
 using Shortcuts = std::array<std::string, 6>;
@@ -126,7 +127,7 @@ struct GlobalSettingsReply {
 };
 
 constexpr bool validLanguage(UiLanguage language, bool allowSystem = true) {
-    return language <= UiLanguage::Japanese &&
+    return language <= UiLanguage::Korean &&
            (allowSystem || language != UiLanguage::System);
 }
 

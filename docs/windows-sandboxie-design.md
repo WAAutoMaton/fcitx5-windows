@@ -10,7 +10,7 @@ Sandboxie 内的 TSF 只连接当前用户/session 的宿主 Core：输入法列
 
 - **环境检测**：共享辅助模块动态查询已加载的 `SbieDll` API，区分宿主、沙箱和未知状态；模块存在但查询异常时禁止本地服务启动。
 - **HostOnly 策略**：沙箱 TSF 不创建 `ServiceController`，不读写本地服务状态，不启动 Core/Settings/控制子进程。Core 与 Settings 启动前拒绝沙箱或未知环境。
-- **连接与服务端归属**：沿用现有 SID/session 管理 Pipe（`\\.\pipe\fcitx5-windows-v2-<SID>-<session>`，协议 **v16**）和当前用户 ACL。沙箱客户端检查 Pipe 服务端 PID 并通过 Sandboxie API 排除沙箱内服务端，无法确认时拒绝连接。失败不消费按键、取消旧预编辑，超时请求不重放。
+- **连接与服务端归属**：沿用现有 SID/session 管理 Pipe（`\\.\pipe\fcitx5-windows-v2-<SID>-<session>`，协议 **v17**）和当前用户 ACL。沙箱客户端检查 Pipe 服务端 PID 并通过 Sandboxie API 排除沙箱内服务端，无法确认时拒绝连接。失败不消费按键、取消旧预编辑，超时请求不重放。
 - **安全模式匿名 token 兼容**：Sandboxie 启用 `UseSecurityMode=y` 时，宿主通过 Pipe 模拟可能看到匿名 SID（`S-1-5-7`）与匿名登录 LUID。原管理 Pipe 在连接已通过当前用户专用 DACL、token 查询成功且非 AppContainer 时，允许该匿名 token 通过内核 `GetNamedPipeClientSessionId` 核对客户端 session（不增加匿名 ACE，不放宽 ACL）。该例外仅用于管理 Pipe，AppContainer `-input` 入口仍严格要求 `sameLogin`。UAC linked-token 兼容见 [UAC 方案](windows-uac-ipc-design.md)。
 
 ## 操作路由
@@ -32,7 +32,7 @@ Sandboxie 内的 TSF 只连接当前用户/session 的宿主 Core：输入法列
 
 ### 1. 准备宿主 Core 与沙箱
 
-1. 先在沙箱外确认 Fcitx5 已安装、已注册，且 Core、TSF DLL 与 Settings 为同一套构建（协议 v16），并能在普通应用正常输入中文。
+1. 先在沙箱外确认 Fcitx5 已安装、已注册，且 Core、TSF DLL 与 Settings 为同一套构建（协议 v17），并能在普通应用正常输入中文。
 2. 记下目标沙箱在 `Sandboxie.ini` 中的节名（例如 `[DefaultBox]` 对应 `DefaultBox`，多个沙箱需分别配置）。
 3. 在沙箱外以当前用户启动宿主 Core（不要用 Sandboxie 运行或强制重定向它）：
 
@@ -93,7 +93,7 @@ OpenPipePath=\Device\NamedPipe\fcitx5-windows-v2-S-1-5-21-111111111-222222222-33
 | 沙箱外也无法输入 | 先确认宿主 Core、TSF 注册与引擎数据正常 |
 | 沙箱外正常、沙箱内无法输入 | 检查应用是否位于目标沙箱、规则节名与 SID 是否匹配、应用及后台进程是否已彻底重启 |
 | 脚本提示沙箱不存在或未启用 | 确认 `-BoxName` 为配置节名且该节包含 `Enabled=y` |
-| 连接提示协议不匹配 | 统一部署同版本 Core/TSF/Settings（协议 v16，Pipe 名保持历史 `v2` 前缀）并重启应用 |
+| 连接提示协议不匹配 | 统一部署同版本 Core/TSF/Settings（协议 v17，Pipe 名保持历史 `v2` 前缀）并重启应用 |
 | 沙箱内出现 Core 或 Settings | 清理残留旧版沙箱进程或检查强制沙箱规则 |
 
 工具与自动化回归：

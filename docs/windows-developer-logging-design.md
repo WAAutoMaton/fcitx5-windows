@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Core、TSF 和 Settings 已接入共享异步结构化日志，同时 Core 默认持久化纯文本 Fcitx5 引擎日志。Settings 全局设置提供默认关闭的详细日志开关。当前 IPC 为 **v16**，`windows-ui.conf` 为 **v4**。
+Core、TSF 和 Settings 已接入共享异步结构化日志，同时 Core 默认持久化纯文本 Fcitx5 引擎日志。Settings 全局设置提供默认关闭的详细日志开关。当前 IPC 为 **v17**，`windows-ui.conf` 为 **v4**。
 
 - **引擎日志（`fcitx5-YYYYMMDD.log`）**：始终记录，默认阈值为 `Info`，开启详细日志后即时切换到 `Debug`（`key_trace` 保持关闭）。
 - **详细结构化日志（`core-*`、`tsf-*`、`settings-*`）**：仅开启详细日志时写入，记录 TSF/IPC、Pipe 握手与 UAC 身份、候选位置与渲染、焦点、Core 状态，以及 Settings 操作阶段、窗口/进程退出和异常元数据。
@@ -107,7 +107,7 @@ Core 启动及运行期间每小时执行一次清理，写入操作也会触发
 
 | 层级 | 入口与覆盖范围 |
 | --- | --- |
-| 单元 / 模拟 | `test_diagnostic_log`（轮转/期限/容量/丢弃/失败/引擎日志）；`test_i18n`（v1–v4 迁移、布局、日志字段与共享 revision）；`test_protocol`（v16 编解码与非法字段） |
+| 单元 / 模拟 | `test_diagnostic_log`（轮转/期限/容量/丢弃/失败/引擎日志）；`test_i18n`（v1–v4 迁移、布局、日志字段与共享 revision）；`test_protocol`（v17 编解码与非法字段） |
 | TSF 免注册 | `test_candidate`、`test_candidate_tsf`（绘制/几何、UIElement、迟到 session 与日志元数据） |
 | 真实引擎 / IPC | `scripts/test-developer-logging.ps1`（引擎 Info/Debug 即时切换与重启恢复、Core/TSF 开关同步、真实输入、断线与隐私检查） |
 | WinUI 开发者页 | `scripts/test-ui-localization.ps1 -TestLogging`（开发者页、应用/重置/冲突、目录与关闭行为） |

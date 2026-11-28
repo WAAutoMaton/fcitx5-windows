@@ -114,10 +114,11 @@ The unified build places Settings' MSVC i18n build and MSBuild artifacts under
 
 ### Translations and Prebuilt Data
 
-Windows UI translations live in `po/zh_CN.po`, `po/zh_TW.po` and `po/ja.po` and
-compile to `share/locale/<lang>/LC_MESSAGES/fcitx5-windows.mo` (English uses
-source strings). Run `scripts/update-translations.ps1` when adding messages (or
-`-ExtractOnly` for POT only). The runtime includes `licenses/Boost-1.92-LICENSE.txt`.
+Windows UI translations live in `po/zh_CN.po`, `po/zh_TW.po`, `po/ja.po` and
+`po/ko.po` and compile to `share/locale/<lang>/LC_MESSAGES/fcitx5-windows.mo`
+(English uses source strings). Run `scripts/update-translations.ps1` when adding
+messages (or `-ExtractOnly` for POT only). The runtime includes
+`licenses/Boost-1.92-LICENSE.txt`.
 
 Precompiled dictionary/model data is cached in `build/pinyin-data`. Before
 downloading, the script checks local `libime*.pkg.tar.zst` files in `build/deps`
@@ -182,7 +183,7 @@ discovery, layout and dependency copying using fixture projects.
 
 ## Status Menus
 
-IPC v16 carries the focused context's Fcitx `StatusArea` / `Action/Menu` tree.
+IPC v17 carries the focused context's Fcitx `StatusArea` / `Action/Menu` tree.
 Desktop popups and system `ITfMenu` share frozen views; AppContainer input pipes
 reject menu queries and actions.
 

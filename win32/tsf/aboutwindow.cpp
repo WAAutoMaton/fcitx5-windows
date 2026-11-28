@@ -60,7 +60,7 @@ std::wstring AboutWindow::details(const win32::i18n::Translator *translator) {
         *buildinfo::ci
             ? buildinfo::ci
             : translation.wide("about", "Local build (no CI information)");
-    result += L"\r\nCommit\uff1a";
+    result += L"\r\n" + translation.wide("about", "Commit: ");
     result += std::wstring(buildinfo::commit) == L"Unavailable"
                   ? translation.wide("about", "Unavailable")
                   : buildinfo::commit;
@@ -236,9 +236,14 @@ LRESULT CALLBACK AboutWindow::windowProc(HWND window, UINT message,
             if (webLink(url) && reinterpret_cast<INT_PTR>(ShellExecuteW(
                                     window, L"open", url, nullptr, nullptr,
                                     SW_SHOWNORMAL)) <= 32) {
-                MessageBoxW(window,
-                            L"\u65e0\u6cd5\u6253\u5f00\u94fe\u63a5\u3002",
-                            kTitle, MB_OK | MB_ICONERROR);
+                const auto snapshot = self->translation_;
+                const win32::i18n::Translator english;
+                const auto &translation = snapshot ? *snapshot : english;
+                MessageBoxW(
+                    window,
+                    translation.wide("about", "Cannot open link.").c_str(),
+                    translation.wide("about", "About Fcitx5").c_str(),
+                    MB_OK | MB_ICONERROR);
             }
         }
         return 0;

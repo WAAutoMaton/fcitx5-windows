@@ -22,6 +22,7 @@ i18n::Translator windowsTranslator() {
         language == "zh_CN"   ? ipc::UiLanguage::SimplifiedChinese
         : language == "zh_TW" ? ipc::UiLanguage::TraditionalChinese
         : (language == "ja_JP" || language == "ja") ? ipc::UiLanguage::Japanese
+        : (language == "ko_KR" || language == "ko") ? ipc::UiLanguage::Korean
                                                     : ipc::UiLanguage::English);
 }
 
@@ -150,8 +151,57 @@ void WindowsSettings::initializeMethods() {
             info.language = entry.languageCode();
             info.panel = info.keyboard ? "keyboard" : entry.addon();
             info.iconLabel = entry.label();
-            if (info.id == "keyboard-us") {
-                info.name = translator.text("input-method", "English Keyboard");
+            static constexpr std::pair<const char *, const char *>
+                keyboardNames[] = {
+                    {"keyboard-us",
+                     i18n::mark("input-method", "English Keyboard")},
+                    {"keyboard-gb",
+                     i18n::mark("input-method", "British Keyboard")},
+                    {"keyboard-fr",
+                     i18n::mark("input-method", "French Keyboard")},
+                    {"keyboard-de",
+                     i18n::mark("input-method", "German Keyboard")},
+                    {"keyboard-es",
+                     i18n::mark("input-method", "Spanish Keyboard")},
+                    {"keyboard-it",
+                     i18n::mark("input-method", "Italian Keyboard")},
+                    {"keyboard-pt",
+                     i18n::mark("input-method", "Portuguese Keyboard")},
+                    {"keyboard-ru",
+                     i18n::mark("input-method", "Russian Keyboard")},
+                    {"keyboard-uk",
+                     i18n::mark("input-method", "Ukrainian Keyboard")},
+                    {"keyboard-ar",
+                     i18n::mark("input-method", "Arabic Keyboard")},
+                    {"keyboard-he",
+                     i18n::mark("input-method", "Hebrew Keyboard")},
+                    {"keyboard-el",
+                     i18n::mark("input-method", "Greek Keyboard")},
+                    {"keyboard-tr",
+                     i18n::mark("input-method", "Turkish Keyboard")},
+                    {"keyboard-vi",
+                     i18n::mark("input-method", "Vietnamese Keyboard")},
+                    {"keyboard-th",
+                     i18n::mark("input-method", "Thai Keyboard")},
+                    {"keyboard-ja",
+                     i18n::mark("input-method", "Japanese Keyboard")},
+                    {"keyboard-ko",
+                     i18n::mark("input-method", "Korean Keyboard")},
+                    {"keyboard-zh",
+                     i18n::mark("input-method", "Keyboard - Chinese")},
+                    {"keyboard-zh-pinyin",
+                     i18n::mark("input-method",
+                                "Keyboard - Chinese - Pinyin alphabet (with "
+                                "AltGr dead keys)")},
+                    {"keyboard-zh-tw",
+                     i18n::mark("input-method",
+                                "Keyboard - Chinese (Traditional)")},
+                };
+            for (const auto &[keyboardId, label] : keyboardNames) {
+                if (info.id == keyboardId) {
+                    info.name = translator.text("input-method", label);
+                    break;
+                }
             }
             if (info.id == "pinyin") {
                 info.name = translator.text("input-method", "Pinyin");

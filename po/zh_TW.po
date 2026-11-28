@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: fcitx5-windows\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 22:38+0800\n"
+"POT-Creation-Date: 2026-11-28 11:47+0800\n"
 "PO-Revision-Date: 2026-10-11 00:00+0800\n"
 "Last-Translator: Fcitx5 Windows contributors\n"
 "Language-Team: zh_TW\n"
@@ -12,555 +12,881 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: win32/settings/SettingsWindow.cpp:68
-msgctxt "settings"
-msgid "Plugins"
-msgstr "外掛程式"
-
-msgctxt "settings"
-msgid "Open Personal Plugin Folder"
-msgstr "開啟個人外掛程式目錄"
-
-msgctxt "settings"
-msgid "Not loaded"
-msgstr "未載入"
-
-msgctxt "settings"
-msgid "No plugins"
-msgstr "沒有外掛程式"
-
-msgctxt "settings"
-msgid "Cannot open the plugin folder."
-msgstr "無法開啟外掛程式目錄。"
-
-msgctxt "settings"
-msgid "Developer options"
-msgstr "開發者選項"
-
-msgctxt "settings"
-msgid "Enable detailed logging"
-msgstr "開啟詳細日誌記錄"
-
-msgctxt "settings"
-msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
-msgstr "日誌記錄連線、輸入環境、候選數量和版面配置中繼資料，不記錄輸入文字。日誌最多保留 7 天，總空間不超過 512 MiB。"
-
-msgctxt "settings"
-msgid "Log folder"
-msgstr "日誌目錄"
-
-msgctxt "settings"
-msgid "Open log folder"
-msgstr "開啟日誌目錄"
-
-msgctxt "settings"
-msgid "Starting"
-msgstr "啟動中"
-
-msgctxt "settings"
-msgid "On"
-msgstr "開啟"
-
-msgctxt "settings"
-msgid "Off"
-msgstr "已關閉"
-
-msgctxt "settings"
-msgid "Recording"
-msgstr "記錄中"
-
-msgctxt "settings"
-msgid "Unavailable"
-msgstr "無法使用"
-
-msgctxt "settings"
-msgid "{0} log files, {1} bytes"
-msgstr "{0} 個日誌檔案，共 {1} 位元組"
-
+#: win32/settings/SettingsWindow.cpp:84 win32/settings/SettingsWindow.cpp:97
 msgctxt "settings"
 msgid "Loaded"
 msgstr "已載入"
 
-#: win32/settings/SettingsWindow.cpp:70
+#: win32/settings/SettingsWindow.cpp:86
 msgctxt "settings"
 msgid "Failed to load"
 msgstr "載入失敗"
 
-#: win32/settings/SettingsWindow.cpp:72
+#: win32/settings/SettingsWindow.cpp:88 win32/settings/SettingsWindow.cpp:99
 msgctxt "settings"
 msgid "Disabled"
 msgstr "已停用"
 
-#: win32/settings/SettingsWindow.cpp:74
+#: win32/settings/SettingsWindow.cpp:90
 msgctxt "settings"
 msgid "Loading"
 msgstr "載入中"
 
-#: win32/settings/SettingsWindow.cpp:79
+#: win32/settings/SettingsWindow.cpp:101
+msgctxt "settings"
+msgid "Not loaded"
+msgstr "未載入"
+
+#: win32/settings/SettingsWindow.cpp:106
 msgctxt "settings"
 msgid "Ziranma"
 msgstr "自然碼"
 
-#: win32/settings/SettingsWindow.cpp:80
+#: win32/settings/SettingsWindow.cpp:107
 msgctxt "settings"
 msgid "Microsoft"
 msgstr "微軟"
 
-#: win32/settings/SettingsWindow.cpp:81
+#: win32/settings/SettingsWindow.cpp:108
 msgctxt "settings"
 msgid "Ziguang"
 msgstr "紫光"
 
-#: win32/settings/SettingsWindow.cpp:82
+#: win32/settings/SettingsWindow.cpp:109
 msgctxt "settings"
 msgid "Smart ABC"
 msgstr "智慧 ABC"
 
-#: win32/settings/SettingsWindow.cpp:83
+#: win32/settings/SettingsWindow.cpp:110
 msgctxt "settings"
 msgid "Chinese Star"
 msgstr "中文之星"
 
-#: win32/settings/SettingsWindow.cpp:84
+#: win32/settings/SettingsWindow.cpp:111
 msgctxt "settings"
 msgid "Pinyin Jiajia"
 msgstr "拼音加加"
 
-#: win32/settings/SettingsWindow.cpp:85
+#: win32/settings/SettingsWindow.cpp:112
 msgctxt "settings"
 msgid "Xiaohe"
 msgstr "小鶴"
 
-#: win32/settings/SettingsWindow.cpp:86
+#: win32/settings/SettingsWindow.cpp:113
 msgctxt "settings"
 msgid "GB Standard"
 msgstr "國標"
 
-#: win32/settings/SettingsWindow.cpp:87
+#: win32/settings/SettingsWindow.cpp:114
 msgctxt "settings"
 msgid "Existing custom profile"
 msgstr "現有自訂方案"
 
-#: win32/settings/SettingsWindow.cpp:93
+#: win32/settings/SettingsWindow.cpp:120
 msgctxt "settings"
 msgid "Settings have changed. Reload before editing."
 msgstr "設定已變更，請重新載入後再修改。"
 
-#: win32/settings/SettingsWindow.cpp:96
+#: win32/settings/SettingsWindow.cpp:123
 msgctxt "settings"
 msgid "Keep at least one available input method. Add another before removing this one."
 msgstr "至少保留一個可用輸入法，請先新增輸入法再刪除。"
 
-#: win32/settings/SettingsWindow.cpp:100
+#: win32/settings/SettingsWindow.cpp:127
 msgctxt "settings"
 msgid "Cannot save settings. Check write permissions for the user configuration directory."
 msgstr "無法儲存設定。請檢查使用者設定目錄的寫入權限。"
 
-#: win32/settings/SettingsWindow.cpp:104
+#: win32/settings/SettingsWindow.cpp:131
 msgctxt "settings"
 msgid "The input engine or input method is unavailable."
 msgstr "輸入引擎或輸入方案無法使用。"
 
-#: win32/settings/SettingsWindow.cpp:107
+#: win32/settings/SettingsWindow.cpp:134
 msgctxt "settings"
 msgid "Cannot apply settings. Please retry."
 msgstr "無法套用設定。請重試。"
 
-#: win32/settings/SettingsWindow.cpp:234
+#: win32/settings/SettingsWindow.cpp:261
 msgctxt "settings"
 msgid "Settings are being updated by another session. Please retry."
 msgstr "設定正在被其他工作階段修改，請重試。"
 
-#: win32/settings/SettingsWindow.cpp:240 win32/settings/SettingsWindow.cpp:432
+#: win32/settings/SettingsWindow.cpp:269 win32/settings/SettingsWindow.cpp:794
+#: win32/settings/main.cpp:129 win32/settings/main.cpp:150
+#: win32/settings/main.cpp:217
 msgctxt "settings"
 msgid "Input Method Settings"
 msgstr "輸入法設定"
 
-#: win32/settings/SettingsWindow.cpp:243
+#: win32/settings/SettingsWindow.cpp:270
 msgctxt "settings"
 msgid "Input Methods"
 msgstr "輸入法"
 
-#: win32/settings/SettingsWindow.cpp:246 win32/settings/SettingsWindow.cpp:267
-msgctxt "settings"
-msgid "Add Input Method"
-msgstr "新增輸入法"
-
-#: win32/settings/SettingsWindow.cpp:249 win32/settings/SettingsWindow.cpp:256
-#: win32/settings/SettingsWindow.cpp:298
+#: win32/settings/SettingsWindow.cpp:271 win32/settings/SettingsWindow.cpp:299
+#: win32/settings/SettingsWindow.cpp:347
 msgctxt "settings"
 msgid "Global Settings"
 msgstr "全域設定"
 
-#: win32/settings/SettingsWindow.cpp:252 win32/settings/SettingsWindow.cpp:254
+#: win32/settings/SettingsWindow.cpp:272 win32/settings/SettingsWindow.cpp:295
 msgctxt "settings"
 msgid "Language"
 msgstr "語言設定"
 
-#: win32/settings/SettingsWindow.cpp:258
+#: win32/settings/SettingsWindow.cpp:273 win32/settings/SettingsWindow.cpp:297
 msgctxt "settings"
-msgid "Add"
-msgstr "新增"
+msgid "Candidate layout"
+msgstr "候選視窗配置"
 
-#: win32/settings/SettingsWindow.cpp:259
+#: win32/settings/SettingsWindow.cpp:274
 msgctxt "settings"
-msgid "Reset to Defaults"
-msgstr "重設為預設值"
+msgid "Shortcuts"
+msgstr "快捷鍵"
 
-#: win32/settings/SettingsWindow.cpp:260
-msgctxt "settings"
-msgid "Reload"
-msgstr "重新載入"
-
-#: win32/settings/SettingsWindow.cpp:261
-msgctxt "settings"
-msgid "Close"
-msgstr "關閉"
-
-#: win32/settings/SettingsWindow.cpp:262
-msgctxt "settings"
-msgid "Apply"
-msgstr "套用"
-
-#: win32/settings/SettingsWindow.cpp:268
-msgctxt "settings"
-msgid "Remove"
-msgstr "刪除"
-
-#: win32/settings/SettingsWindow.cpp:269
-msgctxt "settings"
-msgid "Move Up"
-msgstr "上移"
-
-#: win32/settings/SettingsWindow.cpp:270
-msgctxt "settings"
-msgid "Move Down"
-msgstr "下移"
-
-#: win32/settings/SettingsWindow.cpp:276
-msgctxt "settings"
-msgid "Dictionaries"
-msgstr "詞庫"
-
-#: win32/settings/SettingsWindow.cpp:282
-msgctxt "settings"
-msgid "Open Third-party Dictionary Folder"
-msgstr "開啟第三方詞庫資料夾"
-
-#: win32/settings/SettingsWindow.cpp:285
-msgctxt "settings"
-msgid "Follow System Language"
-msgstr "跟隨系統語言"
-
-#: win32/settings/SettingsWindow.cpp:319 win32/settings/SettingsWindow.cpp:358
-#: win32/settings/SettingsWindow.cpp:1152
-#: win32/settings/SettingsWindow.cpp:1214
-#: win32/settings/SettingsWindow.cpp:1331
-#: win32/settings/SettingsWindow.cpp:1361
-msgctxt "settings"
-msgid "Cannot connect to Core."
-msgstr "無法連線至 Core。"
-
-#: win32/settings/SettingsWindow.cpp:369
-msgctxt "settings"
-msgid "Language saved. Restart services to apply it to Settings."
-msgstr "語言已儲存。重新啟動服務後設定介面將使用新語言。"
-
-#: win32/settings/SettingsWindow.cpp:390
-msgctxt "settings"
-msgid "Save changes?"
-msgstr "儲存變更？"
-
-#: win32/settings/SettingsWindow.cpp:391
-msgctxt "settings"
-msgid "Save"
-msgstr "儲存"
-
-#: win32/settings/SettingsWindow.cpp:392
-msgctxt "settings"
-msgid "Discard"
-msgstr "捨棄"
-
-#: win32/settings/SettingsWindow.cpp:393 win32/settings/SettingsWindow.cpp:1018
-msgctxt "settings"
-msgid "Cancel"
-msgstr "取消"
-
-#: win32/settings/SettingsWindow.cpp:642
-msgctxt "settings"
-msgid "Loading..."
-msgstr "正在載入…"
-
-#: win32/settings/SettingsWindow.cpp:666
-msgctxt "settings"
-msgid "Cannot connect to Core. Check that it is running and retry."
-msgstr "無法連線至 Core。請確認它已啟動並重試。"
-
-#: win32/settings/SettingsWindow.cpp:812
-msgctxt "settings"
-msgid "Pinyin Settings"
-msgstr "拼音設定"
-
-#: win32/settings/SettingsWindow.cpp:813
-msgctxt "settings"
-msgid "Table Settings"
-msgstr "碼表設定"
-
-#: win32/settings/SettingsWindow.cpp:814
-msgctxt "settings"
-msgid "Keyboard Settings"
-msgstr "鍵盤設定"
-
-#: win32/settings/SettingsWindow.cpp:815
-msgctxt "settings"
-msgid "Settings"
-msgstr "設定"
-
-#: win32/settings/SettingsWindow.cpp:825
-msgctxt "settings"
-msgid "Keyboard layout: Windows"
-msgstr "鍵盤配置：Windows"
-
-#: win32/settings/SettingsWindow.cpp:826
-msgctxt "settings"
-msgid "No settings available"
-msgstr "尚無可用設定"
-
-#: win32/settings/SettingsWindow.cpp:832
-msgctxt "settings"
-msgid "Shuangpin Profile"
-msgstr "雙拼鍵位"
-
-#: win32/settings/SettingsWindow.cpp:833
-msgctxt "settings"
-msgid "Candidates Per Page"
-msgstr "每頁候選字數"
-
-#: win32/settings/SettingsWindow.cpp:834
-msgctxt "settings"
-msgid "English Candidates"
-msgstr "英文候選字"
-
-#: win32/settings/SettingsWindow.cpp:835
-msgctxt "settings"
-msgid "Symbol Candidates"
-msgstr "符號候選字"
-
-#: win32/settings/SettingsWindow.cpp:836
-msgctxt "settings"
-msgid "Character Decomposition Candidates"
-msgstr "拆字候選字"
-
-#: win32/settings/SettingsWindow.cpp:837
-msgctxt "settings"
-msgid "Extended Chinese Characters"
-msgstr "擴充漢字"
-
-#: win32/settings/SettingsWindow.cpp:838
-msgctxt "settings"
-msgid "Stroke Candidates"
-msgstr "筆畫候選字"
-
-#: win32/settings/SettingsWindow.cpp:839
-msgctxt "settings"
-msgid "Prediction"
-msgstr "聯想"
-
-#: win32/settings/SettingsWindow.cpp:840
-msgctxt "settings"
-msgid "Preedit Mode"
-msgstr "預編輯模式"
-
-#: win32/settings/SettingsWindow.cpp:842
-msgctxt "settings"
-msgid "Keep Preedit Cursor at Beginning"
-msgstr "預編輯游標固定在開頭"
-
-#: win32/settings/SettingsWindow.cpp:843
-msgctxt "settings"
-msgid "Show Full Pinyin in Preedit"
-msgstr "預編輯顯示完整拼音"
-
-#: win32/settings/SettingsWindow.cpp:844
-msgctxt "settings"
-msgid "Show Shuangpin Mode"
-msgstr "顯示雙拼模式"
-
-#: win32/settings/SettingsWindow.cpp:845
-msgctxt "settings"
-msgid "Common Mistakes"
-msgstr "常見錯誤"
-
-#: win32/settings/SettingsWindow.cpp:846
-msgctxt "settings"
-msgid "Match Letters in Lowercase"
-msgstr "小寫時比對字母"
-
-#: win32/settings/SettingsWindow.cpp:847
-msgctxt "settings"
-msgid "Inner Fuzzy Syllables (xian -> xi'an)"
-msgstr "內模糊音節 (xian -> xi'an)"
-
-#: win32/settings/SettingsWindow.cpp:850
-msgctxt "settings"
-msgid "Inner Fuzzy Syllables for Short Pinyin (qie -> qi'e)"
-msgstr "短拼音的內模糊音節 (qie -> qi'e)"
-
-#: win32/settings/SettingsWindow.cpp:852
-msgctxt "settings"
-msgid "Match Incomplete Finals (e -> en, eng, ei)"
-msgstr "比對不完整韻母 (e -> en, eng, ei)"
-
-#: win32/settings/SettingsWindow.cpp:854
-msgctxt "settings"
-msgid "Partial Shuangpin Matching for Input Longer Than 4"
-msgstr "輸入長度大於 4 時部分雙拼比對"
-
-#: win32/settings/SettingsWindow.cpp:855
-msgctxt "settings"
-msgid "Automatically Select Candidates"
-msgstr "自動選擇候選字"
-
-#: win32/settings/SettingsWindow.cpp:857
-msgctxt "settings"
-msgid "Unique Candidate Auto-selection Length"
-msgstr "唯一候選字自動選擇長度"
-
-#: win32/settings/SettingsWindow.cpp:858
-msgctxt "settings"
-msgid "Commit After Auto-selection"
-msgstr "自動選擇後提交"
-
-#: win32/settings/SettingsWindow.cpp:859
-msgctxt "settings"
-msgid "Commit When Deactivated"
-msgstr "停用時提交"
-
-#: win32/settings/SettingsWindow.cpp:860
-msgctxt "settings"
-msgid "Use Full Width"
-msgstr "使用全形"
-
-#: win32/settings/SettingsWindow.cpp:861
-msgctxt "settings"
-msgid "Show Code Hints"
-msgstr "顯示編碼提示"
-
-#: win32/settings/SettingsWindow.cpp:862
-msgctxt "settings"
-msgid "Learn Word Frequency"
-msgstr "詞頻學習"
-
-#: win32/settings/SettingsWindow.cpp:863
-msgctxt "settings"
-msgid "Order by Context"
-msgstr "依上下文排序"
-
-#: win32/settings/SettingsWindow.cpp:864
-msgctxt "settings"
-msgid "Use System Language Model"
-msgstr "使用系統語言模型"
-
-#: win32/settings/SettingsWindow.cpp:865
-msgctxt "settings"
-msgid "Ordering Policy"
-msgstr "排序方式"
-
-#: win32/settings/SettingsWindow.cpp:866
-msgctxt "settings"
-msgid "Previous Page"
-msgstr "上一頁"
-
-#: win32/settings/SettingsWindow.cpp:867
-msgctxt "settings"
-msgid "Next Page"
-msgstr "下一頁"
-
-#: win32/settings/SettingsWindow.cpp:868
-msgctxt "settings"
-msgid "Previous Candidate"
-msgstr "上一候選字"
-
-#: win32/settings/SettingsWindow.cpp:869
-msgctxt "settings"
-msgid "Next Candidate"
-msgstr "下一候選字"
-
-#: win32/settings/SettingsWindow.cpp:870 win32/settings/SettingsWindow.cpp:873
-msgctxt "settings"
-msgid "Select Current Candidate"
-msgstr "選擇目前候選字"
-
-#: win32/settings/SettingsWindow.cpp:872
-msgctxt "settings"
-msgid "Choose Last Character from Phrase"
-msgstr "選詞末字"
-
-#: win32/settings/SettingsWindow.cpp:885
-msgctxt "settings"
-msgid "Fuzzy Pinyin"
-msgstr "模糊拼音"
-
-#: win32/settings/SettingsWindow.cpp:886
+#: win32/settings/SettingsWindow.cpp:275 win32/settings/SettingsWindow.cpp:1747
 msgctxt "settings"
 msgid "General"
 msgstr "一般"
 
-#: win32/settings/SettingsWindow.cpp:978 win32/settings/SettingsWindow.cpp:980
+#: win32/settings/SettingsWindow.cpp:276
+msgctxt "settings"
+msgid "Plugins"
+msgstr "外掛程式"
+
+#: win32/settings/SettingsWindow.cpp:277 win32/settings/SettingsWindow.cpp:279
+msgctxt "settings"
+msgid "Open Personal Plugin Folder"
+msgstr "開啟個人外掛程式目錄"
+
+#: win32/settings/SettingsWindow.cpp:280
+msgctxt "settings"
+msgid "Developer options"
+msgstr "開發者選項"
+
+#: win32/settings/SettingsWindow.cpp:281 win32/settings/SettingsWindow.cpp:289
+msgctxt "settings"
+msgid "Enable detailed logging"
+msgstr "開啟詳細日誌記錄"
+
+#: win32/settings/SettingsWindow.cpp:283
+msgctxt "settings"
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
+msgstr "日誌記錄連線、輸入環境、候選數量和版面配置中繼資料，不記錄輸入文字。日誌最多保留 7 天，總空間不超過 512 MiB。"
+
+#: win32/settings/SettingsWindow.cpp:286
+msgctxt "settings"
+msgid "Log folder"
+msgstr "日誌目錄"
+
+#: win32/settings/SettingsWindow.cpp:287 win32/settings/SettingsWindow.cpp:293
+msgctxt "settings"
+msgid "Open log folder"
+msgstr "開啟日誌目錄"
+
+#: win32/settings/SettingsWindow.cpp:290
+msgctxt "settings"
+msgid "On"
+msgstr "開啟"
+
+#: win32/settings/SettingsWindow.cpp:291 win32/settings/SettingsWindow.cpp:362
+#: win32/settings/SettingsWindow.cpp:2594
+msgctxt "settings"
+msgid "Off"
+msgstr "已關閉"
+
+#: win32/settings/SettingsWindow.cpp:301
+msgctxt "settings"
+msgid "Reset to Defaults"
+msgstr "重設為預設值"
+
+#: win32/settings/SettingsWindow.cpp:302
+msgctxt "settings"
+msgid "Reload"
+msgstr "重新載入"
+
+#: win32/settings/SettingsWindow.cpp:303
+msgctxt "settings"
+msgid "Close"
+msgstr "關閉"
+
+#: win32/settings/SettingsWindow.cpp:304
+msgctxt "settings"
+msgid "Apply"
+msgstr "套用"
+
+#: win32/settings/SettingsWindow.cpp:308 win32/settings/SettingsWindow.cpp:1429
+#: win32/settings/SettingsWindow.cpp:1458
+msgctxt "settings"
+msgid "Add Input Method"
+msgstr "新增輸入法"
+
+#: win32/settings/SettingsWindow.cpp:309
+msgctxt "settings"
+msgid "Remove"
+msgstr "刪除"
+
+#: win32/settings/SettingsWindow.cpp:310
+msgctxt "settings"
+msgid "Move Up"
+msgstr "上移"
+
+#: win32/settings/SettingsWindow.cpp:311
+msgctxt "settings"
+msgid "Move Down"
+msgstr "下移"
+
+#: win32/settings/SettingsWindow.cpp:317
+msgctxt "settings"
+msgid "Dictionaries"
+msgstr "詞庫"
+
+#: win32/settings/SettingsWindow.cpp:319
+msgctxt "settings"
+msgid "Open Third-party Dictionary Folder"
+msgstr "開啟第三方詞庫資料夾"
+
+#: win32/settings/SettingsWindow.cpp:322
+msgctxt "settings"
+msgid "Follow System Language"
+msgstr "跟隨系統語言"
+
+#: win32/settings/SettingsWindow.cpp:330
+msgctxt "settings"
+msgid "Vertical"
+msgstr "直排"
+
+#: win32/settings/SettingsWindow.cpp:331
+msgctxt "settings"
+msgid "Horizontal"
+msgstr "橫排"
+
+#: win32/settings/SettingsWindow.cpp:361 win32/settings/SettingsWindow.cpp:2547
+#: win32/settings/SettingsWindow.cpp:2596
+msgctxt "settings"
+msgid "Starting"
+msgstr "啟動中"
+
+#: win32/settings/SettingsWindow.cpp:400
+msgctxt "settings"
+msgid "Quick switches follow the input method order. Missing or unavailable entries are ignored. Empty shortcuts disable the action."
+msgstr "快速切換依輸入法清單的順序。不存在或無法使用的項目將被忽略。清空快捷鍵可停用該操作。"
+
+#: win32/settings/SettingsWindow.cpp:406
+msgctxt "settings"
+msgid "Switch input method"
+msgstr "切換輸入法"
+
+#: win32/settings/SettingsWindow.cpp:408
+#, c++-format
+msgctxt "settings"
+msgid "Quick switch to input method {0}"
+msgstr "快速切換至第 {0} 個輸入法"
+
+#: win32/settings/SettingsWindow.cpp:455 win32/settings/SettingsWindow.cpp:457
 msgctxt "settings"
 msgid "Record shortcut"
 msgstr "錄製快捷鍵"
 
-#: win32/settings/SettingsWindow.cpp:1017
+#: win32/settings/SettingsWindow.cpp:495 win32/settings/SettingsWindow.cpp:555
+#: win32/settings/SettingsWindow.cpp:2045
+#: win32/settings/SettingsWindow.cpp:2121
+#: win32/settings/SettingsWindow.cpp:2287
+#: win32/settings/SettingsWindow.cpp:2330
+#: win32/settings/SettingsWindow.cpp:2445
+msgctxt "settings"
+msgid "Cannot connect to Core."
+msgstr "無法連線至 Core。"
+
+#: win32/settings/SettingsWindow.cpp:516
+msgctxt "settings"
+msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
+msgstr "快捷鍵無效或重複，請使用錄製功能選擇其他快捷鍵。"
+
+#: win32/settings/SettingsWindow.cpp:571
+msgctxt "settings"
+msgid "Language saved. Restart services to apply it to Settings."
+msgstr "語言已儲存。重新啟動服務後設定介面將使用新語言。"
+
+#: win32/settings/SettingsWindow.cpp:605
+msgctxt "settings"
+msgid "Save changes?"
+msgstr "儲存變更？"
+
+#: win32/settings/SettingsWindow.cpp:606
+msgctxt "settings"
+msgid "Save"
+msgstr "儲存"
+
+#: win32/settings/SettingsWindow.cpp:607
+msgctxt "settings"
+msgid "Discard"
+msgstr "捨棄"
+
+#: win32/settings/SettingsWindow.cpp:608 win32/settings/SettingsWindow.cpp:1460
+#: win32/settings/SettingsWindow.cpp:1903
+msgctxt "settings"
+msgid "Cancel"
+msgstr "取消"
+
+#: win32/settings/SettingsWindow.cpp:1198
+msgctxt "settings"
+msgid "Loading..."
+msgstr "正在載入…"
+
+#: win32/settings/SettingsWindow.cpp:1234
+msgctxt "settings"
+msgid "Cannot connect to Core. Check that it is running and retry."
+msgstr "無法連線至 Core。請確認它已啟動並重試。"
+
+#: win32/settings/SettingsWindow.cpp:1459
+msgctxt "settings"
+msgid "Add"
+msgstr "新增"
+
+#: win32/settings/SettingsWindow.cpp:1545
+msgctxt "settings"
+msgid "Arabic"
+msgstr "阿拉伯語"
+
+#: win32/settings/SettingsWindow.cpp:1546
+msgctxt "settings"
+msgid "German"
+msgstr "德語"
+
+#: win32/settings/SettingsWindow.cpp:1547
+msgctxt "settings"
+msgid "Greek"
+msgstr "希臘語"
+
+#: win32/settings/SettingsWindow.cpp:1548
+msgctxt "settings"
+msgid "English"
+msgstr "英語"
+
+#: win32/settings/SettingsWindow.cpp:1549
+msgctxt "settings"
+msgid "Spanish"
+msgstr "西班牙語"
+
+#: win32/settings/SettingsWindow.cpp:1550
+msgctxt "settings"
+msgid "French"
+msgstr "法語"
+
+#: win32/settings/SettingsWindow.cpp:1551
+msgctxt "settings"
+msgid "Hebrew"
+msgstr "希伯來語"
+
+#: win32/settings/SettingsWindow.cpp:1552
+msgctxt "settings"
+msgid "Italian"
+msgstr "義大利語"
+
+#: win32/settings/SettingsWindow.cpp:1553
+msgctxt "settings"
+msgid "Japanese"
+msgstr "日語"
+
+#: win32/settings/SettingsWindow.cpp:1554
+msgctxt "settings"
+msgid "Korean"
+msgstr "韓語"
+
+#: win32/settings/SettingsWindow.cpp:1555
+msgctxt "settings"
+msgid "Portuguese"
+msgstr "葡萄牙語"
+
+#: win32/settings/SettingsWindow.cpp:1556
+msgctxt "settings"
+msgid "Russian"
+msgstr "俄語"
+
+#: win32/settings/SettingsWindow.cpp:1557
+msgctxt "settings"
+msgid "Thai"
+msgstr "泰語"
+
+#: win32/settings/SettingsWindow.cpp:1558
+msgctxt "settings"
+msgid "Turkish"
+msgstr "土耳其語"
+
+#: win32/settings/SettingsWindow.cpp:1559
+msgctxt "settings"
+msgid "Ukrainian"
+msgstr "烏克蘭語"
+
+#: win32/settings/SettingsWindow.cpp:1560
+msgctxt "settings"
+msgid "Vietnamese"
+msgstr "越南語"
+
+#: win32/settings/SettingsWindow.cpp:1561
+msgctxt "settings"
+msgid "Wu Chinese"
+msgstr "吳語"
+
+#: win32/settings/SettingsWindow.cpp:1562
+msgctxt "settings"
+msgid "Chinese"
+msgstr "中文"
+
+#: win32/settings/SettingsWindow.cpp:1563
+msgctxt "settings"
+msgid "Chinese (Simplified)"
+msgstr "簡體中文"
+
+#: win32/settings/SettingsWindow.cpp:1564
+msgctxt "settings"
+msgid "Chinese (Hong Kong)"
+msgstr "中文（香港）"
+
+#: win32/settings/SettingsWindow.cpp:1565
+msgctxt "settings"
+msgid "Chinese (Traditional)"
+msgstr "繁體中文"
+
+#: win32/settings/SettingsWindow.cpp:1566
+msgctxt "settings"
+msgid "Other"
+msgstr "其他"
+
+#: win32/settings/SettingsWindow.cpp:1644
+msgctxt "settings"
+msgid "Pinyin Settings"
+msgstr "拼音設定"
+
+#: win32/settings/SettingsWindow.cpp:1645
+msgctxt "settings"
+msgid "Table Settings"
+msgstr "碼表設定"
+
+#: win32/settings/SettingsWindow.cpp:1646
+msgctxt "settings"
+msgid "Keyboard Settings"
+msgstr "鍵盤設定"
+
+#: win32/settings/SettingsWindow.cpp:1647
+msgctxt "settings"
+msgid "Settings"
+msgstr "設定"
+
+#: win32/settings/SettingsWindow.cpp:1657
+msgctxt "settings"
+msgid "Keyboard layout: Windows"
+msgstr "鍵盤配置：Windows"
+
+#: win32/settings/SettingsWindow.cpp:1658
+msgctxt "settings"
+msgid "No settings available"
+msgstr "尚無可用設定"
+
+#: win32/settings/SettingsWindow.cpp:1664
+msgctxt "settings"
+msgid "Shuangpin Profile"
+msgstr "雙拼鍵位"
+
+#: win32/settings/SettingsWindow.cpp:1665
+msgctxt "settings"
+msgid "Candidates Per Page"
+msgstr "每頁候選字數"
+
+#: win32/settings/SettingsWindow.cpp:1666
+msgctxt "settings"
+msgid "English Candidates"
+msgstr "英文候選字"
+
+#: win32/settings/SettingsWindow.cpp:1667
+msgctxt "settings"
+msgid "Symbol Candidates"
+msgstr "符號候選字"
+
+#: win32/settings/SettingsWindow.cpp:1668
+msgctxt "settings"
+msgid "Character Decomposition Candidates"
+msgstr "拆字候選字"
+
+#: win32/settings/SettingsWindow.cpp:1669
+msgctxt "settings"
+msgid "Extended Chinese Characters"
+msgstr "擴充漢字"
+
+#: win32/settings/SettingsWindow.cpp:1670
+msgctxt "settings"
+msgid "Stroke Candidates"
+msgstr "筆畫候選字"
+
+#: win32/settings/SettingsWindow.cpp:1671
+msgctxt "settings"
+msgid "Prediction"
+msgstr "聯想"
+
+#: win32/settings/SettingsWindow.cpp:1672
+msgctxt "settings"
+msgid "Preedit Mode"
+msgstr "預編輯模式"
+
+#: win32/settings/SettingsWindow.cpp:1674
+msgctxt "settings"
+msgid "Keep Preedit Cursor at Beginning"
+msgstr "預編輯游標固定在開頭"
+
+#: win32/settings/SettingsWindow.cpp:1675
+msgctxt "settings"
+msgid "Show Full Pinyin in Preedit"
+msgstr "預編輯顯示完整拼音"
+
+#: win32/settings/SettingsWindow.cpp:1676
+msgctxt "settings"
+msgid "Show Shuangpin Mode"
+msgstr "顯示雙拼模式"
+
+#: win32/settings/SettingsWindow.cpp:1677
+msgctxt "settings"
+msgid "Common Mistakes"
+msgstr "常見錯誤"
+
+#: win32/settings/SettingsWindow.cpp:1678
+msgctxt "settings"
+msgid "Match Letters in Lowercase"
+msgstr "小寫時比對字母"
+
+#: win32/settings/SettingsWindow.cpp:1679
+msgctxt "settings"
+msgid "Inner Fuzzy Syllables (xian -> xi'an)"
+msgstr "內模糊音節 (xian -> xi'an)"
+
+#: win32/settings/SettingsWindow.cpp:1682
+msgctxt "settings"
+msgid "Inner Fuzzy Syllables for Short Pinyin (qie -> qi'e)"
+msgstr "短拼音的內模糊音節 (qie -> qi'e)"
+
+#: win32/settings/SettingsWindow.cpp:1684
+msgctxt "settings"
+msgid "Match Incomplete Finals (e -> en, eng, ei)"
+msgstr "比對不完整韻母 (e -> en, eng, ei)"
+
+#: win32/settings/SettingsWindow.cpp:1686
+msgctxt "settings"
+msgid "Partial Shuangpin Matching for Input Longer Than 4"
+msgstr "輸入長度大於 4 時部分雙拼比對"
+
+#: win32/settings/SettingsWindow.cpp:1687
+msgctxt "settings"
+msgid "Automatically Select Candidates"
+msgstr "自動選擇候選字"
+
+#: win32/settings/SettingsWindow.cpp:1689
+msgctxt "settings"
+msgid "Unique Candidate Auto-selection Length"
+msgstr "唯一候選字自動選擇長度"
+
+#: win32/settings/SettingsWindow.cpp:1690
+msgctxt "settings"
+msgid "Commit After Auto-selection"
+msgstr "自動選擇後提交"
+
+#: win32/settings/SettingsWindow.cpp:1691
+msgctxt "settings"
+msgid "Commit When Deactivated"
+msgstr "停用時提交"
+
+#: win32/settings/SettingsWindow.cpp:1692
+msgctxt "settings"
+msgid "Use Full Width"
+msgstr "使用全形"
+
+#: win32/settings/SettingsWindow.cpp:1693
+msgctxt "settings"
+msgid "Show Code Hints"
+msgstr "顯示編碼提示"
+
+#: win32/settings/SettingsWindow.cpp:1694
+msgctxt "settings"
+msgid "Learn Word Frequency"
+msgstr "詞頻學習"
+
+#: win32/settings/SettingsWindow.cpp:1695
+msgctxt "settings"
+msgid "Order by Context"
+msgstr "依上下文排序"
+
+#: win32/settings/SettingsWindow.cpp:1696
+msgctxt "settings"
+msgid "Use System Language Model"
+msgstr "使用系統語言模型"
+
+#: win32/settings/SettingsWindow.cpp:1697
+msgctxt "settings"
+msgid "Ordering Policy"
+msgstr "排序方式"
+
+#: win32/settings/SettingsWindow.cpp:1698
+msgctxt "settings"
+msgid "Previous Page"
+msgstr "上一頁"
+
+#: win32/settings/SettingsWindow.cpp:1699
+msgctxt "settings"
+msgid "Next Page"
+msgstr "下一頁"
+
+#: win32/settings/SettingsWindow.cpp:1700
+msgctxt "settings"
+msgid "Previous Candidate"
+msgstr "上一候選字"
+
+#: win32/settings/SettingsWindow.cpp:1701
+msgctxt "settings"
+msgid "Next Candidate"
+msgstr "下一候選字"
+
+#: win32/settings/SettingsWindow.cpp:1702
+#: win32/settings/SettingsWindow.cpp:1705
+msgctxt "settings"
+msgid "Select Current Candidate"
+msgstr "選擇目前候選字"
+
+#: win32/settings/SettingsWindow.cpp:1704
+msgctxt "settings"
+msgid "Choose Last Character from Phrase"
+msgstr "選詞末字"
+
+#: win32/settings/SettingsWindow.cpp:1706
+msgctxt "settings"
+msgid "Correction Layout"
+msgstr "糾錯佈局"
+
+#: win32/settings/SettingsWindow.cpp:1707
+msgctxt "settings"
+msgid "Enable Cloud Pinyin"
+msgstr "啟用雲端拼音"
+
+#: win32/settings/SettingsWindow.cpp:1708
+msgctxt "settings"
+msgid "Cloud Pinyin Candidate Order"
+msgstr "雲端拼音候選順序"
+
+#: win32/settings/SettingsWindow.cpp:1710
+msgctxt "settings"
+msgid "Show animation when Cloud Pinyin is loading"
+msgstr "載入雲拼音時顯示動畫"
+
+#: win32/settings/SettingsWindow.cpp:1712
+msgctxt "settings"
+msgid "Always show Cloud Pinyin place holder"
+msgstr "總是顯示雲拼音佔位符"
+
+#: win32/settings/SettingsWindow.cpp:1715
+msgctxt "settings"
+msgid "Keep the current typed text for next input prediction"
+msgstr "為下次輸入預測保留目前輸入的內容"
+
+#: win32/settings/SettingsWindow.cpp:1716
+msgctxt "settings"
+msgid "Number of Predictions"
+msgstr "預測數量"
+
+#: win32/settings/SettingsWindow.cpp:1717
+msgctxt "settings"
+msgid "Number of Phrase Candidates"
+msgstr "詞組候選數量"
+
+#: win32/settings/SettingsWindow.cpp:1719
+msgctxt "settings"
+msgid "Backspace behavior on prediction"
+msgstr "預測時退格鍵的行為"
+
+#: win32/settings/SettingsWindow.cpp:1721
+msgctxt "settings"
+msgid "Action when switching input method"
+msgstr "切換輸入法時的行為"
+
+#: win32/settings/SettingsWindow.cpp:1723
+msgctxt "settings"
+msgid "Use BackSpace to cancel the selection"
+msgstr "使用退格鍵以取消選詞"
+
+#: win32/settings/SettingsWindow.cpp:1724
+msgctxt "settings"
+msgid "Commit Raw Input"
+msgstr "提交原始字串"
+
+#: win32/settings/SettingsWindow.cpp:1725
+msgctxt "settings"
+msgid "Look up pinyin"
+msgstr "查詢拼音"
+
+#: win32/settings/SettingsWindow.cpp:1726
+msgctxt "settings"
+msgid "Sort candidate by code length"
+msgstr "按碼長排序候選詞"
+
+#: win32/settings/SettingsWindow.cpp:1728
+msgctxt "settings"
+msgid "Learn auto phrase with phrase"
+msgstr "詞組參與自組詞"
+
+#: win32/settings/SettingsWindow.cpp:1730
+msgctxt "settings"
+msgid "Show space between candidate and hint text"
+msgstr "提示與候選詞間顯示空格"
+
+#: win32/settings/SettingsWindow.cpp:1732
+msgctxt "settings"
+msgid "Allow use keypad key as table input"
+msgstr "允許使用數字鍵盤輸入字碼"
+
+#: win32/settings/SettingsWindow.cpp:1744
+msgctxt "settings"
+msgid "Fuzzy Pinyin"
+msgstr "模糊拼音"
+
+#: win32/settings/SettingsWindow.cpp:1746
+msgctxt "settings"
+msgid "Table Global Options"
+msgstr "碼表全域選項"
+
+#: win32/settings/SettingsWindow.cpp:1803
+msgctxt "settings"
+msgid "Do not show"
+msgstr "不顯示"
+
+#: win32/settings/SettingsWindow.cpp:1805
+msgctxt "settings"
+msgid "Composing pinyin"
+msgstr "拼音串"
+
+#: win32/settings/SettingsWindow.cpp:1807
+msgctxt "settings"
+msgid "Commit preview"
+msgstr "提交預覽"
+
+#: win32/settings/SettingsWindow.cpp:1808
+msgctxt "settings"
+msgid "Clear"
+msgstr "清除"
+
+#: win32/settings/SettingsWindow.cpp:1810
+msgctxt "settings"
+msgid "Commit current preedit"
+msgstr "提交目前預編輯"
+
+#: win32/settings/SettingsWindow.cpp:1812
+msgctxt "settings"
+msgid "Commit default selection"
+msgstr "提交預設選擇"
+
+#: win32/settings/SettingsWindow.cpp:1814
+msgctxt "settings"
+msgid "Only Clear candidates"
+msgstr "僅清空候選字詞"
+
+#: win32/settings/SettingsWindow.cpp:1817
+msgctxt "settings"
+msgid "Clear candidates & backspace"
+msgstr "清空候選字詞並退格"
+
+#: win32/settings/SettingsWindow.cpp:1821
+msgctxt "settings"
+msgid "Backspace when not using on-screen keyboard"
+msgstr "不使用螢幕鍵盤時執行退格"
+
+#: win32/settings/SettingsWindow.cpp:1822
+msgctxt "settings"
+msgid "None"
+msgstr "無"
+
+#: win32/settings/SettingsWindow.cpp:1823
+msgctxt "settings"
+msgid "QWERTY"
+msgstr "QWERTY"
+
+#: win32/settings/SettingsWindow.cpp:1902
 msgctxt "settings"
 msgid "Use shortcut"
 msgstr "使用此快捷鍵"
 
-#: win32/settings/SettingsWindow.cpp:1023
+#: win32/settings/SettingsWindow.cpp:1908
 msgctxt "settings"
 msgid "Recording..."
 msgstr "正在錄製..."
 
-#: win32/settings/SettingsWindow.cpp:1025
+#: win32/settings/SettingsWindow.cpp:1910
 msgctxt "settings"
 msgid "Recorded shortcut"
 msgstr "錄製的快捷鍵"
 
-#: win32/settings/SettingsWindow.cpp:1039
-#: win32/settings/SettingsWindow.cpp:1088
+#: win32/settings/SettingsWindow.cpp:1924
+#: win32/settings/SettingsWindow.cpp:1978
 msgctxt "settings"
 msgid "Cannot record shortcut."
 msgstr "無法錄製快捷鍵。"
 
-#: win32/settings/SettingsWindow.cpp:1174
+#: win32/settings/SettingsWindow.cpp:2071
 msgctxt "settings"
 msgid "Check the setting values."
 msgstr "請檢查設定值。"
 
-#: win32/settings/SettingsWindow.cpp:1368
+#: win32/settings/SettingsWindow.cpp:2337
 msgctxt "settings"
 msgid "Pinyin dictionaries are unavailable."
 msgstr "拼音詞庫無法使用。"
 
-#: win32/settings/SettingsWindow.cpp:1370
+#: win32/settings/SettingsWindow.cpp:2339
 msgctxt "settings"
 msgid "Cannot read the dictionary directory."
 msgstr "無法讀取詞庫目錄。"
 
-#: win32/settings/SettingsWindow.cpp:1372
+#: win32/settings/SettingsWindow.cpp:2341
 msgctxt "settings"
 msgid "No third-party dictionaries"
 msgstr "尚無第三方詞庫"
 
-#: win32/settings/SettingsWindow.cpp:1419
+#: win32/settings/SettingsWindow.cpp:2406
 msgctxt "settings"
 msgid "Cannot open the dictionary folder."
 msgstr "無法開啟詞庫資料夾。"
 
-#: win32/settings/main.cpp:65
+#: win32/settings/SettingsWindow.cpp:2450
+msgctxt "settings"
+msgid "No plugins"
+msgstr "沒有外掛程式"
+
+#: win32/settings/SettingsWindow.cpp:2525
+msgctxt "settings"
+msgid "Cannot open the plugin folder."
+msgstr "無法開啟外掛程式目錄。"
+
+#: win32/settings/SettingsWindow.cpp:2592
+msgctxt "settings"
+msgid "Unavailable"
+msgstr "無法使用"
+
+#: win32/settings/SettingsWindow.cpp:2597
+msgctxt "settings"
+msgid "Recording"
+msgstr "記錄中"
+
+#: win32/settings/SettingsWindow.cpp:2599
+#, c++-format
+msgctxt "settings"
+msgid "{0} log files, {1} bytes"
+msgstr "{0} 個日誌檔案，共 {1} 位元組"
+
+#: win32/settings/main.cpp:123
 msgctxt "settings"
 msgid "The Windows App SDK 1.8 x64 runtime is required."
 msgstr "需要 Windows App SDK 1.8 x64 執行階段。"
+
+#: win32/settings/main.cpp:215
+msgctxt "settings"
+msgid "Cannot initialize the Fcitx5 settings service."
+msgstr "無法初始化 Fcitx5 設定服務。"
 
 #: win32/tsf/langbaritem.cpp:16
 msgctxt "menu"
@@ -597,6 +923,16 @@ msgctxt "menu"
 msgid "About"
 msgstr "關於"
 
+#: win32/tsf/langbaritem.cpp:320 win32/tsf/langbaritem.cpp:374
+msgctxt "menu"
+msgid "Unable to read input method menu"
+msgstr "讀取輸入法選單失敗"
+
+#: win32/tsf/langbaritem.cpp:322 win32/tsf/langbaritem.cpp:376
+msgctxt "menu"
+msgid "Reading input method menu..."
+msgstr "正在讀取輸入法選單…"
+
 #: win32/tsf/aboutwindow.cpp:54
 msgctxt "about"
 msgid "Architecture: "
@@ -617,6 +953,11 @@ msgctxt "about"
 msgid "Local build (no CI information)"
 msgstr "本機建置（無 CI 資訊）"
 
+#: win32/tsf/aboutwindow.cpp:63
+msgctxt "about"
+msgid "Commit: "
+msgstr "Commit："
+
 #: win32/tsf/aboutwindow.cpp:65 win32/tsf/aboutwindow.cpp:69
 msgctxt "about"
 msgid "Unavailable"
@@ -627,7 +968,7 @@ msgctxt "about"
 msgid "Commit time: "
 msgstr "Commit 時間："
 
-#: win32/tsf/aboutwindow.cpp:158
+#: win32/tsf/aboutwindow.cpp:158 win32/tsf/aboutwindow.cpp:245
 msgctxt "about"
 msgid "About Fcitx5"
 msgstr "關於 Fcitx5"
@@ -647,56 +988,163 @@ msgctxt "about"
 msgid "Close"
 msgstr "關閉"
 
-#: win32/tsf/servicecontrol.cpp:157
-msgctxt "settings"
-msgid "Cannot open the user data folder."
-msgstr "無法開啟使用者資料資料夾。"
+#: win32/tsf/aboutwindow.cpp:244
+msgctxt "about"
+msgid "Cannot open link."
+msgstr "無法開啟連結。"
 
-#: win32/tsf/servicecontrol.cpp:158
-msgctxt "settings"
-msgid "Service operation failed."
-msgstr "服務操作失敗。"
-
-msgctxt "settings"
-msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
-msgstr "請在 Sandboxie 外啟動 Core，並在沙箱中允許存取其具名管道。"
-
+#: win32/tsf/servicecontrol.cpp:171
 msgctxt "settings"
 msgid "Cannot reach the host Core named pipe. Start Core outside Sandboxie, add the Fcitx5 OpenPipePath rule to this sandbox, and reopen the application."
 msgstr "無法連接宿主 Core 具名管道。請在 Sandboxie 外啟動 Core，為此沙箱新增 Fcitx5 的 OpenPipePath 規則，然後重新開啟應用程式。"
 
-#: win32/tsf/servicecontrol.cpp:162
+#: win32/tsf/servicecontrol.cpp:178
+msgctxt "settings"
+msgid "Cannot open the user data folder."
+msgstr "無法開啟使用者資料資料夾。"
+
+#: win32/tsf/servicecontrol.cpp:180
+msgctxt "settings"
+msgid "Service operation failed."
+msgstr "服務操作失敗。"
+
+#: win32/tsf/servicecontrol.cpp:184
 msgctxt "settings"
 msgid "If services are stopped, restart services. Check that the DLL, Core and Settings are in the same installation directory."
 msgstr "服務已停止時，請先重新啟動服務。請確認 DLL、Core 和設定程式位於同一安裝目錄。"
 
-#: win32/tsf/servicecontrol.cpp:166
+#: win32/tsf/servicecontrol.cpp:190
+msgctxt "settings"
+msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
+msgstr "請在 Sandboxie 外啟動 Core，並在沙箱中允許存取其具名管道。"
+
+#: win32/tsf/servicecontrol.cpp:200
 #, c++-format
 msgctxt "settings"
 msgid "Windows error: {0}"
 msgstr "Windows 錯誤：{0}"
 
-#: src/windowsinputmethods.cpp:149
+#: src/main.cpp:260
+msgctxt "settings"
+msgid "Cannot stop or restart Fcitx5 services."
+msgstr "無法停止或重新啟動 Fcitx5 服務。"
+
+#: src/windowsinputmethods.cpp:157
 msgctxt "input-method"
 msgid "English Keyboard"
 msgstr "英文鍵盤"
 
-#: src/windowsinputmethods.cpp:152
+#: src/windowsinputmethods.cpp:159
+msgctxt "input-method"
+msgid "British Keyboard"
+msgstr "英式鍵盤"
+
+#: src/windowsinputmethods.cpp:161
+msgctxt "input-method"
+msgid "French Keyboard"
+msgstr "法文鍵盤"
+
+#: src/windowsinputmethods.cpp:163
+msgctxt "input-method"
+msgid "German Keyboard"
+msgstr "德文鍵盤"
+
+#: src/windowsinputmethods.cpp:165
+msgctxt "input-method"
+msgid "Spanish Keyboard"
+msgstr "西班牙文鍵盤"
+
+#: src/windowsinputmethods.cpp:167
+msgctxt "input-method"
+msgid "Italian Keyboard"
+msgstr "義大利文鍵盤"
+
+#: src/windowsinputmethods.cpp:169
+msgctxt "input-method"
+msgid "Portuguese Keyboard"
+msgstr "葡萄牙文鍵盤"
+
+#: src/windowsinputmethods.cpp:171
+msgctxt "input-method"
+msgid "Russian Keyboard"
+msgstr "俄文鍵盤"
+
+#: src/windowsinputmethods.cpp:173
+msgctxt "input-method"
+msgid "Ukrainian Keyboard"
+msgstr "烏克蘭文鍵盤"
+
+#: src/windowsinputmethods.cpp:175
+msgctxt "input-method"
+msgid "Arabic Keyboard"
+msgstr "阿拉伯文鍵盤"
+
+#: src/windowsinputmethods.cpp:177
+msgctxt "input-method"
+msgid "Hebrew Keyboard"
+msgstr "希伯來文鍵盤"
+
+#: src/windowsinputmethods.cpp:179
+msgctxt "input-method"
+msgid "Greek Keyboard"
+msgstr "希臘文鍵盤"
+
+#: src/windowsinputmethods.cpp:181
+msgctxt "input-method"
+msgid "Turkish Keyboard"
+msgstr "土耳其文鍵盤"
+
+#: src/windowsinputmethods.cpp:183
+msgctxt "input-method"
+msgid "Vietnamese Keyboard"
+msgstr "越南文鍵盤"
+
+#: src/windowsinputmethods.cpp:185
+msgctxt "input-method"
+msgid "Thai Keyboard"
+msgstr "泰文鍵盤"
+
+#: src/windowsinputmethods.cpp:187
+msgctxt "input-method"
+msgid "Japanese Keyboard"
+msgstr "日文鍵盤"
+
+#: src/windowsinputmethods.cpp:189
+msgctxt "input-method"
+msgid "Korean Keyboard"
+msgstr "韓文鍵盤"
+
+#: src/windowsinputmethods.cpp:191
+msgctxt "input-method"
+msgid "Keyboard - Chinese"
+msgstr "鍵盤 - 中文"
+
+#: src/windowsinputmethods.cpp:194
+msgctxt "input-method"
+msgid "Keyboard - Chinese - Pinyin alphabet (with AltGr dead keys)"
+msgstr "鍵盤 - 中文 - 拼音字母（含 AltGr 死鍵）"
+
+#: src/windowsinputmethods.cpp:198
+msgctxt "input-method"
+msgid "Keyboard - Chinese (Traditional)"
+msgstr "鍵盤 - 中文（繁體）"
+
+#: src/windowsinputmethods.cpp:207
 msgctxt "input-method"
 msgid "Pinyin"
 msgstr "拼音"
 
-#: src/windowsinputmethods.cpp:156
+#: src/windowsinputmethods.cpp:211
 msgctxt "input-method"
 msgid "Shuangpin"
 msgstr "雙拼"
 
-#: src/windowsinputmethods.cpp:160
+#: src/windowsinputmethods.cpp:215
 msgctxt "input-method"
 msgid "Wubi"
 msgstr "五筆字型"
 
-#: src/windowsinputmethods.cpp:163
+#: src/windowsinputmethods.cpp:218
 msgctxt "input-method"
 msgid "Wubi Pinyin"
 msgstr "五筆拼音"
@@ -734,10 +1182,6 @@ msgstr "五筆拼音"
 #~ msgstr "本機建置（無 CI 資訊）"
 
 #~ msgctxt "settings"
-#~ msgid "Commit time: "
-#~ msgstr "Commit 時間："
-
-#~ msgctxt "settings"
 #~ msgid "GPL-3.0 License"
 #~ msgstr "GPL-3.0 授權條款"
 
@@ -756,132 +1200,3 @@ msgstr "五筆拼音"
 #~ msgctxt "settings"
 #~ msgid "Shuangpin"
 #~ msgstr "雙拼"
-
-
-msgctxt "settings"
-msgid "Shortcuts"
-msgstr "快捷鍵"
-
-msgctxt "settings"
-msgid "Switch input method"
-msgstr "切換輸入法"
-
-msgctxt "settings"
-msgid "Quick switch to input method {0}"
-msgstr "快速切換至第 {0} 個輸入法"
-
-msgctxt "settings"
-msgid "Quick switches follow the input method order. Missing or unavailable entries are ignored. Empty shortcuts disable the action."
-msgstr "快速切換依輸入法清單的順序。不存在或無法使用的項目將被忽略。清空快捷鍵可停用該操作。"
-
-msgctxt "settings"
-msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
-msgstr "快捷鍵無效或重複，請使用錄製功能選擇其他快捷鍵。"
-
-msgctxt "menu"
-msgid "Reading input method menu..."
-msgstr "正在讀取輸入法選單…"
-
-msgctxt "menu"
-msgid "Unable to read input method menu"
-msgstr "讀取輸入法選單失敗"
-
-msgctxt "settings"
-msgid "Arabic"
-msgstr "阿拉伯語"
-
-msgctxt "settings"
-msgid "German"
-msgstr "德語"
-
-msgctxt "settings"
-msgid "Greek"
-msgstr "希臘語"
-
-msgctxt "settings"
-msgid "English"
-msgstr "英語"
-
-msgctxt "settings"
-msgid "Spanish"
-msgstr "西班牙語"
-
-msgctxt "settings"
-msgid "French"
-msgstr "法語"
-
-msgctxt "settings"
-msgid "Hebrew"
-msgstr "希伯來語"
-
-msgctxt "settings"
-msgid "Italian"
-msgstr "義大利語"
-
-msgctxt "settings"
-msgid "Japanese"
-msgstr "日語"
-
-msgctxt "settings"
-msgid "Korean"
-msgstr "韓語"
-
-msgctxt "settings"
-msgid "Portuguese"
-msgstr "葡萄牙語"
-
-msgctxt "settings"
-msgid "Russian"
-msgstr "俄語"
-
-msgctxt "settings"
-msgid "Thai"
-msgstr "泰語"
-
-msgctxt "settings"
-msgid "Turkish"
-msgstr "土耳其語"
-
-msgctxt "settings"
-msgid "Ukrainian"
-msgstr "烏克蘭語"
-
-msgctxt "settings"
-msgid "Vietnamese"
-msgstr "越南語"
-
-msgctxt "settings"
-msgid "Chinese"
-msgstr "中文"
-
-msgctxt "settings"
-msgid "Chinese (Simplified)"
-msgstr "簡體中文"
-
-msgctxt "settings"
-msgid "Chinese (Hong Kong)"
-msgstr "中文（香港）"
-
-msgctxt "settings"
-msgid "Chinese (Traditional)"
-msgstr "繁體中文"
-
-msgctxt "settings"
-msgid "Other"
-msgstr "其他"
-
-msgctxt "settings"
-msgid "Wu Chinese"
-msgstr "吳語"
-
-msgctxt "settings"
-msgid "Candidate layout"
-msgstr "候選視窗配置"
-
-msgctxt "settings"
-msgid "Vertical"
-msgstr "直排"
-
-msgctxt "settings"
-msgid "Horizontal"
-msgstr "橫排"

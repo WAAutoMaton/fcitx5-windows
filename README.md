@@ -1,6 +1,6 @@
 # Fcitx5 Windows
 
-[中文文档](README_zh-cn.md) | [日本語](README_ja.md)
+[中文文档](README_zh-cn.md) | [日本語](README_ja.md) | [한국어](README_ko.md)
 
 An in-progress Windows port of Fcitx5 for AMD64. Core runs in a separate
 process, x64 and x86 TSF DLLs integrate with applications, and a WinUI 3
@@ -47,8 +47,8 @@ installers are published by the CI and Nightly release workflow.
   - Third-party Pinyin dictionary status view with automatic background reload.
   - Read-only addon status page in **Global Settings > Plugins**, plus
     independent engine/resource plugin package discovery.
-  - Simplified Chinese, Traditional Chinese and English UI with a
-    follow-system option.
+  - Simplified Chinese, Traditional Chinese, Japanese, Korean and English UI
+    with a follow-system option.
 - **Environment & diagnostics**:
   - Automatic background Core startup for standard desktop sessions, plus
     optional login startup in the installer.

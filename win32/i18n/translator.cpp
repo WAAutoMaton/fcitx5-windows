@@ -43,6 +43,10 @@ Translator::Translator(UiLanguage language,
             info.language = "ja";
             info.country = "JP";
             break;
+        case UiLanguage::Korean:
+            info.language = "ko";
+            info.country = "KR";
+            break;
         default:
             info.language = "en";
             info.country = "US";

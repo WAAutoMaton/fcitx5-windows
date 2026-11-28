@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Prefix,
-    [ValidateSet('en', 'zh-Hans', 'zh-Hant', 'ja')][string]$Language = 'zh-Hans',
+    [ValidateSet('en', 'zh-Hans', 'zh-Hant', 'ja', 'ko')][string]$Language = 'zh-Hans',
     [string]$LogDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -17,6 +17,7 @@ function Text([int[]]$Codes) { -join ([char[]]$Codes) }
 $apply = if ($Language -eq 'en') { 'Apply' }
     elseif ($Language -eq 'zh-Hans') { Text @(0x5e94,0x7528) }
     elseif ($Language -eq 'ja') { Text @(0x9069,0x7528) }
+    elseif ($Language -eq 'ko') { Text @(0xc801,0xc6a9) }
     else { Text @(0x5957,0x7528) }
 $coreProcess = $null; $settingsProcess = $null
 $oldSkipUser = $env:SKIP_FCITX_USER_PATH

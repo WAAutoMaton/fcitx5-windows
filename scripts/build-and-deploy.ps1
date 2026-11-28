@@ -195,7 +195,7 @@ try {
             throw "Missing staged output: $file"
         }
     }
-    foreach ($language in @('zh_CN', 'zh_TW', 'ja')) {
+    foreach ($language in @('zh_CN', 'zh_TW', 'ja', 'ko')) {
         if (!(Test-Path -LiteralPath "$staging/share/locale/$language/LC_MESSAGES/fcitx5-windows.mo" -PathType Leaf)) {
             throw "Missing Windows translation catalog: $language"
         }

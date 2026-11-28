@@ -324,6 +324,7 @@ void SettingsWindow::translateStatic() {
     language_.Items().Append(box_value(L"\u7e41\u9ad4\u4e2d\u6587"));
     language_.Items().Append(box_value(L"English"));
     language_.Items().Append(box_value(L"\u65e5\u672c\u8a9e"));
+    language_.Items().Append(box_value(L"\ud55c\uad6d\uc5b4"));
     language_.SelectedIndex(static_cast<int>(global_.settings.language));
     candidateLayout_.Items().Clear();
     candidateLayout_.Items().Append(box_value(tr("settings", "Vertical")));
@@ -356,7 +357,9 @@ void SettingsWindow::renderGlobal() {
     win32::diagnostic::settingsLogger().setEnabled(
         global_.settings.detailedLogging);
     logStatus_.Text(
-        tr("settings", global_.settings.detailedLogging ? "Starting" : "Off"));
+        tr("settings", global_.settings.detailedLogging
+                           ? win32::i18n::mark("settings", "Starting")
+                           : win32::i18n::mark("settings", "Off")));
     operation.stage("log_status");
     refreshLogStatus();
     if (globalPanel_.SelectedIndex() == 2)
@@ -1699,7 +1702,34 @@ void SettingsWindow::renderConfig() {
         {"CurrentCandidate", tr("settings", "Select Current Candidate")},
         {"ChooseLastCharFromPhrase",
          tr("settings", "Choose Last Character from Phrase")},
-        {"DefaultCandidate", tr("settings", "Select Current Candidate")}};
+        {"DefaultCandidate", tr("settings", "Select Current Candidate")},
+        {"Correction", tr("settings", "Correction Layout")},
+        {"CloudPinyinEnabled", tr("settings", "Enable Cloud Pinyin")},
+        {"CloudPinyinIndex", tr("settings", "Cloud Pinyin Candidate Order")},
+        {"CloudPinyinAnimation",
+         tr("settings", "Show animation when Cloud Pinyin is loading")},
+        {"KeepCloudPinyinPlaceHolder",
+         tr("settings", "Always show Cloud Pinyin place holder")},
+        {"KeepCurrentContext",
+         tr("settings",
+            "Keep the current typed text for next input prediction")},
+        {"PredictionSize", tr("settings", "Number of Predictions")},
+        {"WordCandidateLimit", tr("settings", "Number of Phrase Candidates")},
+        {"BackspaceBehaviorOnPrediction",
+         tr("settings", "Backspace behavior on prediction")},
+        {"SwitchInputMethodBehavior",
+         tr("settings", "Action when switching input method")},
+        {"BackSpaceToUnselect",
+         tr("settings", "Use BackSpace to cancel the selection")},
+        {"CommitRawInput", tr("settings", "Commit Raw Input")},
+        {"LookupPinyinKey", tr("settings", "Look up pinyin")},
+        {"SortByCodeLength", tr("settings", "Sort candidate by code length")},
+        {"AutoPhraseWithPhrase",
+         tr("settings", "Learn auto phrase with phrase")},
+        {"SpaceBeforeHint",
+         tr("settings", "Show space between candidate and hint text")},
+        {"KeypadAsInput",
+         tr("settings", "Allow use keypad key as table input")}};
     std::string group;
     for (const auto &option : config_.options) {
         const auto separator = option.path.find_last_of('/');
@@ -1712,8 +1742,10 @@ void SettingsWindow::renderConfig() {
         if (section != group || editors_.empty()) {
             TextBlock title;
             title.Text(section == "Fuzzy" ? tr("settings", "Fuzzy Pinyin")
-                       : section.empty()  ? tr("settings", "General")
-                                          : std::wstring(to_hstring(section)));
+                       : section == "TableGlobal"
+                           ? tr("settings", "Table Global Options")
+                       : section.empty() ? tr("settings", "General")
+                                         : std::wstring(to_hstring(section)));
             title.FontSize(18);
             title.FontWeight(Windows::UI::Text::FontWeights::SemiBold());
             title.Margin({0, 12, 0, 4});
@@ -1766,6 +1798,30 @@ void SettingsWindow::renderConfig() {
             ComboBox combo;
             combo.Width(210);
             int selected = -1;
+            static constexpr std::pair<const char *, const char *>
+                enumFallbacks[] = {
+                    {"Do not show", win32::i18n::mark("settings", "Do not show")},
+                    {"Composing pinyin",
+                     win32::i18n::mark("settings", "Composing pinyin")},
+                    {"Commit preview",
+                     win32::i18n::mark("settings", "Commit preview")},
+                    {"Clear", win32::i18n::mark("settings", "Clear")},
+                    {"Commit current preedit",
+                     win32::i18n::mark("settings", "Commit current preedit")},
+                    {"Commit default selection",
+                     win32::i18n::mark("settings", "Commit default selection")},
+                    {"Only Clear candidates",
+                     win32::i18n::mark("settings", "Only Clear candidates")},
+                    {"Clear candidates & backspace",
+                     win32::i18n::mark("settings",
+                                       "Clear candidates & backspace")},
+                    {"Backspace when not using on-screen keyboard",
+                     win32::i18n::mark(
+                         "settings",
+                         "Backspace when not using on-screen keyboard")},
+                    {"None", win32::i18n::mark("settings", "None")},
+                    {"QWERTY", win32::i18n::mark("settings", "QWERTY")},
+                };
             for (size_t i = 0; i < option.choices.size(); ++i) {
                 auto name = to_hstring(option.choices[i].label);
                 if (key == "ShuangpinProfile") {
@@ -1777,6 +1833,13 @@ void SettingsWindow::renderConfig() {
                                 static_cast<ipc::ShuangpinProfile>(p)) ==
                             option.choices[i].value) {
                             name = tr("settings", profileNames[p]);
+                        }
+                    }
+                } else if (option.choices[i].label == option.choices[i].value) {
+                    for (const auto &[raw, marked] : enumFallbacks) {
+                        if (option.choices[i].value == raw) {
+                            name = tr("settings", marked);
+                            break;
                         }
                     }
                 }

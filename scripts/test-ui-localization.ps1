@@ -221,7 +221,7 @@ try {
     $languageCombo = Find-Id 'UiLanguage'
     $expandChoices = $languageCombo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
     $expandChoices.Expand(); Start-Sleep -Milliseconds 150
-    foreach ($choice in @('Follow System Language', (Text @(0x7b80,0x4f53,0x4e2d,0x6587)), (Text @(0x7e41,0x9ad4,0x4e2d,0x6587)), 'English', (Text @(0x65e5,0x672c,0x8a9e)))) {
+    foreach ($choice in @('Follow System Language', (Text @(0x7b80,0x4f53,0x4e2d,0x6587)), (Text @(0x7e41,0x9ad4,0x4e2d,0x6587)), 'English', (Text @(0x65e5,0x672c,0x8a9e)), (Text @(0xd55c,0xad6d,0xc5b4)))) {
         if (!(Find-Name $choice)) { throw "Missing language choice: $choice" }
     }
     $expandChoices.Collapse()
@@ -272,13 +272,20 @@ try {
     if (!(Find-Name (Text @(0x30b0,0x30ed,0x30fc,0x30d0,0x30eb,0x8a2d,0x5b9a)))) { throw 'Japanese translation missing.' }
     Capture 'global-japanese'
     Capture 'global-japanese-minimum' 720 480
-    Choose-Language 'English'
+    Choose-Language (Text @(0xd55c,0xad6d,0xc5b4))
     Invoke (Find-Name (Text @(0x9069,0x7528))); Wait-Ready
     Close-Settings (Text @(0x9589,0x3058,0x308b)); Stop-Fixture
+    Start-Fixture; Open-Settings (Text @(0xc785,0xb825,0xae30,0x0020,0xc124,0xc815)); Global
+    if (!(Find-Name (Text @(0xc804,0xc5ed,0x0020,0xc124,0xc815)))) { throw 'Korean translation missing.' }
+    Capture 'global-korean'
+    Capture 'global-korean-minimum' 720 480
+    Choose-Language 'English'
+    Invoke (Find-Name (Text @(0xc801,0xc6a9))); Wait-Ready
+    Close-Settings (Text @(0xb2eb,0xae30)); Stop-Fixture
     Start-Fixture; Open-Settings 'Input Method Settings'; Global
     Capture 'global-english-restored'
     Close-Settings 'Close'
-    Write-Output "PASS: actual WinUI with isolated simulated Core; navigation placement, save/deferred language, draft cancel/discard, reset, simplified/traditional/Japanese/English startup. Screenshots: $LogDirectory"
+    Write-Output "PASS: actual WinUI with isolated simulated Core; navigation placement, save/deferred language, draft cancel/discard, reset, simplified/traditional/Japanese/Korean/English startup. Screenshots: $LogDirectory"
 } finally {
     if ($settings -and !$settings.HasExited) { Stop-Process -Id $settings.Id; $settings.WaitForExit() }
     Stop-Fixture

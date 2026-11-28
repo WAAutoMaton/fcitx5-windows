@@ -1,0 +1,1150 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: fcitx5-windows\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-28 11:47+0800\n"
+"PO-Revision-Date: 2026-11-28 11:32+0800\n"
+"Last-Translator: Fcitx5 Windows contributors\n"
+"Language-Team: ko\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: win32/settings/SettingsWindow.cpp:84 win32/settings/SettingsWindow.cpp:97
+msgctxt "settings"
+msgid "Loaded"
+msgstr "로드됨"
+
+#: win32/settings/SettingsWindow.cpp:86
+msgctxt "settings"
+msgid "Failed to load"
+msgstr "로드 실패"
+
+#: win32/settings/SettingsWindow.cpp:88 win32/settings/SettingsWindow.cpp:99
+msgctxt "settings"
+msgid "Disabled"
+msgstr "비활성화됨"
+
+#: win32/settings/SettingsWindow.cpp:90
+msgctxt "settings"
+msgid "Loading"
+msgstr "로드 중"
+
+#: win32/settings/SettingsWindow.cpp:101
+msgctxt "settings"
+msgid "Not loaded"
+msgstr "로드되지 않음"
+
+#: win32/settings/SettingsWindow.cpp:106
+msgctxt "settings"
+msgid "Ziranma"
+msgstr "자연마"
+
+#: win32/settings/SettingsWindow.cpp:107
+msgctxt "settings"
+msgid "Microsoft"
+msgstr "Microsoft"
+
+#: win32/settings/SettingsWindow.cpp:108
+msgctxt "settings"
+msgid "Ziguang"
+msgstr "자광"
+
+#: win32/settings/SettingsWindow.cpp:109
+msgctxt "settings"
+msgid "Smart ABC"
+msgstr "스마트 ABC"
+
+#: win32/settings/SettingsWindow.cpp:110
+msgctxt "settings"
+msgid "Chinese Star"
+msgstr "중문지성"
+
+#: win32/settings/SettingsWindow.cpp:111
+msgctxt "settings"
+msgid "Pinyin Jiajia"
+msgstr "병음가가"
+
+#: win32/settings/SettingsWindow.cpp:112
+msgctxt "settings"
+msgid "Xiaohe"
+msgstr "샤오허"
+
+#: win32/settings/SettingsWindow.cpp:113
+msgctxt "settings"
+msgid "GB Standard"
+msgstr "국가표준"
+
+#: win32/settings/SettingsWindow.cpp:114
+msgctxt "settings"
+msgid "Existing custom profile"
+msgstr "기존 사용자 지정 프로필"
+
+#: win32/settings/SettingsWindow.cpp:120
+msgctxt "settings"
+msgid "Settings have changed. Reload before editing."
+msgstr "설정이 변경되었습니다. 편집하기 전에 다시 불러오세요."
+
+#: win32/settings/SettingsWindow.cpp:123
+msgctxt "settings"
+msgid "Keep at least one available input method. Add another before removing this one."
+msgstr "사용 가능한 입력기를 하나 이상 유지해야 합니다. 이 항목을 제거하기 전에 다른 입력기를 추가하세요."
+
+#: win32/settings/SettingsWindow.cpp:127
+msgctxt "settings"
+msgid "Cannot save settings. Check write permissions for the user configuration directory."
+msgstr "설정을 저장할 수 없습니다. 사용자 설정 디렉터리의 쓰기 권한을 확인하세요."
+
+#: win32/settings/SettingsWindow.cpp:131
+msgctxt "settings"
+msgid "The input engine or input method is unavailable."
+msgstr "입력 엔진 또는 입력기를 사용할 수 없습니다."
+
+#: win32/settings/SettingsWindow.cpp:134
+msgctxt "settings"
+msgid "Cannot apply settings. Please retry."
+msgstr "설정을 적용할 수 없습니다. 다시 시도해 주세요."
+
+#: win32/settings/SettingsWindow.cpp:261
+msgctxt "settings"
+msgid "Settings are being updated by another session. Please retry."
+msgstr "다른 세션에서 설정을 업데이트하고 있습니다. 다시 시도해 주세요."
+
+#: win32/settings/SettingsWindow.cpp:269 win32/settings/SettingsWindow.cpp:794
+#: win32/settings/main.cpp:129 win32/settings/main.cpp:150
+#: win32/settings/main.cpp:217
+msgctxt "settings"
+msgid "Input Method Settings"
+msgstr "입력기 설정"
+
+#: win32/settings/SettingsWindow.cpp:270
+msgctxt "settings"
+msgid "Input Methods"
+msgstr "입력기"
+
+#: win32/settings/SettingsWindow.cpp:271 win32/settings/SettingsWindow.cpp:299
+#: win32/settings/SettingsWindow.cpp:347
+msgctxt "settings"
+msgid "Global Settings"
+msgstr "전역 설정"
+
+#: win32/settings/SettingsWindow.cpp:272 win32/settings/SettingsWindow.cpp:295
+msgctxt "settings"
+msgid "Language"
+msgstr "언어"
+
+#: win32/settings/SettingsWindow.cpp:273 win32/settings/SettingsWindow.cpp:297
+msgctxt "settings"
+msgid "Candidate layout"
+msgstr "후보 레이아웃"
+
+#: win32/settings/SettingsWindow.cpp:274
+msgctxt "settings"
+msgid "Shortcuts"
+msgstr "단축키"
+
+#: win32/settings/SettingsWindow.cpp:275 win32/settings/SettingsWindow.cpp:1747
+msgctxt "settings"
+msgid "General"
+msgstr "일반"
+
+#: win32/settings/SettingsWindow.cpp:276
+msgctxt "settings"
+msgid "Plugins"
+msgstr "플러그인"
+
+#: win32/settings/SettingsWindow.cpp:277 win32/settings/SettingsWindow.cpp:279
+msgctxt "settings"
+msgid "Open Personal Plugin Folder"
+msgstr "개인 플러그인 폴더 열기"
+
+#: win32/settings/SettingsWindow.cpp:280
+msgctxt "settings"
+msgid "Developer options"
+msgstr "개발자 옵션"
+
+#: win32/settings/SettingsWindow.cpp:281 win32/settings/SettingsWindow.cpp:289
+msgctxt "settings"
+msgid "Enable detailed logging"
+msgstr "상세 로그 사용"
+
+#: win32/settings/SettingsWindow.cpp:283
+msgctxt "settings"
+msgid "Logs record connection, context, candidate counts and layout metadata, never input text. Files are kept here for up to 7 days, up to 512 MiB total."
+msgstr "로그에는 연결, 컨텍스트, 후보 수, 레이아웃 메타데이터만 기록되며 입력 텍스트는 절대 기록되지 않습니다. 파일은 최대 7일간, 총 512 MiB까지 보관됩니다."
+
+#: win32/settings/SettingsWindow.cpp:286
+msgctxt "settings"
+msgid "Log folder"
+msgstr "로그 폴더"
+
+#: win32/settings/SettingsWindow.cpp:287 win32/settings/SettingsWindow.cpp:293
+msgctxt "settings"
+msgid "Open log folder"
+msgstr "로그 폴더 열기"
+
+#: win32/settings/SettingsWindow.cpp:290
+msgctxt "settings"
+msgid "On"
+msgstr "켬"
+
+#: win32/settings/SettingsWindow.cpp:291 win32/settings/SettingsWindow.cpp:362
+#: win32/settings/SettingsWindow.cpp:2594
+msgctxt "settings"
+msgid "Off"
+msgstr "끔"
+
+#: win32/settings/SettingsWindow.cpp:301
+msgctxt "settings"
+msgid "Reset to Defaults"
+msgstr "기본값으로 재설정"
+
+#: win32/settings/SettingsWindow.cpp:302
+msgctxt "settings"
+msgid "Reload"
+msgstr "다시 불러오기"
+
+#: win32/settings/SettingsWindow.cpp:303
+msgctxt "settings"
+msgid "Close"
+msgstr "닫기"
+
+#: win32/settings/SettingsWindow.cpp:304
+msgctxt "settings"
+msgid "Apply"
+msgstr "적용"
+
+#: win32/settings/SettingsWindow.cpp:308 win32/settings/SettingsWindow.cpp:1429
+#: win32/settings/SettingsWindow.cpp:1458
+msgctxt "settings"
+msgid "Add Input Method"
+msgstr "입력기 추가"
+
+#: win32/settings/SettingsWindow.cpp:309
+msgctxt "settings"
+msgid "Remove"
+msgstr "제거"
+
+#: win32/settings/SettingsWindow.cpp:310
+msgctxt "settings"
+msgid "Move Up"
+msgstr "위로 이동"
+
+#: win32/settings/SettingsWindow.cpp:311
+msgctxt "settings"
+msgid "Move Down"
+msgstr "아래로 이동"
+
+#: win32/settings/SettingsWindow.cpp:317
+msgctxt "settings"
+msgid "Dictionaries"
+msgstr "사전"
+
+#: win32/settings/SettingsWindow.cpp:319
+msgctxt "settings"
+msgid "Open Third-party Dictionary Folder"
+msgstr "타사 사전 폴더 열기"
+
+#: win32/settings/SettingsWindow.cpp:322
+msgctxt "settings"
+msgid "Follow System Language"
+msgstr "시스템 언어 따르기"
+
+#: win32/settings/SettingsWindow.cpp:330
+msgctxt "settings"
+msgid "Vertical"
+msgstr "세로"
+
+#: win32/settings/SettingsWindow.cpp:331
+msgctxt "settings"
+msgid "Horizontal"
+msgstr "가로"
+
+#: win32/settings/SettingsWindow.cpp:361 win32/settings/SettingsWindow.cpp:2547
+#: win32/settings/SettingsWindow.cpp:2596
+msgctxt "settings"
+msgid "Starting"
+msgstr "시작 중"
+
+#: win32/settings/SettingsWindow.cpp:400
+msgctxt "settings"
+msgid "Quick switches follow the input method order. Missing or unavailable entries are ignored. Empty shortcuts disable the action."
+msgstr "빠른 전환은 입력기 목록의 순서를 따릅니다. 없거나 사용할 수 없는 항목은 무시됩니다. 단축키를 비워 두면 동작이 비활성화됩니다."
+
+#: win32/settings/SettingsWindow.cpp:406
+msgctxt "settings"
+msgid "Switch input method"
+msgstr "입력기 전환"
+
+#: win32/settings/SettingsWindow.cpp:408
+#, c++-format
+msgctxt "settings"
+msgid "Quick switch to input method {0}"
+msgstr "{0}번 입력기로 빠르게 전환"
+
+#: win32/settings/SettingsWindow.cpp:455 win32/settings/SettingsWindow.cpp:457
+msgctxt "settings"
+msgid "Record shortcut"
+msgstr "단축키 기록"
+
+#: win32/settings/SettingsWindow.cpp:495 win32/settings/SettingsWindow.cpp:555
+#: win32/settings/SettingsWindow.cpp:2045
+#: win32/settings/SettingsWindow.cpp:2121
+#: win32/settings/SettingsWindow.cpp:2287
+#: win32/settings/SettingsWindow.cpp:2330
+#: win32/settings/SettingsWindow.cpp:2445
+msgctxt "settings"
+msgid "Cannot connect to Core."
+msgstr "Core에 연결할 수 없습니다."
+
+#: win32/settings/SettingsWindow.cpp:516
+msgctxt "settings"
+msgid "Invalid or duplicate shortcuts. Use the recorder to choose a different shortcut."
+msgstr "단축키가 잘못되었거나 중복됩니다. 기록 기능을 사용하여 다른 단축키를 선택하세요."
+
+#: win32/settings/SettingsWindow.cpp:571
+msgctxt "settings"
+msgid "Language saved. Restart services to apply it to Settings."
+msgstr "언어가 저장되었습니다. 설정에 적용하려면 서비스를 다시 시작하세요."
+
+#: win32/settings/SettingsWindow.cpp:605
+msgctxt "settings"
+msgid "Save changes?"
+msgstr "변경 사항을 저장하시겠습니까?"
+
+#: win32/settings/SettingsWindow.cpp:606
+msgctxt "settings"
+msgid "Save"
+msgstr "저장"
+
+#: win32/settings/SettingsWindow.cpp:607
+msgctxt "settings"
+msgid "Discard"
+msgstr "버리기"
+
+#: win32/settings/SettingsWindow.cpp:608 win32/settings/SettingsWindow.cpp:1460
+#: win32/settings/SettingsWindow.cpp:1903
+msgctxt "settings"
+msgid "Cancel"
+msgstr "취소"
+
+#: win32/settings/SettingsWindow.cpp:1198
+msgctxt "settings"
+msgid "Loading..."
+msgstr "로드 중..."
+
+#: win32/settings/SettingsWindow.cpp:1234
+msgctxt "settings"
+msgid "Cannot connect to Core. Check that it is running and retry."
+msgstr "Core에 연결할 수 없습니다. 실행 중인지 확인하고 다시 시도하세요."
+
+#: win32/settings/SettingsWindow.cpp:1459
+msgctxt "settings"
+msgid "Add"
+msgstr "추가"
+
+#: win32/settings/SettingsWindow.cpp:1545
+msgctxt "settings"
+msgid "Arabic"
+msgstr "아랍어"
+
+#: win32/settings/SettingsWindow.cpp:1546
+msgctxt "settings"
+msgid "German"
+msgstr "독일어"
+
+#: win32/settings/SettingsWindow.cpp:1547
+msgctxt "settings"
+msgid "Greek"
+msgstr "그리스어"
+
+#: win32/settings/SettingsWindow.cpp:1548
+msgctxt "settings"
+msgid "English"
+msgstr "영어"
+
+#: win32/settings/SettingsWindow.cpp:1549
+msgctxt "settings"
+msgid "Spanish"
+msgstr "스페인어"
+
+#: win32/settings/SettingsWindow.cpp:1550
+msgctxt "settings"
+msgid "French"
+msgstr "프랑스어"
+
+#: win32/settings/SettingsWindow.cpp:1551
+msgctxt "settings"
+msgid "Hebrew"
+msgstr "히브리어"
+
+#: win32/settings/SettingsWindow.cpp:1552
+msgctxt "settings"
+msgid "Italian"
+msgstr "이탈리아어"
+
+#: win32/settings/SettingsWindow.cpp:1553
+msgctxt "settings"
+msgid "Japanese"
+msgstr "일본어"
+
+#: win32/settings/SettingsWindow.cpp:1554
+msgctxt "settings"
+msgid "Korean"
+msgstr "한국어"
+
+#: win32/settings/SettingsWindow.cpp:1555
+msgctxt "settings"
+msgid "Portuguese"
+msgstr "포르투갈어"
+
+#: win32/settings/SettingsWindow.cpp:1556
+msgctxt "settings"
+msgid "Russian"
+msgstr "러시아어"
+
+#: win32/settings/SettingsWindow.cpp:1557
+msgctxt "settings"
+msgid "Thai"
+msgstr "태국어"
+
+#: win32/settings/SettingsWindow.cpp:1558
+msgctxt "settings"
+msgid "Turkish"
+msgstr "튀르키예어"
+
+#: win32/settings/SettingsWindow.cpp:1559
+msgctxt "settings"
+msgid "Ukrainian"
+msgstr "우크라이나어"
+
+#: win32/settings/SettingsWindow.cpp:1560
+msgctxt "settings"
+msgid "Vietnamese"
+msgstr "베트남어"
+
+#: win32/settings/SettingsWindow.cpp:1561
+msgctxt "settings"
+msgid "Wu Chinese"
+msgstr "우어"
+
+#: win32/settings/SettingsWindow.cpp:1562
+msgctxt "settings"
+msgid "Chinese"
+msgstr "중국어"
+
+#: win32/settings/SettingsWindow.cpp:1563
+msgctxt "settings"
+msgid "Chinese (Simplified)"
+msgstr "중국어 (간체)"
+
+#: win32/settings/SettingsWindow.cpp:1564
+msgctxt "settings"
+msgid "Chinese (Hong Kong)"
+msgstr "중국어 (홍콩)"
+
+#: win32/settings/SettingsWindow.cpp:1565
+msgctxt "settings"
+msgid "Chinese (Traditional)"
+msgstr "중국어 (번체)"
+
+#: win32/settings/SettingsWindow.cpp:1566
+msgctxt "settings"
+msgid "Other"
+msgstr "기타"
+
+#: win32/settings/SettingsWindow.cpp:1644
+msgctxt "settings"
+msgid "Pinyin Settings"
+msgstr "병음 설정"
+
+#: win32/settings/SettingsWindow.cpp:1645
+msgctxt "settings"
+msgid "Table Settings"
+msgstr "테이블 설정"
+
+#: win32/settings/SettingsWindow.cpp:1646
+msgctxt "settings"
+msgid "Keyboard Settings"
+msgstr "키보드 설정"
+
+#: win32/settings/SettingsWindow.cpp:1647
+msgctxt "settings"
+msgid "Settings"
+msgstr "설정"
+
+#: win32/settings/SettingsWindow.cpp:1657
+msgctxt "settings"
+msgid "Keyboard layout: Windows"
+msgstr "키보드 레이아웃: Windows"
+
+#: win32/settings/SettingsWindow.cpp:1658
+msgctxt "settings"
+msgid "No settings available"
+msgstr "사용 가능한 설정이 없습니다"
+
+#: win32/settings/SettingsWindow.cpp:1664
+msgctxt "settings"
+msgid "Shuangpin Profile"
+msgstr "쌍병음 프로필"
+
+#: win32/settings/SettingsWindow.cpp:1665
+msgctxt "settings"
+msgid "Candidates Per Page"
+msgstr "페이지당 후보 수"
+
+#: win32/settings/SettingsWindow.cpp:1666
+msgctxt "settings"
+msgid "English Candidates"
+msgstr "영어 후보"
+
+#: win32/settings/SettingsWindow.cpp:1667
+msgctxt "settings"
+msgid "Symbol Candidates"
+msgstr "기호 후보"
+
+#: win32/settings/SettingsWindow.cpp:1668
+msgctxt "settings"
+msgid "Character Decomposition Candidates"
+msgstr "한자 분해 후보"
+
+#: win32/settings/SettingsWindow.cpp:1669
+msgctxt "settings"
+msgid "Extended Chinese Characters"
+msgstr "확장 한자"
+
+#: win32/settings/SettingsWindow.cpp:1670
+msgctxt "settings"
+msgid "Stroke Candidates"
+msgstr "필획 후보"
+
+#: win32/settings/SettingsWindow.cpp:1671
+msgctxt "settings"
+msgid "Prediction"
+msgstr "예측 입력"
+
+#: win32/settings/SettingsWindow.cpp:1672
+msgctxt "settings"
+msgid "Preedit Mode"
+msgstr "사전 편집 모드"
+
+#: win32/settings/SettingsWindow.cpp:1674
+msgctxt "settings"
+msgid "Keep Preedit Cursor at Beginning"
+msgstr "사전 편집 커서를 시작 위치에 고정"
+
+#: win32/settings/SettingsWindow.cpp:1675
+msgctxt "settings"
+msgid "Show Full Pinyin in Preedit"
+msgstr "사전 편집에 전체 병음 표시"
+
+#: win32/settings/SettingsWindow.cpp:1676
+msgctxt "settings"
+msgid "Show Shuangpin Mode"
+msgstr "쌍병음 모드 표시"
+
+#: win32/settings/SettingsWindow.cpp:1677
+msgctxt "settings"
+msgid "Common Mistakes"
+msgstr "자주 틀리는 오타"
+
+#: win32/settings/SettingsWindow.cpp:1678
+msgctxt "settings"
+msgid "Match Letters in Lowercase"
+msgstr "소문자로 문자 일치"
+
+#: win32/settings/SettingsWindow.cpp:1679
+msgctxt "settings"
+msgid "Inner Fuzzy Syllables (xian -> xi'an)"
+msgstr "내부 음절 분리 (xian -> xi'an)"
+
+#: win32/settings/SettingsWindow.cpp:1682
+msgctxt "settings"
+msgid "Inner Fuzzy Syllables for Short Pinyin (qie -> qi'e)"
+msgstr "단축 병음 내부 음절 분리 (qie -> qi'e)"
+
+#: win32/settings/SettingsWindow.cpp:1684
+msgctxt "settings"
+msgid "Match Incomplete Finals (e -> en, eng, ei)"
+msgstr "불완전한 운모 일치 (e -> en, eng, ei)"
+
+#: win32/settings/SettingsWindow.cpp:1686
+msgctxt "settings"
+msgid "Partial Shuangpin Matching for Input Longer Than 4"
+msgstr "4글자 초과 입력 시 부분 쌍병음 일치"
+
+#: win32/settings/SettingsWindow.cpp:1687
+msgctxt "settings"
+msgid "Automatically Select Candidates"
+msgstr "후보 자동 선택"
+
+#: win32/settings/SettingsWindow.cpp:1689
+msgctxt "settings"
+msgid "Unique Candidate Auto-selection Length"
+msgstr "단일 후보 자동 선택 길이"
+
+#: win32/settings/SettingsWindow.cpp:1690
+msgctxt "settings"
+msgid "Commit After Auto-selection"
+msgstr "자동 선택 후 입력 확정"
+
+#: win32/settings/SettingsWindow.cpp:1691
+msgctxt "settings"
+msgid "Commit When Deactivated"
+msgstr "비활성화 시 입력 확정"
+
+#: win32/settings/SettingsWindow.cpp:1692
+msgctxt "settings"
+msgid "Use Full Width"
+msgstr "전각 사용"
+
+#: win32/settings/SettingsWindow.cpp:1693
+msgctxt "settings"
+msgid "Show Code Hints"
+msgstr "코드 힌트 표시"
+
+#: win32/settings/SettingsWindow.cpp:1694
+msgctxt "settings"
+msgid "Learn Word Frequency"
+msgstr "단어 빈도 학습"
+
+#: win32/settings/SettingsWindow.cpp:1695
+msgctxt "settings"
+msgid "Order by Context"
+msgstr "문맥에 따라 정렬"
+
+#: win32/settings/SettingsWindow.cpp:1696
+msgctxt "settings"
+msgid "Use System Language Model"
+msgstr "시스템 언어 모델 사용"
+
+#: win32/settings/SettingsWindow.cpp:1697
+msgctxt "settings"
+msgid "Ordering Policy"
+msgstr "정렬 정책"
+
+#: win32/settings/SettingsWindow.cpp:1698
+msgctxt "settings"
+msgid "Previous Page"
+msgstr "이전 페이지"
+
+#: win32/settings/SettingsWindow.cpp:1699
+msgctxt "settings"
+msgid "Next Page"
+msgstr "다음 페이지"
+
+#: win32/settings/SettingsWindow.cpp:1700
+msgctxt "settings"
+msgid "Previous Candidate"
+msgstr "이전 후보"
+
+#: win32/settings/SettingsWindow.cpp:1701
+msgctxt "settings"
+msgid "Next Candidate"
+msgstr "다음 후보"
+
+#: win32/settings/SettingsWindow.cpp:1702
+#: win32/settings/SettingsWindow.cpp:1705
+msgctxt "settings"
+msgid "Select Current Candidate"
+msgstr "현재 후보 선택"
+
+#: win32/settings/SettingsWindow.cpp:1704
+msgctxt "settings"
+msgid "Choose Last Character from Phrase"
+msgstr "어구의 마지막 글자 선택"
+
+#: win32/settings/SettingsWindow.cpp:1706
+msgctxt "settings"
+msgid "Correction Layout"
+msgstr "오타 교정 레이아웃"
+
+#: win32/settings/SettingsWindow.cpp:1707
+msgctxt "settings"
+msgid "Enable Cloud Pinyin"
+msgstr "클라우드 병음 사용"
+
+#: win32/settings/SettingsWindow.cpp:1708
+msgctxt "settings"
+msgid "Cloud Pinyin Candidate Order"
+msgstr "클라우드 병음 후보 순서"
+
+#: win32/settings/SettingsWindow.cpp:1710
+msgctxt "settings"
+msgid "Show animation when Cloud Pinyin is loading"
+msgstr "클라우드 병음 로드 중 애니메이션 표시"
+
+#: win32/settings/SettingsWindow.cpp:1712
+msgctxt "settings"
+msgid "Always show Cloud Pinyin place holder"
+msgstr "클라우드 병음 자리 표시자 항상 표시"
+
+#: win32/settings/SettingsWindow.cpp:1715
+msgctxt "settings"
+msgid "Keep the current typed text for next input prediction"
+msgstr "다음 입력 예측을 위해 현재 입력된 텍스트 유지"
+
+#: win32/settings/SettingsWindow.cpp:1716
+msgctxt "settings"
+msgid "Number of Predictions"
+msgstr "예측 수"
+
+#: win32/settings/SettingsWindow.cpp:1717
+msgctxt "settings"
+msgid "Number of Phrase Candidates"
+msgstr "어구 후보 수"
+
+#: win32/settings/SettingsWindow.cpp:1719
+msgctxt "settings"
+msgid "Backspace behavior on prediction"
+msgstr "예측 시 백스페이스 동작"
+
+#: win32/settings/SettingsWindow.cpp:1721
+msgctxt "settings"
+msgid "Action when switching input method"
+msgstr "입력기 전환 시 동작"
+
+#: win32/settings/SettingsWindow.cpp:1723
+msgctxt "settings"
+msgid "Use BackSpace to cancel the selection"
+msgstr "백스페이스로 선택 취소"
+
+#: win32/settings/SettingsWindow.cpp:1724
+msgctxt "settings"
+msgid "Commit Raw Input"
+msgstr "원본 입력 확정"
+
+#: win32/settings/SettingsWindow.cpp:1725
+msgctxt "settings"
+msgid "Look up pinyin"
+msgstr "병음 조회"
+
+#: win32/settings/SettingsWindow.cpp:1726
+msgctxt "settings"
+msgid "Sort candidate by code length"
+msgstr "코드 길이순으로 후보 정렬"
+
+#: win32/settings/SettingsWindow.cpp:1728
+msgctxt "settings"
+msgid "Learn auto phrase with phrase"
+msgstr "어구로 자동 어구 학습"
+
+#: win32/settings/SettingsWindow.cpp:1730
+msgctxt "settings"
+msgid "Show space between candidate and hint text"
+msgstr "후보와 힌트 사이에 공백 표시"
+
+#: win32/settings/SettingsWindow.cpp:1732
+msgctxt "settings"
+msgid "Allow use keypad key as table input"
+msgstr "키패드 키를 테이블 입력으로 사용 허용"
+
+#: win32/settings/SettingsWindow.cpp:1744
+msgctxt "settings"
+msgid "Fuzzy Pinyin"
+msgstr "유사음 병음"
+
+#: win32/settings/SettingsWindow.cpp:1746
+msgctxt "settings"
+msgid "Table Global Options"
+msgstr "테이블 전역 옵션"
+
+#: win32/settings/SettingsWindow.cpp:1803
+msgctxt "settings"
+msgid "Do not show"
+msgstr "표시 안 함"
+
+#: win32/settings/SettingsWindow.cpp:1805
+msgctxt "settings"
+msgid "Composing pinyin"
+msgstr "조합 중인 병음"
+
+#: win32/settings/SettingsWindow.cpp:1807
+msgctxt "settings"
+msgid "Commit preview"
+msgstr "확정 미리 보기"
+
+#: win32/settings/SettingsWindow.cpp:1808
+msgctxt "settings"
+msgid "Clear"
+msgstr "지우기"
+
+#: win32/settings/SettingsWindow.cpp:1810
+msgctxt "settings"
+msgid "Commit current preedit"
+msgstr "현재 사전 편집 확정"
+
+#: win32/settings/SettingsWindow.cpp:1812
+msgctxt "settings"
+msgid "Commit default selection"
+msgstr "기본 선택 항목 확정"
+
+#: win32/settings/SettingsWindow.cpp:1814
+msgctxt "settings"
+msgid "Only Clear candidates"
+msgstr "후보만 지우기"
+
+#: win32/settings/SettingsWindow.cpp:1817
+msgctxt "settings"
+msgid "Clear candidates & backspace"
+msgstr "후보 지우기 및 백스페이스"
+
+#: win32/settings/SettingsWindow.cpp:1821
+msgctxt "settings"
+msgid "Backspace when not using on-screen keyboard"
+msgstr "화상 키보드 미사용 시 백스페이스"
+
+#: win32/settings/SettingsWindow.cpp:1822
+msgctxt "settings"
+msgid "None"
+msgstr "없음"
+
+#: win32/settings/SettingsWindow.cpp:1823
+msgctxt "settings"
+msgid "QWERTY"
+msgstr "QWERTY"
+
+#: win32/settings/SettingsWindow.cpp:1902
+msgctxt "settings"
+msgid "Use shortcut"
+msgstr "단축키 사용"
+
+#: win32/settings/SettingsWindow.cpp:1908
+msgctxt "settings"
+msgid "Recording..."
+msgstr "기록 중..."
+
+#: win32/settings/SettingsWindow.cpp:1910
+msgctxt "settings"
+msgid "Recorded shortcut"
+msgstr "기록된 단축키"
+
+#: win32/settings/SettingsWindow.cpp:1924
+#: win32/settings/SettingsWindow.cpp:1978
+msgctxt "settings"
+msgid "Cannot record shortcut."
+msgstr "단축키를 기록할 수 없습니다."
+
+#: win32/settings/SettingsWindow.cpp:2071
+msgctxt "settings"
+msgid "Check the setting values."
+msgstr "설정 값을 확인하세요."
+
+#: win32/settings/SettingsWindow.cpp:2337
+msgctxt "settings"
+msgid "Pinyin dictionaries are unavailable."
+msgstr "병음 사전을 사용할 수 없습니다."
+
+#: win32/settings/SettingsWindow.cpp:2339
+msgctxt "settings"
+msgid "Cannot read the dictionary directory."
+msgstr "사전 디렉터리를 읽을 수 없습니다."
+
+#: win32/settings/SettingsWindow.cpp:2341
+msgctxt "settings"
+msgid "No third-party dictionaries"
+msgstr "타사 사전 없음"
+
+#: win32/settings/SettingsWindow.cpp:2406
+msgctxt "settings"
+msgid "Cannot open the dictionary folder."
+msgstr "사전 폴더를 열 수 없습니다."
+
+#: win32/settings/SettingsWindow.cpp:2450
+msgctxt "settings"
+msgid "No plugins"
+msgstr "플러그인 없음"
+
+#: win32/settings/SettingsWindow.cpp:2525
+msgctxt "settings"
+msgid "Cannot open the plugin folder."
+msgstr "플러그인 폴더를 열 수 없습니다."
+
+#: win32/settings/SettingsWindow.cpp:2592
+msgctxt "settings"
+msgid "Unavailable"
+msgstr "사용 불가"
+
+#: win32/settings/SettingsWindow.cpp:2597
+msgctxt "settings"
+msgid "Recording"
+msgstr "기록 중"
+
+#: win32/settings/SettingsWindow.cpp:2599
+#, c++-format
+msgctxt "settings"
+msgid "{0} log files, {1} bytes"
+msgstr "로그 파일 {0}개, {1}바이트"
+
+#: win32/settings/main.cpp:123
+msgctxt "settings"
+msgid "The Windows App SDK 1.8 x64 runtime is required."
+msgstr "Windows App SDK 1.8 x64 런타임이 필요합니다."
+
+#: win32/settings/main.cpp:215
+msgctxt "settings"
+msgid "Cannot initialize the Fcitx5 settings service."
+msgstr "Fcitx5 설정 서비스를 초기화할 수 없습니다."
+
+#: win32/tsf/langbaritem.cpp:16
+msgctxt "menu"
+msgid "Fcitx5 Pinyin - Chinese input"
+msgstr "Fcitx5 병음 - 중국어 입력"
+
+#: win32/tsf/langbaritem.cpp:18
+msgctxt "menu"
+msgid "Fcitx5 Pinyin - English input"
+msgstr "Fcitx5 병음 - 영어 입력"
+
+#: win32/tsf/langbaritem.cpp:26
+msgctxt "menu"
+msgid "Input Method Settings"
+msgstr "입력기 설정"
+
+#: win32/tsf/langbaritem.cpp:28
+msgctxt "menu"
+msgid "User Data Folder"
+msgstr "사용자 데이터 폴더"
+
+#: win32/tsf/langbaritem.cpp:30
+msgctxt "menu"
+msgid "Restart Services"
+msgstr "서비스 다시 시작"
+
+#: win32/tsf/langbaritem.cpp:32
+msgctxt "menu"
+msgid "Stop Services"
+msgstr "서비스 중지"
+
+#: win32/tsf/langbaritem.cpp:34
+msgctxt "menu"
+msgid "About"
+msgstr "정보"
+
+#: win32/tsf/langbaritem.cpp:320 win32/tsf/langbaritem.cpp:374
+msgctxt "menu"
+msgid "Unable to read input method menu"
+msgstr "입력기 메뉴를 읽을 수 없습니다"
+
+#: win32/tsf/langbaritem.cpp:322 win32/tsf/langbaritem.cpp:376
+msgctxt "menu"
+msgid "Reading input method menu..."
+msgstr "입력기 메뉴 읽는 중..."
+
+#: win32/tsf/aboutwindow.cpp:54
+msgctxt "about"
+msgid "Architecture: "
+msgstr "아키텍처: "
+
+#: win32/tsf/aboutwindow.cpp:56
+msgctxt "about"
+msgid "Unknown"
+msgstr "알 수 없음"
+
+#: win32/tsf/aboutwindow.cpp:58
+msgctxt "about"
+msgid "CI build: "
+msgstr "CI 빌드: "
+
+#: win32/tsf/aboutwindow.cpp:62
+msgctxt "about"
+msgid "Local build (no CI information)"
+msgstr "로컬 빌드 (CI 정보 없음)"
+
+#: win32/tsf/aboutwindow.cpp:63
+msgctxt "about"
+msgid "Commit: "
+msgstr "커밋: "
+
+#: win32/tsf/aboutwindow.cpp:65 win32/tsf/aboutwindow.cpp:69
+msgctxt "about"
+msgid "Unavailable"
+msgstr "사용 불가"
+
+#: win32/tsf/aboutwindow.cpp:67
+msgctxt "about"
+msgid "Commit time: "
+msgstr "커밋 시간: "
+
+#: win32/tsf/aboutwindow.cpp:158 win32/tsf/aboutwindow.cpp:245
+msgctxt "about"
+msgid "About Fcitx5"
+msgstr "Fcitx5 정보"
+
+#: win32/tsf/aboutwindow.cpp:162
+msgctxt "about"
+msgid "GPL-3.0 License"
+msgstr "GPL-3.0 라이선스"
+
+#: win32/tsf/aboutwindow.cpp:163
+msgctxt "about"
+msgid "Repository Homepage"
+msgstr "저장소 홈페이지"
+
+#: win32/tsf/aboutwindow.cpp:164
+msgctxt "about"
+msgid "Close"
+msgstr "닫기"
+
+#: win32/tsf/aboutwindow.cpp:244
+msgctxt "about"
+msgid "Cannot open link."
+msgstr "링크를 열 수 없습니다."
+
+#: win32/tsf/servicecontrol.cpp:171
+msgctxt "settings"
+msgid "Cannot reach the host Core named pipe. Start Core outside Sandboxie, add the Fcitx5 OpenPipePath rule to this sandbox, and reopen the application."
+msgstr "호스트 Core 명명된 파이프에 연결할 수 없습니다. Sandboxie 외부에서 Core를 시작하고 이 샌드박스에 Fcitx5 OpenPipePath 규칙을 추가한 후 앱을 다시 여세요."
+
+#: win32/tsf/servicecontrol.cpp:178
+msgctxt "settings"
+msgid "Cannot open the user data folder."
+msgstr "사용자 데이터 폴더를 열 수 없습니다."
+
+#: win32/tsf/servicecontrol.cpp:180
+msgctxt "settings"
+msgid "Service operation failed."
+msgstr "서비스 작업에 실패했습니다."
+
+#: win32/tsf/servicecontrol.cpp:184
+msgctxt "settings"
+msgid "If services are stopped, restart services. Check that the DLL, Core and Settings are in the same installation directory."
+msgstr "서비스가 중지된 경우 서비스를 다시 시작하세요. DLL, Core 및 설정 프로그램이 같은 설치 디렉터리에 있는지 확인하세요."
+
+#: win32/tsf/servicecontrol.cpp:190
+msgctxt "settings"
+msgid "Start Core outside Sandboxie and allow its named pipe in the sandbox."
+msgstr "Sandboxie 외부에서 Core를 시작하고 샌드박스에서 명명된 파이프를 허용하세요."
+
+#: win32/tsf/servicecontrol.cpp:200
+#, c++-format
+msgctxt "settings"
+msgid "Windows error: {0}"
+msgstr "Windows 오류: {0}"
+
+#: src/main.cpp:260
+msgctxt "settings"
+msgid "Cannot stop or restart Fcitx5 services."
+msgstr "Fcitx5 서비스를 중지하거나 다시 시작할 수 없습니다."
+
+#: src/windowsinputmethods.cpp:157
+msgctxt "input-method"
+msgid "English Keyboard"
+msgstr "영어 키보드"
+
+#: src/windowsinputmethods.cpp:159
+msgctxt "input-method"
+msgid "British Keyboard"
+msgstr "영국식 키보드"
+
+#: src/windowsinputmethods.cpp:161
+msgctxt "input-method"
+msgid "French Keyboard"
+msgstr "프랑스어 키보드"
+
+#: src/windowsinputmethods.cpp:163
+msgctxt "input-method"
+msgid "German Keyboard"
+msgstr "독일어 키보드"
+
+#: src/windowsinputmethods.cpp:165
+msgctxt "input-method"
+msgid "Spanish Keyboard"
+msgstr "스페인어 키보드"
+
+#: src/windowsinputmethods.cpp:167
+msgctxt "input-method"
+msgid "Italian Keyboard"
+msgstr "이탈리아어 키보드"
+
+#: src/windowsinputmethods.cpp:169
+msgctxt "input-method"
+msgid "Portuguese Keyboard"
+msgstr "포르투갈어 키보드"
+
+#: src/windowsinputmethods.cpp:171
+msgctxt "input-method"
+msgid "Russian Keyboard"
+msgstr "러시아어 키보드"
+
+#: src/windowsinputmethods.cpp:173
+msgctxt "input-method"
+msgid "Ukrainian Keyboard"
+msgstr "우크라이나어 키보드"
+
+#: src/windowsinputmethods.cpp:175
+msgctxt "input-method"
+msgid "Arabic Keyboard"
+msgstr "아랍어 키보드"
+
+#: src/windowsinputmethods.cpp:177
+msgctxt "input-method"
+msgid "Hebrew Keyboard"
+msgstr "히브리어 키보드"
+
+#: src/windowsinputmethods.cpp:179
+msgctxt "input-method"
+msgid "Greek Keyboard"
+msgstr "그리스어 키보드"
+
+#: src/windowsinputmethods.cpp:181
+msgctxt "input-method"
+msgid "Turkish Keyboard"
+msgstr "튀르키예어 키보드"
+
+#: src/windowsinputmethods.cpp:183
+msgctxt "input-method"
+msgid "Vietnamese Keyboard"
+msgstr "베트남어 키보드"
+
+#: src/windowsinputmethods.cpp:185
+msgctxt "input-method"
+msgid "Thai Keyboard"
+msgstr "태국어 키보드"
+
+#: src/windowsinputmethods.cpp:187
+msgctxt "input-method"
+msgid "Japanese Keyboard"
+msgstr "일본어 키보드"
+
+#: src/windowsinputmethods.cpp:189
+msgctxt "input-method"
+msgid "Korean Keyboard"
+msgstr "한국어 키보드"
+
+#: src/windowsinputmethods.cpp:191
+msgctxt "input-method"
+msgid "Keyboard - Chinese"
+msgstr "키보드 - 중국어"
+
+#: src/windowsinputmethods.cpp:194
+msgctxt "input-method"
+msgid "Keyboard - Chinese - Pinyin alphabet (with AltGr dead keys)"
+msgstr "키보드 - 중국어 - 병음 알파벳 (AltGr 데드 키)"
+
+#: src/windowsinputmethods.cpp:198
+msgctxt "input-method"
+msgid "Keyboard - Chinese (Traditional)"
+msgstr "키보드 - 중국어 (번체)"
+
+#: src/windowsinputmethods.cpp:207
+msgctxt "input-method"
+msgid "Pinyin"
+msgstr "병음"
+
+#: src/windowsinputmethods.cpp:211
+msgctxt "input-method"
+msgid "Shuangpin"
+msgstr "쌍병음"
+
+#: src/windowsinputmethods.cpp:215
+msgctxt "input-method"
+msgid "Wubi"
+msgstr "오필"
+
+#: src/windowsinputmethods.cpp:218
+msgctxt "input-method"
+msgid "Wubi Pinyin"
+msgstr "오필 병음"

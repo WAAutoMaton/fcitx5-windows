@@ -1,4 +1,5 @@
 #include "App.h"
+#include "../i18n/translator.h"
 #include "App.g.cpp"
 #include "diagnostics.h"
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -43,8 +44,17 @@ void App::OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const &) {
         fcitx::win32::diagnostic::settingsLogger().event(
             fcitx::win32::diagnostic::Level::Error, "settings_app_exit",
             {{"reason", "launch_exception"}});
-        MessageBoxW(nullptr, error.message().c_str(), L"Fcitx5 settings",
-                    MB_OK | MB_ICONERROR);
+        fcitx::win32::ipc::GlobalSettings uiSettings;
+        try {
+            fcitx::win32::i18n::readSettings(
+                fcitx::win32::i18n::settingsPath(), uiSettings);
+        } catch (...) {
+        }
+        const fcitx::win32::i18n::Translator translator(uiSettings.language);
+        MessageBoxW(
+            nullptr, error.message().c_str(),
+            translator.wide("settings", "Input Method Settings").c_str(),
+            MB_OK | MB_ICONERROR);
         Exit();
     }
 }

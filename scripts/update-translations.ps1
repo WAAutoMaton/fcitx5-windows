@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $sources = @('win32/settings/SettingsWindow.cpp', 'win32/settings/main.cpp',
     'win32/tsf/langbaritem.cpp', 'win32/tsf/aboutwindow.cpp', 'win32/tsf/servicecontrol.cpp',
-    'src/windowsinputmethods.cpp')
+    'src/main.cpp', 'src/windowsinputmethods.cpp')
 $template = Join-Path $root 'po/fcitx5-windows.pot'
 Push-Location $root
 try {
@@ -14,7 +14,7 @@ try {
 if ($LASTEXITCODE -ne 0) { throw 'Translation extraction failed.' }
 } finally { Pop-Location }
 if (!$ExtractOnly) {
-    foreach ($language in @('zh_CN', 'zh_TW', 'ja')) {
+    foreach ($language in @('zh_CN', 'zh_TW', 'ja', 'ko')) {
         & "$GettextDirectory/msgmerge.exe" --update --backup=none --no-wrap "$root/po/$language.po" $template
         if ($LASTEXITCODE -ne 0) { throw "Translation update failed: $language" }
     }

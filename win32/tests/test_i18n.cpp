@@ -14,12 +14,16 @@ int main() {
     assert(i18n::matchLanguage(L"en-GB") == UiLanguage::English);
     assert(i18n::matchLanguage(L"ja-JP") == UiLanguage::Japanese);
     assert(i18n::matchLanguage(L"JA") == UiLanguage::Japanese);
+    assert(i18n::matchLanguage(L"ko-KR") == UiLanguage::Korean);
+    assert(i18n::matchLanguage(L"KO") == UiLanguage::Korean);
     assert(i18n::matchLanguage(L"fr-FR") == UiLanguage::System);
     assert(std::string_view(i18n::localeName(UiLanguage::Japanese)) == "ja_JP");
+    assert(std::string_view(i18n::localeName(UiLanguage::Korean)) == "ko_KR");
     i18n::Translator english;
     i18n::Translator simplified(UiLanguage::SimplifiedChinese);
     i18n::Translator traditional(UiLanguage::TraditionalChinese);
     i18n::Translator japanese(UiLanguage::Japanese);
+    i18n::Translator korean(UiLanguage::Korean);
     assert(english.wide("settings", "Global Settings") == L"Global Settings");
     assert(simplified.wide("settings", "Global Settings") ==
            L"\u5168\u5c40\u8bbe\u7f6e");
@@ -27,6 +31,8 @@ int main() {
            L"\u5168\u57df\u8a2d\u5b9a");
     assert(japanese.wide("settings", "Global Settings") ==
            L"\u30b0\u30ed\u30fc\u30d0\u30eb\u8a2d\u5b9a");
+    assert(korean.wide("settings", "Global Settings") ==
+           L"\uc804\uc5ed \uc124\uc815");
     assert(simplified.wide("settings", "Choose Last Character from Phrase") ==
            L"\u9009\u8bcd\u672b\u5b57");
     assert(traditional.wide("settings", "Choose Last Character from Phrase") ==
@@ -34,15 +40,21 @@ int main() {
     assert(
         japanese.wide("settings", "Choose Last Character from Phrase") ==
         L"\u8a9e\u53e5\u306e\u672b\u5c3e\u306e\u6587\u5b57\u3092\u9078\u629e");
+    assert(korean.wide("settings", "Choose Last Character from Phrase") ==
+           L"\uc5b4\uad6c\uc758 \ub9c8\uc9c0\ub9c9 \uae00\uc790 "
+           L"\uc120\ud0dd");
     assert(simplified.text("unknown-context", "Global Settings") ==
            "Global Settings");
     assert(traditional.text("settings", "Missing message") ==
            "Missing message");
     assert(japanese.text("settings", "Missing message") == "Missing message");
+    assert(korean.text("settings", "Missing message") == "Missing message");
     assert(simplified.format("settings", "Windows error: {0}", 42) ==
            L"Windows \u9519\u8bef\uff1a42");
     assert(japanese.format("settings", "Windows error: {0}", 42) ==
            L"Windows \u30a8\u30e9\u30fc: 42");
+    assert(korean.format("settings", "Windows error: {0}", 42) ==
+           L"Windows \uc624\ub958: 42");
     i18n::Translator missing(UiLanguage::SimplifiedChinese,
                              L"nonexistent-localization-directory");
     assert(missing.text("settings", "Global Settings") == "Global Settings");
@@ -192,6 +204,13 @@ int main() {
     assert(i18n::readSettings(file, reloaded) && reloaded == actual &&
            reloaded.language == UiLanguage::Japanese &&
            reloaded.revision == 26);
+    request = reloaded;
+    request.language = UiLanguage::Korean;
+    assert(i18n::saveSettings(file, request, actual) ==
+           ipc::SettingsError::None);
+    assert(i18n::readSettings(file, reloaded) && reloaded == actual &&
+           reloaded.language == UiLanguage::Korean &&
+           reloaded.revision == 27);
     request.candidateLayout = ipc::CandidateLayout::Vertical;
     assert(i18n::saveSettings(file, request, actual) ==
            ipc::SettingsError::Conflict);

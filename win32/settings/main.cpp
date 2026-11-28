@@ -124,7 +124,10 @@ static int runSettings() {
                        .c_str(),
                    WINDOWSAPPSDK_RUNTIME_VERSION_DOTQUADSTRING_W,
                    static_cast<unsigned>(initialized));
-        MessageBoxW(nullptr, message, L"Fcitx5 settings", MB_OK | MB_ICONERROR);
+        MessageBoxW(
+            nullptr, message,
+            translator.wide("settings", "Input Method Settings").c_str(),
+            MB_OK | MB_ICONERROR);
         fcitx::settingsService = nullptr;
         return fcitx::settings::diagnostic::exit(
             "runtime_initialization_failed", 1);
@@ -142,8 +145,10 @@ static int runSettings() {
         fcitx::win32::diagnostic::settingsLogger().event(
             fcitx::win32::diagnostic::Level::Error, "settings_ui_error",
             {{"hr", static_cast<uint32_t>(error.code())}});
-        MessageBoxW(nullptr, error.message().c_str(), L"Fcitx5 settings",
-                    MB_OK | MB_ICONERROR);
+        MessageBoxW(
+            nullptr, error.message().c_str(),
+            translator.wide("settings", "Input Method Settings").c_str(),
+            MB_OK | MB_ICONERROR);
         result = 1;
     }
     fcitx::win32::diagnostic::settingsLogger().event(
@@ -197,8 +202,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         return runSettings();
     } catch (const std::exception &) {
         fcitx::settings::diagnostic::exception("settings_main");
-        MessageBoxW(nullptr, L"Cannot initialize the Fcitx5 settings service.",
-                    L"Fcitx5 settings", MB_OK | MB_ICONERROR);
+        fcitx::win32::ipc::GlobalSettings uiSettings;
+        try {
+            fcitx::win32::i18n::readSettings(
+                fcitx::win32::i18n::settingsPath(), uiSettings);
+        } catch (...) {
+        }
+        const fcitx::win32::i18n::Translator translator(uiSettings.language);
+        MessageBoxW(
+            nullptr,
+            translator
+                .wide("settings", "Cannot initialize the Fcitx5 settings service.")
+                .c_str(),
+            translator.wide("settings", "Input Method Settings").c_str(),
+            MB_OK | MB_ICONERROR);
         return fcitx::settings::diagnostic::exit("initialization_exception", 1);
     } catch (...) {
         fcitx::settings::diagnostic::exception("settings_main", true);

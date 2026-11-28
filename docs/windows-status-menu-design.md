@@ -2,7 +2,7 @@
 
 ## 状态与目标
 
-Core、IPC 和 x64/x86 TSF 已接入通用状态菜单桥接，统一协议为 **v16**（消息类型自 v14 引入），Settings 使用同一协议头配套构建。桌面 `HMENU` 与系统托管 `ITfMenu` 共享冻结视图，Rime 和拼音的真实动作已由隔离 probe 覆盖；真实 Windows 语言栏派发、owner 焦点行为、DPI 和应用矩阵需系统验收。
+Core、IPC 和 x64/x86 TSF 已接入通用状态菜单桥接，统一协议为 **v17**（消息类型自 v14 引入），Settings 使用同一协议头配套构建。桌面 `HMENU` 与系统托管 `ITfMenu` 共享冻结视图，Rime 和拼音的真实动作已由隔离 probe 覆盖；真实 Windows 语言栏派发、owner 焦点行为、DPI 和应用矩阵需系统验收。
 
 桥接将上游 Fcitx `StatusArea → Action/Menu` 映射到 Windows 原生菜单：Rime 是首个验证插件，其他插件通过相同接口提供模式、标点、字符集、方案等动作，复用同一 Core/IPC/TSF 链路。
 
@@ -165,7 +165,7 @@ Rime 适配保存在 `patches/fcitx5-rime-windows.patch`：
 | --- | --- |
 | `src/windowsstatusmenu.h/.cpp` | Core 通用遍历、生命周期、revision、快照与动作调用 |
 | `src/windowsfrontend.*`、`src/windowsinputmethods.cpp` | 消息路由、焦点/owner 校验、子模式名称与标签 |
-| `win32/ipc/statusmenuprotocol.h`、`protocol.h`、`isolationpolicy.h` | v16 数据模型、有界编解码与受限入口拒绝策略 |
+| `win32/ipc/statusmenuprotocol.h`、`protocol.h`、`isolationpolicy.h` | v17 数据模型、有界编解码与受限入口拒绝策略 |
 | `win32/tsf/statusmenu.h/.cpp`、`statusmenudispatch.cpp`、`pipeclient.*` | 冻结视图、命令 ID、动作队列与 Pipe 请求 |
 | `win32/tsf/langbaritem.*`、`tsf.h`、`pollstate.cpp`、`EditSession.cpp` | `HMENU` / `ITfMenu` 渲染、缓存刷新、焦点/停用清理与回复应用 |
 | `patches/fcitx5-rime-windows.patch` | Rime 方案勾选、切换取消与 UI 刷新 |

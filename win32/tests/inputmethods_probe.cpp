@@ -89,9 +89,11 @@ int main(int argc, char **argv) {
                 language == "zh_CN"   ? UiLanguage::SimplifiedChinese
                 : language == "zh_TW" ? UiLanguage::TraditionalChinese
                 : language == "ja_JP" ? UiLanguage::Japanese
+                : language == "ko_KR" ? UiLanguage::Korean
                                       : UiLanguage::English;
             require((language == "zh_CN" || language == "zh_TW" ||
-                     language == "en_US" || language == "ja_JP") &&
+                     language == "en_US" || language == "ja_JP" ||
+                     language == "ko_KR") &&
                         global.coreActiveLanguage == expected,
                     "unexpected active language");
             if (expected == UiLanguage::Japanese) {
@@ -103,6 +105,15 @@ int main(int argc, char **argv) {
                                 "\u82f1\u8a9e\u30ad\u30fc\u30dc\u30fc\u30c9",
                         "Japanese Windows catalog translation missing");
             }
+            if (expected == UiLanguage::Korean) {
+                auto found = std::find_if(
+                    catalog.methods.begin(), catalog.methods.end(),
+                    [](const auto &item) { return item.id == "keyboard-us"; });
+                require(found != catalog.methods.end() &&
+                            found->name ==
+                                "\uc601\uc5b4 \ud0a4\ubcf4\ub4dc",
+                        "Korean Windows catalog translation missing");
+            }
             const struct {
                 const char *method;
                 const char *path;
@@ -110,24 +121,28 @@ int main(int argc, char **argv) {
                 const char *simplified;
                 const char *traditional;
                 const char *japanese;
+                const char *korean;
             } labels[] = {
                 {"pinyin", "PrevPage", "Previous Page", "\u4e0a\u4e00\u9875",
-                 "\u4e0a\u4e00\u9801", "\u524d\u306e\u30da\u30fc\u30b8"},
+                 "\u4e0a\u4e00\u9801", "\u524d\u306e\u30da\u30fc\u30b8",
+                 "\uc774\uc804 \ud398\uc774\uc9c0"},
                 {"pinyin", "CurrentCandidate", "Select Current Candidate",
                  "\u9009\u62e9\u5f53\u524d\u5019\u9009\u8bcd",
                  "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e",
-                 "Select Current Candidate"},
+                 "Select Current Candidate", "Select Current Candidate"},
                 {"shuangpin", "CommitRawInput", "Commit Raw Input",
                  "\u63d0\u4ea4\u539f\u59cb\u5b57\u7b26\u4e32",
-                 "\u63d0\u4ea4\u539f\u59cb\u5b57\u4e32", "Commit Raw Input"},
+                 "\u63d0\u4ea4\u539f\u59cb\u5b57\u4e32", "Commit Raw Input",
+                 "Commit Raw Input"},
                 {"wbx", "DefaultCandidate", "Select Current Candidate",
                  "\u9009\u62e9\u5f53\u524d\u5019\u9009\u8bcd",
                  "\u9078\u64c7\u76ee\u524d\u5019\u9078\u8a5e",
-                 "Select Current Candidate"},
+                 "Select Current Candidate", "Select Current Candidate"},
                 {"wbx", "SecondCandidate", "Select Second Candidate",
                  "\u9009\u62e9\u7b2c\u4e8c\u4e2a\u5019\u9009\u8bcd",
                  "\u9078\u64c7\u7b2c\u4e8c\u500b\u5019\u9078\u8a5e",
-                 "Select Second Candidate"}};
+                 "Select Second Candidate",
+                 "\ub450 \ubc88\uc9f8 \ud6c4\ubcf4 \uc120\ud0dd"}};
             for (const auto &label : labels) {
                 MethodConfigReply config;
                 require(client.getMethodConfig(label.method, config) &&
@@ -142,6 +157,8 @@ int main(int argc, char **argv) {
                                        ? label.traditional
                                    : expected == UiLanguage::Japanese
                                        ? label.japanese
+                                   : expected == UiLanguage::Korean
+                                       ? label.korean
                                        : label.english),
                         "engine config translation missing");
             }

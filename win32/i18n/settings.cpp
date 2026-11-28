@@ -18,9 +18,9 @@ struct Handle {
             CloseHandle(value);
     }
 };
-constexpr const char *names[] = {"system", "zh-Hans", "zh-Hant", "en", "ja"};
-static_assert(std::size(names) ==
-              static_cast<size_t>(UiLanguage::Japanese) + 1);
+constexpr const char *names[] = {"system", "zh-Hans", "zh-Hant",
+                               "en",     "ja",      "ko"};
+static_assert(std::size(names) == static_cast<size_t>(UiLanguage::Korean) + 1);
 constexpr const char *candidateLayouts[] = {"vertical", "horizontal"};
 } // namespace
 
@@ -34,6 +34,8 @@ UiLanguage matchLanguage(std::wstring_view name) {
         return UiLanguage::English;
     if (tag.starts_with(L"ja-"))
         return UiLanguage::Japanese;
+    if (tag.starts_with(L"ko-"))
+        return UiLanguage::Korean;
     if (tag.starts_with(L"zh-hant-"))
         return UiLanguage::TraditionalChinese;
     if (tag.starts_with(L"zh-hans-"))
@@ -81,6 +83,8 @@ const char *localeName(UiLanguage language) {
         return "zh_TW";
     case UiLanguage::Japanese:
         return "ja_JP";
+    case UiLanguage::Korean:
+        return "ko_KR";
     default:
         return "en_US";
     }

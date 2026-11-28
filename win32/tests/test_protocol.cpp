@@ -10,7 +10,7 @@ int main() {
     wideIds.requestId = 0x8877665544332211ULL;
     wideIds.contextId = 0xffeeddccbbaa0099ULL;
     const std::vector<uint8_t> expected = {
-        0x58, 0x43, 0x57, 0x46, 16,   0,    8,    0,    0,    0,
+        0x58, 0x43, 0x57, 0x46, 17,   0,    8,    0,    0,    0,
         0,    0,    0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
         0x99, 0,    0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
     assert(encodeFrame(wideIds) == expected && expected.size() == kHeaderSize);
@@ -27,10 +27,11 @@ int main() {
     assert(globalSettingsRequest(MessageType::StopServices));
     assert(globalSettingsRequest(MessageType::GetGlobalSettings));
     assert(globalSettingsRequest(MessageType::SetGlobalSettings));
-    assert(kVersion == 16);
+    assert(kVersion == 17);
     assert(validLanguage(UiLanguage::Japanese, false));
+    assert(validLanguage(UiLanguage::Korean, false));
     assert(!validLanguage(static_cast<UiLanguage>(
-        static_cast<uint8_t>(UiLanguage::Japanese) + 1)));
+        static_cast<uint8_t>(UiLanguage::Korean) + 1)));
     GlobalSettings global{UiLanguage::TraditionalChinese, 42, true};
     global.candidateLayout = CandidateLayout::Horizontal;
     GlobalSettings restoredGlobal;
@@ -43,13 +44,18 @@ int main() {
     globalPayload[9] = 2;
     assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
     globalPayload = encodeGlobalSettings(global);
-    globalPayload[0] = static_cast<uint8_t>(UiLanguage::Japanese) + 1;
+    globalPayload[0] = static_cast<uint8_t>(UiLanguage::Korean) + 1;
     assert(!decodeGlobalSettings(globalPayload, restoredGlobal));
     auto japaneseGlobal = global;
     japaneseGlobal.language = UiLanguage::Japanese;
     assert(decodeGlobalSettings(encodeGlobalSettings(japaneseGlobal),
                                 restoredGlobal) &&
            restoredGlobal == japaneseGlobal);
+    auto koreanGlobal = global;
+    koreanGlobal.language = UiLanguage::Korean;
+    assert(decodeGlobalSettings(encodeGlobalSettings(koreanGlobal),
+                                restoredGlobal) &&
+           restoredGlobal == koreanGlobal);
     globalPayload = encodeGlobalSettings(global);
     globalPayload.push_back(0);
     assert(!decodeGlobalSettings(globalPayload, restoredGlobal));

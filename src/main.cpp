@@ -246,8 +246,20 @@ int main(int argc, char **argv) {
         FCITX_ERROR() << error.what();
         if (argc == 2 && (std::string_view(argv[1]) == "--stop-services" ||
                           std::string_view(argv[1]) == "--restart-services")) {
-            MessageBoxW(nullptr, L"Cannot stop or restart Fcitx5 services.",
-                        L"Fcitx5", MB_OK | MB_ICONERROR);
+            fcitx::win32::ipc::GlobalSettings uiSettings;
+            try {
+                fcitx::win32::i18n::readSettings(
+                    fcitx::win32::i18n::settingsPath(), uiSettings);
+            } catch (...) {
+            }
+            const fcitx::win32::i18n::Translator translator(
+                uiSettings.language);
+            MessageBoxW(
+                nullptr,
+                translator
+                    .wide("settings", "Cannot stop or restart Fcitx5 services.")
+                    .c_str(),
+                L"Fcitx5", MB_OK | MB_ICONERROR);
         }
         return 1;
     }
