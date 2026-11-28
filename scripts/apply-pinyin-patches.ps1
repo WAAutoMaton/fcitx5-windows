@@ -8,6 +8,7 @@ $patches = @{
     'fcitx5' = @('fcitx5-windows-paths.patch', 'fcitx5-dynamic-log-level.patch')
     'libime' = 'libime-windows.patch'
     'fcitx5-chinese-addons' = @('chinese-addons-windows.patch', 'chinese-addons-windows-table.patch')
+    'fcitx5-hangul' = 'fcitx5-hangul-windows.patch'
     'fcitx5-mozc' = 'fcitx5-mozc-windows.patch'
     'fcitx5-mozc-protobuf' = '../plugins/fcitx5-mozc/patches/protobuf.patch'
     'fcitx5-rime' = 'fcitx5-rime-windows.patch'
@@ -19,7 +20,7 @@ foreach ($repository in $patches.Keys) {
         $source = "$root/plugins/fcitx5-chinese-addons"
     } elseif ($repository -eq 'fcitx5-mozc-protobuf') {
         $source = "$root/plugins/fcitx5-mozc/protobuf"
-    } elseif ($repository -in @('fcitx5-mozc', 'fcitx5-rime', 'fcitx5-skk', 'fcitx5-zhuyin')) {
+    } elseif ($repository -in @('fcitx5-hangul', 'fcitx5-mozc', 'fcitx5-rime', 'fcitx5-skk', 'fcitx5-zhuyin')) {
         $source = "$root/plugins/$repository"
     } else {
         $source = Join-Path $root $repository

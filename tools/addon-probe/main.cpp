@@ -52,15 +52,27 @@ std::string utf8(const wchar_t *value) {
 
 int wmain(int argc, wchar_t **argv) {
     try {
-        if (argc != 5 && argc != 6) {
+        if (argc < 5 || argc > 7) {
             throw std::runtime_error(
                 "Usage: addon_probe <Core prefix> <plugin prefix> <method> "
-                "<keys|--absent|--unavailable> [--preedit]");
+                "<keys|--absent|--unavailable> [--preedit|--trigger <key>]");
         }
-        const bool preedit =
-            argc == 6 && std::wstring_view(argv[5]) == L"--preedit";
-        if (argc == 6 && !preedit) {
-            throw std::runtime_error("Unknown probe option");
+        bool preedit = false;
+        fcitx::KeySym triggerKey = FcitxKey_None;
+        if (argc == 6) {
+            if (std::wstring_view(argv[5]) == L"--preedit") {
+                preedit = true;
+            } else {
+                throw std::runtime_error("Unknown probe option");
+            }
+        } else if (argc == 7) {
+            if (std::wstring_view(argv[5]) != L"--trigger") {
+                throw std::runtime_error("Unknown probe option");
+            }
+            triggerKey = fcitx::Key::keySymFromString(utf8(argv[6]));
+            if (triggerKey == FcitxKey_None) {
+                throw std::runtime_error("Unknown trigger key");
+            }
         }
         fcitx::setEnvironment("SKIP_FCITX_USER_PATH", "1");
         fcitx::setEnvironment("SKIP_FCITX_SYSTEM_PATH", "1");
@@ -139,6 +151,13 @@ int wmain(int argc, wchar_t **argv) {
             if (!down.accepted()) {
                 throw std::runtime_error(
                     "Input method did not open candidates");
+            }
+        } else if (triggerKey != FcitxKey_None) {
+            fcitx::KeyEvent trigger(&context, fcitx::Key(triggerKey));
+            context.keyEvent(trigger);
+            if (!trigger.accepted()) {
+                throw std::runtime_error(
+                    "Input method did not handle trigger key");
             }
         }
         const auto candidates = context.inputPanel().candidateList();

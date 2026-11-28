@@ -4,14 +4,14 @@
 
 面向 AMD64 的 Fcitx5 Windows 移植版本（持续开发中）。Core 在独立进程中运行，x64 与 x86 TSF DLL 负责与应用程序集成，WinUI 3 设置程序管理输入法列表和引擎配置。
 
-`base` 版提供拼音、双拼和 `fcitx5-chinese-addons` 码表输入法；`full` 版额外提供 Mozc（日语）、Rime、SKK（日语）、温州话、注音和 `fcitx5-table-extra`。统一 x64 安装包已接入 CI 打包与 Nightly 发布流程。
+`base` 版提供拼音、双拼和 `fcitx5-chinese-addons` 码表输入法；`full` 版额外提供 Hangul（韩语）、Mozc（日语）、Rime、SKK（日语）、温州话、注音和 `fcitx5-table-extra`。统一 x64 安装包已接入 CI 打包与 Nightly 发布流程。
 
 ## 功能
 
 - **中文与多语言输入**：
   - 全拼与八种内置双拼方案（含小鹤、自然码），支持预编辑、候选选择和中文提交。
   - base 码表：五笔字型、五笔拼音、仓颉、电报码、二笔、冰蟾、晚风和自然码（已安装对应引擎与码表数据时可用）。
-  - full 扩展：Mozc（日语）、Rime、SKK（日语）、温州话、注音及 25 张额外码表（含五笔 98、郑码、嘸蝦米、仓颉五代、粤拼码表等）。
+  - full 扩展：Hangul（韩语）、Mozc（日语）、Rime、SKK（日语）、温州话、注音及 25 张额外码表（含五笔 98、郑码、嘸蝦米、仓颉五代、粤拼码表等）。
   - 多语言键盘候选：按当前 Windows 键盘布局透传按键。
 - **候选窗**：
   - 不抢焦点的 DirectWrite/Direct2D 候选浮窗，支持彩色字体渲染、软件 DC 回退与 Per-Monitor V2 DPI 定位。
@@ -36,7 +36,7 @@
 [Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)提供四种 x64 安装包及其 SHA256 校验文件，适用于 Windows 10 1809（build 17763）及以上版本。两种版本均包含 Core、x64/x86 TSF DLL 和 Settings：
 
 - `base`：内置 `fcitx5-chinese-addons`。
-- `full`：内置 `fcitx5-chinese-addons`、`fcitx5-mozc`、`fcitx5-rime`、`fcitx5-skk`、`fcitx5-table-extra`、`fcitx5-wenzhounese` 和 `fcitx5-zhuyin`。
+- `full`：内置 `fcitx5-chinese-addons`、`fcitx5-hangul`、`fcitx5-mozc`、`fcitx5-rime`、`fcitx5-skk`、`fcitx5-table-extra`、`fcitx5-wenzhounese` 和 `fcitx5-zhuyin`。
 
 每种版本均提供两种运行库组合：
 

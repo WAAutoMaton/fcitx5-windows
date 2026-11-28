@@ -28,3 +28,6 @@
 [submodule "plugins/fcitx5-skk"]
 	path = plugins/fcitx5-skk
 	url = https://github.com/fcitx/fcitx5-skk
+[submodule "plugins/fcitx5-hangul"]
+	path = plugins/fcitx5-hangul
+	url = https://github.com/fcitx/fcitx5-hangul

@@ -4,14 +4,14 @@
 
 AMD64용으로 개발 중인 Fcitx5 Windows 이식 버전입니다. Core는 별도의 프로세스로 실행되고, x64 및 x86 TSF DLL이 애플리케이션과 통합되며, WinUI 3 설정 앱이 입력기와 엔진 옵션을 관리합니다.
 
-`base` 에디션은 병음(Pinyin), 쌍병음(Shuangpin) 및 `fcitx5-chinese-addons` 테이블 입력기를 제공합니다. `full` 에디션에는 Mozc(일본어), Rime, SKK(일본어), 원저우어(Wenzhounese), 주음(Zhuyin) 및 `fcitx5-table-extra`가 추가됩니다. 통합 x64 설치 프로그램은 CI 및 Nightly 릴리스 워크플로에서 배포됩니다.
+`base` 에디션은 병음(Pinyin), 쌍병음(Shuangpin) 및 `fcitx5-chinese-addons` 테이블 입력기를 제공합니다. `full` 에디션에는 Hangul(한국어), Mozc(일본어), Rime, SKK(일본어), 원저우어(Wenzhounese), 주음(Zhuyin) 및 `fcitx5-table-extra`가 추가됩니다. 통합 x64 설치 프로그램은 CI 및 Nightly 릴리스 워크플로에서 배포됩니다.
 
 ## 주요 기능
 
 - **중국어·일본어·다국어 입력**:
   - 전체 병음 및 8가지 내장 쌍병음 프로필(샤오허, 자연마 등)을 지원하며 사전 편집, 후보 선택, 중국어 입력 확정을 제공합니다.
   - base 테이블 입력기: 오필(Wubi), 오필 병음(Wubi Pinyin), 창힐(Cangjie), 전보마(Dianbaoma), 이필(Erbi), 빙찬(Bingchan), 완펑(Wanfeng), 자연마(Ziranma) (해당 엔진과 테이블 데이터가 설치된 경우 사용 가능).
-  - full 에디션 추가 기능: Mozc(일본어), Rime, SKK(일본어), 원저우어, 주음 및 25종의 추가 테이블(오필 98, 정마, 보샤미, 창힐 5세대, 광둥어 병음 테이블 등).
+  - full 에디션 추가 기능: Hangul(한국어), Mozc(일본어), Rime, SKK(일본어), 원저우어, 주음 및 25종의 추가 테이블(오필 98, 정마, 보샤미, 창힐 5세대, 광둥어 병음 테이블 등).
   - 현재 활성화된 Windows 키보드 레이아웃을 그대로 통과시키는 다국어 키보드 항목.
 - **후보 창**:
   - 포커스를 빼앗지 않는 DirectWrite/Direct2D 후보 팝업(컬러 글꼴 렌더링, 소프트웨어 DC 폴백, Per-Monitor V2 DPI 배치 지원).
@@ -36,7 +36,7 @@ AMD64용으로 개발 중인 Fcitx5 Windows 이식 버전입니다. Core는 별�
 [Nightly 릴리스](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)에서는 Windows 10 버전 1809(build 17763) 이상용 4종의 x64 설치 프로그램과 SHA256 체크섬을 제공합니다. 모든 에디션에 Core, x64/x86 TSF DLL 및 설정 프로그램이 포함됩니다.
 
 - `base`: `fcitx5-chinese-addons` 포함.
-- `full`: `fcitx5-chinese-addons`, `fcitx5-mozc`, `fcitx5-rime`, `fcitx5-skk`, `fcitx5-table-extra`, `fcitx5-wenzhounese`, `fcitx5-zhuyin` 포함.
+- `full`: `fcitx5-chinese-addons`, `fcitx5-hangul`, `fcitx5-mozc`, `fcitx5-rime`, `fcitx5-skk`, `fcitx5-table-extra`, `fcitx5-wenzhounese`, `fcitx5-zhuyin` 포함.
 
 각 에디션은 런타임 포함 여부에 따라 두 가지 설치 파일로 제공됩니다.
 
@@ -73,7 +73,7 @@ AMD64용으로 개발 중인 Fcitx5 Windows 이식 버전입니다. Core는 별�
 
 ## 입력기 플러그인
 
-입력기는 독립 엔진 또는 리소스 패키지로 빌드 및 설치할 수 있습니다. `fcitx5-chinese-addons`는 Core와 함께 빌드됩니다. `fcitx5-table-extra`는 `base`의 `table` 엔진을 재사용해 25종의 테이블을 제공합니다. `fcitx5-zhuyin`은 고정 버전 libpinyin 소스에서 빌드한 libzhuyin과 컴파일된 모델을 포함합니다. `fcitx5-skk`는 고정 버전 libskk 소스에서 빌드한 `libskk.dll`, 규칙 파일 및 `SKK-JISYO.L`을 포함하며, `fcitx5-mozc`는 내장 데이터 기반 인프로세스 `libmozc.dll`을, Rime은 공유 스키마와 OpenCC 데이터를 제공합니다.
+입력기는 독립 엔진 또는 리소스 패키지로 빌드 및 설치할 수 있습니다. `fcitx5-chinese-addons`는 Core와 함께 빌드됩니다. `fcitx5-table-extra`는 `base`의 `table` 엔진을 재사용해 25종의 테이블을 제공합니다. `fcitx5-hangul`은 고정 버전 libhangul 소스에서 빌드한 `libhangul-1.dll`과 한자·기호 사전을 포함합니다. `fcitx5-zhuyin`은 고정 버전 libpinyin 소스에서 빌드한 libzhuyin과 컴파일된 모델을 포함합니다. `fcitx5-skk`는 고정 버전 libskk 소스에서 빌드한 `libskk.dll`, 규칙 파일 및 `SKK-JISYO.L`을 포함하며, `fcitx5-mozc`는 내장 데이터 기반 인프로세스 `libmozc.dll`을, Rime은 공유 스키마와 OpenCC 데이터를 제공합니다.
 
 ### 설치 및 활성화
 
@@ -115,7 +115,7 @@ DLL 언로드를 위해 열려 있는 앱을 다시 시작하세요. 미리 보�
 ### 일상 입력 및 전환
 
 - 설정된 순환 단축키(기본값 `Ctrl+Space`) 또는 입력 표시기 좌클릭으로 활성화된 입력기를 순환 전환합니다. 사용할 수 없는 항목은 자동으로 건너뜁니다.
-- 기본 목록은 영어 키보드와 병음이며, 설정에서 쌍병음, 테이블 입력기, Mozc, SKK, Rime, 원저우어, 주음 또는 다국어 키보드를 추가할 수 있습니다.
+- 기본 목록은 영어 키보드와 병음이며, 설정에서 쌍병음, 테이블 입력기, Hangul, Mozc, SKK, Rime, 원저우어, 주음 또는 다국어 키보드를 추가할 수 있습니다.
 - 스페이스바 또는 숫자 키로 후보를 선택합니다. 입력기를 전환하거나 포커스를 잃으면 완료되지 않은 사전 편집이 취소됩니다.
 - **전역 설정 → 단축키**에서 순환 전환 및 1~5번 항목 직접 전환 단축키를 설정할 수 있습니다(비워 두면 비활성화). 직접 전환은 목록의 원래 위치를 기준으로 하며, 항목이 없거나 사용할 수 없으면 키를 그대로 통과시킵니다.
 - 중·영문 문장부호는 입력 표시기의 상태 메뉴에서 전환하며, 병음·쌍병음 및 punctuation 모듈을 사용하는 테이블 입력기가 같은 상태를 공유합니다.

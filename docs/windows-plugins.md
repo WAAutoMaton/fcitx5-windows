@@ -58,6 +58,7 @@ plugins/
 `build-pinyin.ps1` 构建 `base` 中的 `fcitx5-chinese-addons`；`build-plugins.ps1` 自动发现 `plugins/` 下其余直接子目录，执行 `git lfs pull`，使用同一次构建的 SDK 编译并安装到 `Prefix/plugins/<name>`。当前 `full` 包包含：
 
 - **`fcitx5-chinese-addons`**（`base` 已含）：拼音、双拼及八张基础码表。
+- **`fcitx5-hangul`**：韩语 Hangul 输入法引擎。`cmake/hangul-deps` 从 SHA256 固定的 `libhangul 0.2.0` 发布包构建独立 `libhangul-1.dll`（内置 9 种韩文键盘布局，无外部 Expat 依赖；`patches/libhangul-windows.patch` 使用 UTF-8 到 UTF-16 转换及二进制模式读取词典），并安装 `hanja.txt`/`mssymbol.txt` 与 LGPL-2.1 许可证；引擎补丁位于 `patches/fcitx5-hangul-windows.patch`（按 `ENABLE_TEST` 条件查找 `TestFrontend` 并将 `StandardPaths` 路径转为 UTF-8）。CI 验证 `gks` + `F9` 汉字候选提交及 `full`/`base` 清单差异。
 - **`fcitx5-table-extra`**：纯资源包，复用 `base` 的 `table` 引擎。使用 SDK 的 `libime_tabledict.exe` 生成 25 张码表，CI 验证五笔 98、仓颉五代、粤拼码表提交及 `full`/`base` 清单差异。
 - **`fcitx5-rime`**：补丁见 `patches/fcitx5-rime-windows.patch`。依赖匹配的 `clang64` `librime` 与 `librime-data`，构建时复制共享方案与 OpenCC 数据到 `plugins/fcitx5-rime/share/rime-data`。状态菜单与繁简切换验证见 `scripts/test-status-menu.ps1 -Rime`（[build.md](build.md#status-menus)）。
 - **`fcitx5-wenzhounese`**：温州话引擎，CI addon probe 验证 `nyi` 候选提交。
@@ -96,6 +97,8 @@ cmake --install build/addon-probe
 & "$sdk/bin/addon_probe.exe" "$sdk" --default "<输入法ID>" "<ASCII按键序列>"
 # 先选预编辑再 Enter 提交的引擎（如注音）：
 & "$sdk/bin/addon_probe.exe" "$sdk" --default zhuyin su3 --preedit
+# 需额外触发键打开候选窗的引擎（如 Hangul 按 F9 查汉字）：
+& "$sdk/bin/addon_probe.exe" "$sdk" --default hangul gks --trigger F9
 ```
 
 最后一个参数支持 `--absent`（验证未安装）或 `--unavailable`（验证描述存在但缺 DLL/依赖/数据）。配套目录发现回归可通过 `ctest --test-dir build/addon-probe --output-on-failure` 运行。

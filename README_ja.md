@@ -4,14 +4,14 @@
 
 AMD64 向けに開発中の Fcitx5 Windows 移植版です。Core は独立したプロセスとして動作し、x64 / x86 の TSF DLL がアプリケーションと連携し、WinUI 3 設定アプリで入力メソッドやエンジン設定を管理します。
 
-`base` 版ではピンイン、双拼および `fcitx5-chinese-addons` のテーブル入力メソッドを提供します。`full` 版ではこれらに加えて Mozc（日本語）、Rime、SKK（日本語）、温州語、注音および `fcitx5-table-extra` を収録しています。統合 x64 インストーラーは CI および Nightly リリースワークフローで公開されています。
+`base` 版ではピンイン、双拼および `fcitx5-chinese-addons` のテーブル入力メソッドを提供します。`full` 版ではこれらに加えて Hangul（韓国語）、Mozc（日本語）、Rime、SKK（日本語）、温州語、注音および `fcitx5-table-extra` を収録しています。統合 x64 インストーラーは CI および Nightly リリースワークフローで公開されています。
 
 ## 主な機能
 
 - **中国語・日本語・多言語入力**:
   - フルピンインおよび 8 種類の組み込み双拼プロファイル（小鶴・自然碼など）に対応し、プリエディット、候補選択、確定入力を行えます。
   - base テーブル入力: 五筆字型、五筆ピンイン、倉頡、電報碼、二筆、氷蟾、晩風、自然碼（対応するエンジンおよびテーブルデータが導入されている場合に利用可能）。
-  - full 版追加機能: Mozc（日本語）、Rime、SKK（日本語）、温州語、注音および 25 種類の追加テーブル（五筆 98、鄭碼、嘸蝦米、倉頡五代、広東語ピンインテーブルなど）。
+  - full 版追加機能: Hangul（韓国語）、Mozc（日本語）、Rime、SKK（日本語）、温州語、注音および 25 種類の追加テーブル（五筆 98、鄭碼、嘸蝦米、倉頡五代、広東語ピンインテーブルなど）。
   - 現在の Windows キーボードレイアウトを使ってキーをそのまま透過する多言語キーボード項目。
 - **候補ウィンドウ**:
   - フォーカスを奪わない DirectWrite / Direct2D 候補ポップアップ（カラーフォント描画、ソフトウェア DC フォールバック、Per-Monitor V2 DPI 配置に対応）。
@@ -36,7 +36,7 @@ AMD64 向けに開発中の Fcitx5 Windows 移植版です。Core は独立し�
 [Nightly リリース](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)では Windows 10 バージョン 1809（build 17763）以降向けの 4 種類の x64 インストーラーと SHA256 チェックサムを公開しています。いずれのエディションにも Core、x64 / x86 TSF DLL、および Settings が含まれます。
 
 - `base`: `fcitx5-chinese-addons` を同梱。
-- `full`: `fcitx5-chinese-addons`、`fcitx5-mozc`、`fcitx5-rime`、`fcitx5-skk`、`fcitx5-table-extra`、`fcitx5-wenzhounese`、`fcitx5-zhuyin` を同梱。
+- `full`: `fcitx5-chinese-addons`、`fcitx5-hangul`、`fcitx5-mozc`、`fcitx5-rime`、`fcitx5-skk`、`fcitx5-table-extra`、`fcitx5-wenzhounese`、`fcitx5-zhuyin` を同梱。
 
 各エディションにはランタイム同梱の有無による 2 種類のインストーラーがあります。
 
@@ -73,7 +73,7 @@ AMD64 向けに開発中の Fcitx5 Windows 移植版です。Core は独立し�
 
 ## 入力メソッドプラグイン
 
-入力メソッドは独立したエンジンまたはリソースパッケージとしてビルド・導入できます。`fcitx5-chinese-addons` は Core と同時にビルドされます。`fcitx5-table-extra` は `base` の `table` エンジンを再利用して 25 種類のテーブルを提供します。`fcitx5-zhuyin` は固定バージョンの libpinyin ソースからビルドした libzhuyin とコンパイル済みモデルを同梱します。`fcitx5-skk` は固定バージョンの libskk ソースからビルドした `libskk.dll`・ルール定義・`SKK-JISYO.L` を同梱します。`fcitx5-mozc` は埋め込みデータ付きのプロセス内 `libmozc.dll` を構成し、Rime は共有スキームと OpenCC データを同梱します。
+入力メソッドは独立したエンジンまたはリソースパッケージとしてビルド・導入できます。`fcitx5-chinese-addons` は Core と同時にビルドされます。`fcitx5-table-extra` は `base` の `table` エンジンを再利用して 25 種類のテーブルを提供します。`fcitx5-hangul` は固定バージョンの libhangul ソースからビルドした `libhangul-1.dll` と漢字・記号辞書を同梱します。`fcitx5-zhuyin` は固定バージョンの libpinyin ソースからビルドした libzhuyin とコンパイル済みモデルを同梱します。`fcitx5-skk` は固定バージョンの libskk ソースからビルドした `libskk.dll`・ルール定義・`SKK-JISYO.L` を同梱します。`fcitx5-mozc` は埋め込みデータ付きのプロセス内 `libmozc.dll` を構成し、Rime は共有スキームと OpenCC データを同梱します。
 
 ### 導入と有効化
 
@@ -115,7 +115,7 @@ DLL をアンロードするため、開いているアプリケーションを�
 ### 日常の入力と切り替え
 
 - 設定した巡回ショートカット（既定 `Ctrl+Space`）またはインジケーターの左クリックで有効な入力メソッドを順に切り替えます。利用不可の項目は自動的にスキップされます。
-- 既定の一覧は英語キーボードとピンインです。設定画面から双拼、テーブル入力、Mozc、SKK、Rime、温州語、注音、多言語キーボードを追加できます。
+- 既定の一覧は英語キーボードとピンインです。設定画面から双拼、テーブル入力、Hangul、Mozc、SKK、Rime、温州語、注音、多言語キーボードを追加できます。
 - スペースキーや数字キーで候補を選択します。入力メソッドの切り替えやフォーカス喪失時には未確定のプリエディットがキャンセルされます。
 - **グローバル設定 → ショートカット**で巡回切り替えおよび 1〜5 番目の直接切り替えを設定できます（空欄にすると無効化）。直接切り替えは一覧の元の位置を参照し、該当項目が存在しないか利用不可の場合はキーを透過します。
 - 中英文句読点の切り替えはインジケーターのステータスメニューから行えます。ピンイン、双拼および punctuation モジュールを使用するテーブル入力メソッドでこの状態が共有されます。

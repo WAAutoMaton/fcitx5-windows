@@ -1,0 +1,59 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2461487..77a7cb3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -12,9 +12,11 @@ include(ECMUninstallTarget)
+ find_package(Fcitx5Core ${REQUIRED_FCITX_VERSION} REQUIRED)
+ find_package(Gettext REQUIRED)
+ find_package(PkgConfig REQUIRED)
+-find_package(Fcitx5Module REQUIRED COMPONENTS TestFrontend)
+ 
+ option(ENABLE_TEST "Build Test" On)
++if (ENABLE_TEST)
++    find_package(Fcitx5Module REQUIRED COMPONENTS TestFrontend)
++endif()
+ option(ENABLE_COVERAGE "Build the project with gcov support (Need ENABLE_TEST=On)" Off)
+ 
+ if (NOT DEFINED HANGUL_TARGET)
+diff --git a/src/engine.cpp b/src/engine.cpp
+index b28b796..d82a9b5 100644
+--- a/src/engine.cpp
++++ b/src/engine.cpp
+@@ -30,6 +30,7 @@
+ #include <fcitx/text.h>
+ #include <fcitx/userinterface.h>
+ #include <fcitx/userinterfacemanager.h>
++#include <filesystem>
+ #include <hangul.h>
+ #include <memory>
+ #include <stdexcept>
+@@ -45,6 +46,11 @@ namespace fcitx {
+ 
+ namespace {
+ 
++std::string pathToUtf8(const std::filesystem::path &path) {
++    const auto value = path.generic_u8string();
++    return {reinterpret_cast<const char *>(value.data()), value.size()};
++}
++
+ const KeyList &selectionKeys() {
+     static const KeyList selectionKeys{
+         Key(FcitxKey_1), Key(FcitxKey_2), Key(FcitxKey_3), Key(FcitxKey_4),
+@@ -103,7 +109,7 @@ HanjaTable *loadTable() {
+         sp.locate(fcitx::StandardPathsType::Data, "libhangul/hanja/hanja.txt");
+     HanjaTable *table = nullptr;
+     if (!hanjaTxt.empty()) {
+-        table = hanja_table_load(hanjaTxt.string().c_str());
++        table = hanja_table_load(pathToUtf8(hanjaTxt).c_str());
+     }
+     return table ? table : hanja_table_load(nullptr);
+ }
+@@ -631,7 +637,7 @@ HangulEngine::HangulEngine(Instance *instance)
+     auto file = StandardPaths::global().locate(StandardPathsType::PkgData,
+                                                "hangul/symbol.txt");
+     if (!file.empty()) {
+-        symbolTable_.reset(hanja_table_load(file.string().c_str()));
++        symbolTable_.reset(hanja_table_load(pathToUtf8(file).c_str()));
+     }
+ 
+     reloadConfig();

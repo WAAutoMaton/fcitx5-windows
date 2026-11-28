@@ -146,6 +146,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Bundled SKK probe failed.' }
             & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default skk --absent
             if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains SKK.' }
+            & ./dist/ci-runtime-full/bin/addon_probe.exe "$PWD/dist/ci-runtime-full" --default hangul gks --trigger F9
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled Hangul probe failed.' }
+            & ./dist/ci-runtime/bin/addon_probe.exe "$PWD/dist/ci-runtime" --default hangul --absent
+            if ($LASTEXITCODE -ne 0) { throw 'Base runtime unexpectedly contains Hangul.' }
             $env:PATH = "$PWD/dist/ci-runtime-full/bin;$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/bin;$env:PATH"
             & ./build/ci-x64/plugins/zhuyin-deps/zhuyin_model_probe.exe "$PWD/dist/ci-runtime-full/plugins/fcitx5-zhuyin/share/fcitx5/zhuyin"
             if ($LASTEXITCODE -ne 0) { throw 'Zhuyin model save/reload probe failed.' }
@@ -444,6 +448,16 @@ jobs:
             "$skk/share/locale/ja/LC_MESSAGES/fcitx5-skk.mo",
             "$skk/share/locale/zh_CN/LC_MESSAGES/fcitx5-skk.mo",
             "$skk/share/locale/zh_TW/LC_MESSAGES/fcitx5-skk.mo")
+          $hangul = 'plugins/fcitx5-hangul'
+          $expected += @("$hangul/lib/fcitx5/libhangul.dll", "$hangul/bin/libhangul-1.dll",
+            "$hangul/share/fcitx5/addon/hangul.conf", "$hangul/share/fcitx5/inputmethod/hangul.conf",
+            "$hangul/share/fcitx5/hangul/symbol.txt",
+            "$hangul/share/libhangul/hanja/hanja.txt", "$hangul/share/libhangul/hanja/mssymbol.txt",
+            "$hangul/licenses/LICENSES/LGPL-2.1-or-later.txt", "$hangul/licenses/libhangul/COPYING",
+            "$hangul/share/locale/ko/LC_MESSAGES/fcitx5-hangul.mo",
+            "$hangul/share/locale/ja/LC_MESSAGES/fcitx5-hangul.mo",
+            "$hangul/share/locale/zh_CN/LC_MESSAGES/fcitx5-hangul.mo",
+            "$hangul/share/locale/zh_TW/LC_MESSAGES/fcitx5-hangul.mo")
           foreach ($path in $expected) {
             $count = @($manifest.files | Where-Object path -eq $path).Count
             $required = if ('${{ matrix.edition }}' -eq 'full') { 1 } else { 0 }

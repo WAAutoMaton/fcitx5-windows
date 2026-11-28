@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +24,13 @@ function cmake {
         $data = "$($project.Stage)/share/fcitx5/inputmethod"
         New-Item -ItemType Directory -Force $data | Out-Null
         [IO.File]::WriteAllText("$data/$($project.Name).conf", 'plugin fixture')
+        if ($project.Name -eq 'hangul-deps') {
+            New-Item -ItemType Directory -Force "$($project.Stage)/bin", "$($project.Stage)/share/libhangul/hanja", "$($project.Stage)/licenses/libhangul" | Out-Null
+            [IO.File]::WriteAllText("$($project.Stage)/bin/libhangul-1.dll", 'dependency fixture')
+            [IO.File]::WriteAllText("$($project.Stage)/share/libhangul/hanja/hanja.txt", "한:韓:한`n")
+            [IO.File]::WriteAllText("$($project.Stage)/share/libhangul/hanja/mssymbol.txt", "ㅁ:□:square`n")
+            [IO.File]::WriteAllText("$($project.Stage)/licenses/libhangul/COPYING", 'libhangul license')
+        }
         if ($project.Name -eq 'zhuyin-deps') {
             New-Item -ItemType Directory -Force "$($project.Stage)/bin", "$($project.Stage)/licenses/libpinyin" | Out-Null
             [IO.File]::WriteAllText("$($project.Stage)/bin/libzhuyin.dll", 'dependency fixture')
@@ -236,6 +243,13 @@ pathlib.Path(args.output).write_text(
         throw 'SKK did not configure with ENABLE_QT=OFF and relocatable SKK_PATH.'
     }
     Remove-Item -LiteralPath "$temporary/plugins/fcitx5-skk" -Recurse -Force
+    New-Item -ItemType Directory -Force "$temporary/plugins/fcitx5-hangul" | Out-Null
+    [IO.File]::WriteAllText("$temporary/plugins/fcitx5-hangul/CMakeLists.txt", 'fixture')
+    & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 | Out-Null
+    foreach ($relative in @('bin/libhangul-1.dll', 'share/libhangul/hanja/hanja.txt', 'share/libhangul/hanja/mssymbol.txt', 'licenses/libhangul/COPYING')) {
+        if (!(Test-Path -LiteralPath "$prefix/plugins/fcitx5-hangul/$relative")) { throw "Missing Hangul dependency output: $relative" }
+    }
+    Remove-Item -LiteralPath "$temporary/plugins/fcitx5-hangul" -Recurse -Force
     $testState.FailLfs = $true
     Assert-Failure { & $entry -CorePrefix $sdk -Prefix $prefix -BuildRoot $buildRoot -MSYS2Root $msys2 } 'git failed (1)'
     $testState.FailLfs = $false

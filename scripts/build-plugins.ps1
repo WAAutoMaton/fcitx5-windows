@@ -222,6 +222,23 @@ try {
         $pluginDependencies = $DependencyPrefix
         $pluginOptions = @()
         $env:PKG_CONFIG_PATH = "$DependencyPrefix/lib/pkgconfig;$sysroot/lib/pkgconfig"
+        if ($plugin.Name -eq 'fcitx5-hangul') {
+            $hangulDependencyBuild = "$BuildRoot/hangul-deps"
+            $hangulPrefix = "$hangulDependencyBuild/prefix"
+            $env:PATH = ($runtimeDirectories -join ';') + ";$oldPath"
+            Invoke-PluginCommand 'cmake' @('-S', "$root/cmake/hangul-deps", '-B', $hangulDependencyBuild, '-G', 'Ninja',
+                "-DCMAKE_TOOLCHAIN_FILE=$root/cmake/windows-addon-toolchain.cmake",
+                "-DFCITX5_WINDOWS_SDK=$CorePrefix",
+                "-DWINDOWS_DEPENDENCY_PREFIX=$DependencyPrefix", "-DCMAKE_INSTALL_PREFIX=$hangulPrefix",
+                '-DARCH=AMD64', '-DCMAKE_BUILD_TYPE=Release',
+                "-DCMAKE_C_COMPILER=$sysroot/bin/clang.exe",
+                "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe")
+            Invoke-PluginCommand 'cmake' @('--build', $hangulDependencyBuild, '-j', "$Jobs")
+            Invoke-PluginCommand 'cmake' @('--install', $hangulDependencyBuild)
+            $pluginDependencies = (@($hangulPrefix, $DependencyPrefix) | Where-Object { $_ }) -join ';'
+            $env:PKG_CONFIG_PATH = "$hangulPrefix/lib/pkgconfig;$DependencyPrefix/lib/pkgconfig;$sysroot/lib/pkgconfig"
+            $runtimeDirectories = @("$hangulPrefix/bin") + $runtimeDirectories
+        }
         if ($plugin.Name -eq 'fcitx5-mozc') {
             $embedScript = "$($plugin.FullName)/mozc/src/build_tools/embed_file.py"
             if (!(Test-Path -LiteralPath $embedScript -PathType Leaf)) {
@@ -313,6 +330,12 @@ try {
         if ($licenses.Count) {
             New-Item -ItemType Directory -Force "$destination/licenses" | Out-Null
             $licenses | Copy-Item -Destination "$destination/licenses" -Recurse -Force
+        }
+        if ($plugin.Name -eq 'fcitx5-hangul') {
+            New-Item -ItemType Directory -Force "$destination/bin", "$destination/share/libhangul", "$destination/licenses" | Out-Null
+            Copy-Item -LiteralPath "$hangulPrefix/bin/libhangul-1.dll" -Destination "$destination/bin" -Force
+            Copy-Item -LiteralPath "$hangulPrefix/share/libhangul/hanja" -Destination "$destination/share/libhangul" -Recurse -Force
+            Copy-Item -LiteralPath "$hangulPrefix/licenses/libhangul" -Destination "$destination/licenses" -Recurse -Force
         }
         if ($plugin.Name -eq 'fcitx5-mozc') {
             foreach ($submodule in @('mozc', 'abseil-cpp', 'protobuf')) {

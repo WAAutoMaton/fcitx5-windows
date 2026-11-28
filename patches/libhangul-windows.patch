@@ -1,0 +1,57 @@
+diff --git a/hangul/hanja.c b/hangul/hanja.c
+index 8e6d56f..f0d1b97 100644
+--- a/hangul/hanja.c
++++ b/hangul/hanja.c
+@@ -25,6 +25,8 @@
+ #ifndef _WIN32
+ #include <unistd.h>
+ #else
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
+ #include <io.h>
+ #define strtok_r strtok_s
+ #endif
+@@ -462,6 +464,34 @@ hanja_table_match(const HanjaTable* table,
+     }
+ }
+ 
++static FILE*
++hanja_fopen(const char* filename)
++{
++#ifdef _WIN32
++    int wide_len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
++				       filename, -1, NULL, 0);
++    if (wide_len > 0) {
++	wchar_t* wide_path = malloc((size_t)wide_len * sizeof(wchar_t));
++	if (wide_path == NULL) {
++	    return NULL;
++	}
++	if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
++				filename, -1, wide_path, wide_len) > 0) {
++	    FILE* file = _wfopen(wide_path, L"rb");
++	    free(wide_path);
++	    if (file != NULL) {
++		return file;
++	    }
++	} else {
++	    free(wide_path);
++	}
++    }
++    return fopen(filename, "rb");
++#else
++    return fopen(filename, "r");
++#endif
++}
++
+ /**
+  * @ingroup hanjadictionary
+  * @brief 한자 사전 파일을 로딩하는 함수
+@@ -501,7 +531,7 @@ hanja_table_load(const char* filename)
+ 	return NULL;
+ #endif /* LIBHANGUL_DEFAULT_HANJA_DIC */
+ 
+-    file = fopen(filename, "r");
++    file = hanja_fopen(filename);
+     if (file == NULL) {
+ 	return NULL;
+     }

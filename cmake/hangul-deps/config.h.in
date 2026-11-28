@@ -1,0 +1,2 @@
+/* Generated for Windows libhangul dependency build */
+#undef HAVE_GLOB_H

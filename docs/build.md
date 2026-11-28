@@ -133,10 +133,10 @@ For individual Core, TSF and Settings builds, see
 ## Independent Input-Method Plugins
 
 Bundled plugin submodules live under `plugins/`: `fcitx5-chinese-addons`,
-`fcitx5-mozc`, `fcitx5-rime`, `fcitx5-skk`, `fcitx5-table-extra`,
-`fcitx5-wenzhounese` and `fcitx5-zhuyin`. `fcitx5-chinese-addons` is built by
-`build-pinyin.ps1` as part of `base`. To build and deploy every additional
-plugin against the same build's SDK:
+`fcitx5-hangul`, `fcitx5-mozc`, `fcitx5-rime`, `fcitx5-skk`,
+`fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`.
+`fcitx5-chinese-addons` is built by `build-pinyin.ps1` as part of `base`. To
+build and deploy every additional plugin against the same build's SDK:
 
 ```powershell
 ./scripts/build-plugins.ps1 -CorePrefix ./build/all/prefix -Prefix ./dist/pinyin
@@ -152,6 +152,11 @@ shared runtime DLLs and installs into `Prefix/plugins/<name>`. It also supports
 
 Plugin specifics:
 
+- **`fcitx5-hangul`**: `cmake/hangul-deps` builds `libhangul-1.dll` from the
+  SHA256-pinned `libhangul 0.2.0` release archive (`patches/libhangul-windows.patch`)
+  with built-in keyboard layouts (no external library dependencies) and deploys
+  `libhangul-1.dll`, `hanja.txt`/`mssymbol.txt` and dependency licenses into
+  `plugins/fcitx5-hangul`.
 - **`fcitx5-mozc`**: requires Python 3 and initialized nested submodules
   (`mozc`, `abseil-cpp`, `protobuf`). Downloads `mozc.data` into
   `build/mozc-data` (or uses `-MozcData`), checks its dataset magic header
